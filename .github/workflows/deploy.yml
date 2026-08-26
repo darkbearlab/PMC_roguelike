@@ -45,9 +45,9 @@ jobs:
         env:
           VITE_BUILD_ID: ${{ github.sha }}
 
+      # Pages 已在 repo 設定為「GitHub Actions」來源，這裡只需要讀設定。
+      # （GITHUB_TOKEN 沒有建立 Pages site 的權限，enablement 會失敗。）
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
