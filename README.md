@@ -17,9 +17,14 @@ npm run build
 npm run map:build  # 重新產生並驗證 mission_01（會檢查連通性與 §13.1 的設計要求）
 ```
 
-CI（`.github/workflows/deploy.yml`）會在每次 push 到 `main` 時跑完全部四項，
-其中包含「地圖 JSON 與 `scripts/build_map.mjs` 必須一致」的檢查，
-避免有人手改 JSON 卻沒同步產生器。
+CI（`.github/workflows/deploy.yml`）在每次 push 到 `main` 時跑：
+型別檢查 → 測試 → 「地圖 JSON 與 `scripts/build_map.mjs` 必須一致」→ 建置 → 部署 →
+**線上健檢**（部署完直接抓線上頁面，確認它真的是這次的 commit）。
+
+> 最後那一步是有原因的：GitHub 內建的 legacy Jekyll builder 曾經跟這個 workflow
+> 搶著部署並且贏了，線上被換成 repo 根目錄那份**未經建置**的 `index.html`
+> （script 還指著 `/src/main.ts`，於是整頁空白）。以前那是靜悄悄的，現在 CI 會直接變紅。
+> 若真的再發生，去 **Settings → Pages** 把 Source 改回 **GitHub Actions**。
 
 用 `?seed=12345` 固定亂數種子重現同一場（§14）。開發者主控台會印出當場的 seed。
 
