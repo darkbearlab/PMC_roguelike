@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { applyCommand, checkLegal } from '../src/core/commands';
+import { checkLegal } from '../src/core/commands';
 import { abandonedWeapons, corpseAt } from '../src/core/state';
-import { testState, player, unit } from './helpers';
+import { run, testState, player, unit } from './helpers';
 
 const ROOM = [
   '################',
@@ -16,7 +16,7 @@ function runEnemyTurn(s0: ReturnType<typeof testState>) {
   let s = s0;
   let guard = 0;
   while (s.phase === 'ENEMY' && !s.pendingReinforcement && guard++ < 500) {
-    s = applyCommand(s, { type: 'ENEMY_STEP' });
+    s = run(s, { type: 'ENEMY_STEP' });
   }
   return s;
 }
@@ -28,7 +28,7 @@ describe('§10 死亡、增援與屍體', () => {
     p.hp = 3;
     // canAttack 不限制目標陣營（§8.2 刻意不做友軍傷害豁免），
     // 因此測試可以直接讓士兵對自己開一槍製造陣亡。
-    s = applyCommand(s, { type: 'FIRE', target: p.pos }); // AR-9 傷害 3
+    s = run(s, { type: 'FIRE', target: p.pos }); // AR-9 傷害 3
     expect(s.casualties).toBe(1);
     expect(s.corpses).toHaveLength(1);
     expect(s.corpses[0].weapons.map((w) => w.id).sort()).toEqual(['ar9', 'rr4']);
@@ -41,11 +41,11 @@ describe('§10 死亡、增援與屍體', () => {
     const p = player(s);
     p.hp = 3;
     p.pos = { x: 7, y: 1 };   // 靠近第二個空投點 (6,1)
-    s = applyCommand(s, { type: 'FIRE', target: p.pos });
+    s = run(s, { type: 'FIRE', target: p.pos });
     expect(s.pendingReinforcement!.deathPos).toEqual({ x: 7, y: 1 });
 
     const next = s.roster[0];
-    s = applyCommand(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: next });
+    s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: next });
     const fresh = unit(s, next);
     expect(fresh.pos).toEqual({ x: 6, y: 1 });      // 最近的空投點，不是起點
     expect(fresh.equipped!.id).toBe('ar9');
@@ -60,8 +60,8 @@ describe('§10 死亡、增援與屍體', () => {
     const p = player(s);
     p.hp = 3;
     p.pos = { x: 6, y: 1 };
-    s = applyCommand(s, { type: 'FIRE', target: p.pos });
-    s = applyCommand(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
+    s = run(s, { type: 'FIRE', target: p.pos });
+    s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
     s = runEnemyTurn(s);
 
     const corpse = corpseAt(s, { x: 6, y: 1 })!;
@@ -70,7 +70,7 @@ describe('§10 死亡、增援與屍體', () => {
     const rrIndex = corpse.weapons.findIndex((w) => w.id === 'rr4');
 
     const apBefore = player(s).ap;
-    s = applyCommand(s, {
+    s = run(s, {
       type: 'PICKUP', corpseId: corpse.id, weaponIndex: rrIndex, slot: 'STOWED',
     });
     expect(player(s).stowed!.id).toBe('rr4');
@@ -83,12 +83,12 @@ describe('§10 死亡、增援與屍體', () => {
     const p = player(s);
     p.hp = 3;
     p.pos = { x: 6, y: 1 };
-    s = applyCommand(s, { type: 'FIRE', target: p.pos });
-    s = applyCommand(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
+    s = run(s, { type: 'FIRE', target: p.pos });
+    s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
     s = runEnemyTurn(s);
     const corpse = corpseAt(s, { x: 6, y: 1 })!;
     const rrIndex = corpse.weapons.findIndex((w) => w.id === 'rr4');
-    s = applyCommand(s, {
+    s = run(s, {
       type: 'PICKUP', corpseId: corpse.id, weaponIndex: rrIndex, slot: 'EQUIPPED',
     });
     expect(player(s).equipped!.id).toBe('rr4');
@@ -100,8 +100,8 @@ describe('§10 死亡、增援與屍體', () => {
     const p = player(s);
     p.hp = 3;
     p.pos = { x: 5, y: 2 };
-    s = applyCommand(s, { type: 'FIRE', target: p.pos });
-    s = applyCommand(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
+    s = run(s, { type: 'FIRE', target: p.pos });
+    s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
     s = runEnemyTurn(s);
     player(s).pos = { x: 4, y: 2 };
     expect(checkLegal(s, { type: 'MOVE', dir: 'E' }).ok).toBe(true);
@@ -115,9 +115,9 @@ describe('§10 死亡、增援與屍體', () => {
       p.ap = 2;
       s.phase = 'PLAYER';
       s.enemyQueue = [];
-      s = applyCommand(s, { type: 'FIRE', target: p.pos });
+      s = run(s, { type: 'FIRE', target: p.pos });
       if (s.result === 'WIPED') break;
-      s = applyCommand(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
+      s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
       s = runEnemyTurn(s);
     }
     expect(s.result).toBe('WIPED');
@@ -132,7 +132,7 @@ describe('§11 任務目標與結束', () => {
     const s = testState(ROOM);
     player(s).pos = { x: 14, y: 1 };
     expect(checkLegal(s, { type: 'INTERACT', pos: { x: 14, y: 1 } }).ok).toBe(true);
-    const after = applyCommand(s, { type: 'INTERACT', pos: { x: 14, y: 1 } });
+    const after = run(s, { type: 'INTERACT', pos: { x: 14, y: 1 } });
     expect(after.objectives.main.done).toBe(true);
     expect(after.units[0].ap).toBe(1);
   });
@@ -141,7 +141,7 @@ describe('§11 任務目標與結束', () => {
     let s = testState(ROOM);
     expect(s.objectives.secondary).toHaveLength(2);
     player(s).pos = { x: 1, y: 4 };
-    s = applyCommand(s, { type: 'INTERACT', pos: { x: 1, y: 4 } });
+    s = run(s, { type: 'INTERACT', pos: { x: 1, y: 4 } });
     expect(s.objectives.secondary.filter((o) => o.done)).toHaveLength(1);
   });
 
@@ -156,9 +156,9 @@ describe('§11 任務目標與結束', () => {
   it('完成主目標後回到初始空投點互動 → SUCCESS', () => {
     let s = testState(ROOM);
     player(s).pos = { x: 14, y: 1 };
-    s = applyCommand(s, { type: 'INTERACT', pos: { x: 14, y: 1 } });
+    s = run(s, { type: 'INTERACT', pos: { x: 14, y: 1 } });
     player(s).pos = { x: 1, y: 1 };
-    s = applyCommand(s, { type: 'INTERACT', pos: { x: 1, y: 1 } });
+    s = run(s, { type: 'INTERACT', pos: { x: 1, y: 1 } });
     expect(s.result).toBe('SUCCESS');
     expect(s.phase).toBe('MISSION_END');
   });
@@ -166,16 +166,16 @@ describe('§11 任務目標與結束', () => {
   it('止損按鈕任何時候都可以按', () => {
     let s = testState(ROOM);
     expect(checkLegal(s, { type: 'ABORT' }).ok).toBe(true);
-    s = applyCommand(s, { type: 'WAIT' });
+    s = run(s, { type: 'WAIT' });
     expect(checkLegal(s, { type: 'ABORT' }).ok).toBe(true); // 敵人回合中
-    const aborted = applyCommand(s, { type: 'ABORT' });
+    const aborted = run(s, { type: 'ABORT' });
     expect(aborted.result).toBe('ABORTED');
   });
 
   it('結算資訊：戰場遺留裝備清單來自屍體', () => {
     let s = testState(ROOM);
     player(s).hp = 3;
-    s = applyCommand(s, { type: 'FIRE', target: player(s).pos });
+    s = run(s, { type: 'FIRE', target: player(s).pos });
     expect(abandonedWeapons(s).map((w) => w.id).sort()).toEqual(['ar9', 'rr4']);
   });
 });

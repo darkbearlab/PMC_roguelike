@@ -60,6 +60,10 @@ export interface Lock {
   /** 命中率 0..1；null 代表目前打不到（顯示原因）。 */
   chance: number | null;
   reason: string;
+  /** 預期傷害區間。目前上下限相同，欄位先占好版面（§12.4）。 */
+  damage: { min: number; max: number };
+  /** 目標護甲。和傷害擺在一起，玩家一眼看得出「為什麼只有這麼點」。 */
+  armor: number;
 }
 
 export interface MovePreview {
@@ -419,10 +423,16 @@ function drawLock(ctx: CanvasRenderingContext2D, sc: Scene): void {
   ctx.beginPath(); ctx.arc(b.x, b.y, r * 2.6, 0, Math.PI * 2); ctx.stroke();
   ctx.restore();
 
-  const label = live
-    ? lock.name + '　' + Math.round((lock.chance as number) * 100) + '%'
+  const head = live
+    ? lock.name + '　命中 ' + Math.round((lock.chance as number) * 100) + '%'
     : lock.name + '　' + lock.reason;
-  drawLabel(ctx, b.x, b.y - cam.tile * 0.62, label, live ? C.laser : C.inkDim);
+  // 傷害與護甲並排：AR-9 打裝甲型會顯示「傷害 10–10　裝甲 20」，
+  // 開槍之前就看得出這把槍對它沒用（§12.9 的教學要在開火前就成立）
+  const sub = live
+    ? '傷害 ' + lock.damage.min + '–' + lock.damage.max + '　裝甲 ' + lock.armor
+    : '';
+  // 標籤放在目標「下方」：浮動傷害數字一律往上飄，兩者才不會疊在一起。
+  drawLabel(ctx, b.x, b.y + cam.tile * 0.62 + (sub ? 16 : 9), head, live ? C.laser : C.inkDim, sub);
 }
 
 function drawMovePreview(ctx: CanvasRenderingContext2D, sc: Scene): void {
@@ -467,16 +477,21 @@ function drawInteractPreview(ctx: CanvasRenderingContext2D, sc: Scene): void {
 }
 
 /** 戰場上的行內小標籤：深底 + 彩色文字，確保任何地形上都讀得到。 */
-function drawLabel(ctx: CanvasRenderingContext2D, cx: number, cy: number, text: string, ink: string): void {
+function drawLabel(
+  ctx: CanvasRenderingContext2D, cx: number, cy: number, text: string, ink: string, sub = '',
+): void {
   ctx.save();
   ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const w = ctx.measureText(text).width + 12;
-  const h = 18;
+  const subW = sub ? ctx.measureText(sub).width : 0;
+  const w = Math.max(ctx.measureText(text).width, subW) + 12;
+  const h = sub ? 32 : 18;
+  // 夾在畫面內，免得目標靠邊時標籤被切掉
+  const cxc = Math.min(Math.max(cx, w / 2 + 4), ctx.canvas.width / (ctx.getTransform().a || 1) - w / 2 - 4);
   ctx.fillStyle = 'rgba(8, 11, 15, 0.82)';
   ctx.beginPath();
-  const x = cx - w / 2;
+  const x = cxc - w / 2;
   const y = cy - h / 2;
   const r = 5;
   ctx.moveTo(x + r, y);
@@ -490,7 +505,12 @@ function drawLabel(ctx: CanvasRenderingContext2D, cx: number, cy: number, text: 
   ctx.lineWidth = 1;
   ctx.stroke();
   ctx.fillStyle = ink;
-  ctx.fillText(text, cx, cy + 0.5);
+  ctx.fillText(text, cxc, sub ? cy - 7 : cy + 0.5);
+  if (sub) {
+    ctx.font = '600 11px ui-sans-serif, system-ui, sans-serif';
+    ctx.fillStyle = '#cfe0ee';
+    ctx.fillText(sub, cxc, cy + 8);
+  }
   ctx.restore();
 }
 

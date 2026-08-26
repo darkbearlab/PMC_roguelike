@@ -5,9 +5,9 @@
  * 這條路徑在 MVP 不可能自然發生，但它是活的程式碼，不是空分支。
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { applyCommand } from '../src/core/commands';
+
 import { resetToHitPolicy, resolveAttack, setToHitPolicy, toHitChance } from '../src/core/combat';
-import { testState, player, unit } from './helpers';
+import { run, testState, player, unit } from './helpers';
 
 afterEach(() => resetToHitPolicy());
 
@@ -36,7 +36,7 @@ describe('未命中路徑', () => {
     let s = build();
     const hpBefore = unit(s, 'E01').hp;
     const ammoBefore = player(s).equipped!.ammo;
-    s = applyCommand(s, { type: 'FIRE', target: { x: 4, y: 1 } });
+    s = run(s, { type: 'FIRE', target: { x: 4, y: 1 } });
 
     expect(unit(s, 'E01').hp).toBe(hpBefore);
     expect(player(s).equipped!.ammo).toBe(ammoBefore - 1);
@@ -47,7 +47,7 @@ describe('未命中路徑', () => {
   it('命中率為 0 時：照樣產生噪音', () => {
     setToHitPolicy(() => 0);
     let s = build();
-    s = applyCommand(s, { type: 'FIRE', target: { x: 4, y: 1 } });
+    s = run(s, { type: 'FIRE', target: { x: 4, y: 1 } });
     expect(unit(s, 'E02').aiState).toBe('SEARCH');
     expect(unit(s, 'E02').lastKnownTarget).toEqual({ x: 1, y: 1 });
   });
@@ -55,7 +55,7 @@ describe('未命中路徑', () => {
   it('命中率為 0 時：戰鬥紀錄顯示未命中', () => {
     setToHitPolicy(() => 0);
     let s = build();
-    s = applyCommand(s, { type: 'FIRE', target: { x: 4, y: 1 } });
+    s = run(s, { type: 'FIRE', target: { x: 4, y: 1 } });
     const miss = s.log.filter((l) => l.kind === 'MISS');
     expect(miss).toHaveLength(1);
     expect(miss[0].text).toContain('未命中');
@@ -64,12 +64,12 @@ describe('未命中路徑', () => {
 
   it('命中與否都會抽掉一個亂數，RNG 序列長度一致', () => {
     let hit = testState(ROOM, [{ archetype: 'HULK', pos: { x: 4, y: 1 } }]);
-    hit = applyCommand(hit, { type: 'FIRE', target: { x: 4, y: 1 } });
+    hit = run(hit, { type: 'FIRE', target: { x: 4, y: 1 } });
     const hitDraws = hit.rng.count;
 
     setToHitPolicy(() => 0);
     let miss = testState(ROOM, [{ archetype: 'HULK', pos: { x: 4, y: 1 } }]);
-    miss = applyCommand(miss, { type: 'FIRE', target: { x: 4, y: 1 } });
+    miss = run(miss, { type: 'FIRE', target: { x: 4, y: 1 } });
 
     expect(miss.rng.count).toBe(hitDraws);
     expect(hitDraws).toBe(1);

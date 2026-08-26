@@ -2,6 +2,24 @@ import type { GameState, Unit, Vec2 } from '../src/core/state';
 import { activePlayerUnit, findUnit } from '../src/core/state';
 import type { RawMap } from '../src/core/map';
 import { createInitialState } from '../src/core/setup';
+import type { Command } from '../src/core/commands';
+import { applyCommand } from '../src/core/commands';
+import type { CombatEvent } from '../src/core/events';
+
+/**
+ * 套用指令並只取新狀態。
+ * applyCommand 現在回傳 { state, events }（§8.6），非法指令的 state 仍是原物件，
+ * 所以 `expect(run(s, cmd)).toBe(s)` 這種 identity 比對照樣成立。
+ */
+export function run(s: GameState, cmd: Command): GameState {
+  return applyCommand(s, cmd).state;
+}
+
+/** 套用指令並只取事件清單。 */
+export function events(s: GameState, cmd: Command): CombatEvent[] {
+  return applyCommand(s, cmd).events;
+}
+
 
 export const LEGEND = {
   '.': 'FLOOR',

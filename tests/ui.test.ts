@@ -145,18 +145,18 @@ describe('§2/§3 統一點擊文法與射擊', () => {
     const hp = g.state.units.find((u) => u.id === 'E01')!.hp;
     const ammo = g.state.units[0].equipped!.ammo;
     g.test.tap({ x: 8, y: 9 });
-    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(hp - 3);
+    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(hp - 30);
     expect(g.state.units[0].equipped!.ammo).toBe(ammo - 1);
     expect(g.test.selection()).toBe('TARGET:E01');    // 鎖定保留
   });
 
   it('鎖定跨回合保留：換回合後一下就開火', async () => {
-    // 用裝甲型：AR-9 每發只造成 1 點，兩槍打不死，鎖定才活得過這一回合
+    // 用裝甲型：AR-9 每發只造成 10 點（保底），兩槍打不死，鎖定才活得過這一回合
     const g = await scene([{ at: [8, 9], archetype: 'HULK' }]);
     g.test.tap({ x: 8, y: 9 });
     g.test.tap({ x: 8, y: 9 });          // 第一槍，AP 2 -> 1
     g.test.tap({ x: 8, y: 9 });          // 第二槍，AP 歸零 -> 敵人回合
-    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(10);
+    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(100);
 
     let guard = 0;
     while (g.state.phase === 'ENEMY' && guard++ < 200) g.dispatch({ type: 'ENEMY_STEP' });
@@ -165,7 +165,7 @@ describe('§2/§3 統一點擊文法與射擊', () => {
 
     const foe = g.state.units.find((u) => u.id === 'E01')!;
     g.test.tap({ ...foe.pos });           // 新回合的第一下就是開火
-    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(9);
+    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(90);
   });
 
   it('點另一個敵人只改變鎖定，不開火', async () => {
@@ -183,7 +183,7 @@ describe('§2/§3 統一點擊文法與射擊', () => {
     g.test.tap({ x: 8, y: 9 });
     expect(g.test.selection()).toBe('TARGET:E01');
     g.test.tap({ x: 8, y: 9 });
-    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(1);
+    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(10);
   });
 
   it('看得見但超出曼哈頓射程時不算合法目標，但仍然看得見', async () => {
@@ -209,7 +209,21 @@ describe('§2/§3 統一點擊文法與射擊', () => {
     g.test.tap({ x: 6, y: 9 });
     btn('#modal-root button[data-yes]').click();
     expect(g.state.units.find((u) => u.id === 'E01')).toBeUndefined();
-    expect(g.state.units[0].hp).toBeLessThan(10);     // 自己也吃了濺射
+    expect(g.state.units[0].hp).toBeLessThan(100);    // 自己也吃了濺射
+  });
+
+  it('動畫播放中仍可輸入，回合推進不被延後', async () => {
+    const g = await scene([{ at: [8, 9], archetype: 'HULK' }]);
+    g.test.tap({ x: 8, y: 9 });
+    g.test.tap({ x: 8, y: 9 });                 // 開第一槍，回饋動畫開始播
+    expect(g.state.units[0].ap).toBe(1);
+
+    // 動畫還在播的當下立刻再開一槍 —— 不應該被擋、也不應該被延後
+    g.test.tap({ x: 8, y: 9 });
+    expect(g.state.units[0].ap).toBe(0);
+    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(100);
+    // AP 歸零就該立刻進敵人回合，不會等動畫播完
+    expect(g.state.phase).toBe('ENEMY');
   });
 
   it('一般射擊不跳任何對話框', async () => {

@@ -4,8 +4,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { corpsePanelHtml, selfPanelHtml } from '../src/ui/menus';
-import { applyCommand, checkLegal, interactKindAt } from '../src/core/commands';
-import { testState, player } from './helpers';
+import { checkLegal, interactKindAt } from '../src/core/commands';
+import { run, testState, player } from './helpers';
 
 const ROOM = [
   '##############',
@@ -49,7 +49,7 @@ describe('§11.1 相鄰格互動', () => {
   it('從相鄰格完成主目標，AP 扣 1，並轉向目標', () => {
     const s = testState(ROOM);
     player(s).pos = { x: 11, y: 1 };
-    const after = applyCommand(s, { type: 'INTERACT', pos: T });
+    const after = run(s, { type: 'INTERACT', pos: T });
     expect(after.objectives.main.done).toBe(true);
     expect(after.units[0].ap).toBe(1);
     expect(after.units[0].facing).toBe('E');
@@ -58,7 +58,7 @@ describe('§11.1 相鄰格互動', () => {
   it('次要目標認的是被點的那一格，不是腳下那一格', () => {
     const s = testState(ROOM);
     player(s).pos = { x: 2, y: 3 };   // (1,3) 與 (12,3) 都是 SUPPLY
-    const after = applyCommand(s, { type: 'INTERACT', pos: { x: 1, y: 3 } });
+    const after = run(s, { type: 'INTERACT', pos: { x: 1, y: 3 } });
     const done = after.objectives.secondary.filter((o) => o.done);
     expect(done).toHaveLength(1);
     expect(done[0].pos).toEqual({ x: 1, y: 3 });
@@ -85,7 +85,7 @@ describe('僅存的兩張浮動小卡', () => {
   it('站在撤離點且主目標完成時，自己的卡片提供撤離', () => {
     let s = testState(ROOM);
     player(s).pos = { x: 12, y: 1 };
-    s = applyCommand(s, { type: 'INTERACT', pos: { x: 12, y: 1 } });
+    s = run(s, { type: 'INTERACT', pos: { x: 12, y: 1 } });
     player(s).pos = { x: 1, y: 1 };
     expect(selfPanelHtml(s)).toContain('撤離');
   });
@@ -94,8 +94,8 @@ describe('僅存的兩張浮動小卡', () => {
     let s = testState(ROOM);
     player(s).hp = 3;
     player(s).pos = { x: 5, y: 2 };
-    s = applyCommand(s, { type: 'FIRE', target: { x: 5, y: 2 } });
-    s = applyCommand(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
+    s = run(s, { type: 'FIRE', target: { x: 5, y: 2 } });
+    s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
     const html = corpsePanelHtml(s, { x: 5, y: 2 });
     expect(html).toContain('的遺體');
     expect(html).toContain('AR-9 制式步槍');

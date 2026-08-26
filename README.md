@@ -8,12 +8,12 @@
 資產檔名帶 hash，不會吃到舊快取；戰鬥紀錄面板（右上的 `誌`）頂端顯示 `build <commit>`，
 可以直接確認手機上跑的是哪一版。
 
-規格書：[`clone-pmc-roguelike-mvp-spec.md`](clone-pmc-roguelike-mvp-spec.md)（v0.3，與實作同步）
+規格書：[`clone-pmc-roguelike-mvp-spec.md`](clone-pmc-roguelike-mvp-spec.md)（v0.4，與實作同步）
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173  （手機同網段可用 --host 顯示的網址開）
-npm run test       # 107 個測試：core/ 規則層、UI 互動文法、整張正式地圖的整合測試
+npm run test       # 140 個測試：core/ 規則層、UI 互動文法、整張正式地圖的整合測試
 npm run typecheck
 npm run build
 npm run map:build  # 重新產生並驗證 mission_01（會檢查連通性與規格 §13.1 的設計要求）
@@ -92,6 +92,45 @@ MVP 每一發都必中，但**擲骰管線是完整活著的**：
 - **無論命中率是多少都會抽一個亂數**，讓 MVP 與日後啟用擲骰的 RNG 序列長度一致。
 - 未命中路徑是真的程式碼，不是空分支：不扣血、照扣 AP 與彈藥、照樣產生噪音、紀錄顯示「未命中」。
   `misspath.test.ts` 與 `ui.test.ts` 都會把命中率強制設為 0 走完整條路徑。
+
+---
+
+## 戰場回饋層：不開日誌也看得懂
+
+規則層每次套用指令會吐出一份**決定性的事件清單**，渲染層拿它播動畫：
+
+```ts
+applyCommand(state, cmd) => { state: GameState; events: CombatEvent[] }
+```
+
+事件有 `SHOT`／`IMPACT`／`MISS`／`KILL`／`NOISE`／`AI_STATE`／`AMMO_OUT`／`RELOAD`／`OBJECTIVE`／`DEPLOY`。
+它們是純資料、可序列化、完全由狀態轉換推導而來，所以完全決定性。
+**動畫的時間軸與播放狀態只活在 `render/effects.ts`，不進 `GameState`**，
+回饋層也只是每幀被畫出來 —— 不阻塞輸入、不延後回合推進。
+
+### 三種結果必須分得出來
+
+這一條的優先度高於回饋層的其他所有項目：
+
+| 結果 | 玩家該讀到的意思 | 判準 | 畫面 |
+|---|---|---|---|
+| 未命中 | 運氣不好，再開一槍 | 沒有 `IMPACT` | 虛線偏移彈道 + 灰色「未命中」 |
+| **命中但被擋下大半** | **這把槍沒用，該換武器了** | `blocked >= amount` | 暗藍小號數字 + 青色「擋下 20」 |
+| 命中 | 有效 | `blocked < amount` | 亮琥珀大號數字 |
+
+裝甲型敵人在設計上的唯一任務，就是教會玩家「該換重武器了」。
+如果玩家分不出「我沒打中」和「我打中了但沒用」，這個教學就不會發生，
+裝甲型只會被當成一個很煩的高血量敵人。
+
+而且教學在**開槍之前**就成立：鎖定裝甲型時標籤直接寫 `傷害 10–10　裝甲 20`。
+
+> 標籤畫在目標**下方**，因為浮動數字一律往上飄 —— 一開始兩者疊在一起看不清，
+> 分到上下兩側才解決。連續受擊的數字錯開時，每一階要拉開「主數字 + 副標」的**總高**，
+> 只錯開半個字高一樣會咬在一起。
+
+`effects.test.ts` 用一個假的 2D context 記錄實際畫出來的文字、顏色與字級，
+確認三者顏色互不相同、被擋下的字比有效命中小、未命中真的會播、
+連續受擊的間距大於一個字高、每個字都有描邊。
 
 ---
 
@@ -206,6 +245,7 @@ IDLE 的敵人一定要選得到、打得到，偷襲是核心玩法。
 | 旋鈕 | 位置 |
 |---|---|
 | 玩家 AP / HP / 視野 | `actors.json → SOLDIER` |
+| 保底傷害 | `rules.json → combat.minDamage` |
 | AR-9 彈匣、傷害、噪音半徑 | `weapons.json` |
 | HULK 護甲、RUNNER AP、SHOOTER 每回合次數 | `actors.json` |
 | 名冊人數與編號 | `rules.json → roster` |
@@ -213,6 +253,10 @@ IDLE 的敵人一定要選得到、打得到，偷襲是核心玩法。
 | 命中率總開關與下限 | `rules.json → combat` |
 | SEARCH 持續回合 | `rules.json → ai` |
 | 空投點數量／間距、敵人配置 | `scripts/build_map.mjs` → `npm run map:build` |
+
+> **兩組不同單位，不要一起縮放。** 生命值單位（HP、傷害、護甲、保底傷害）是一組可互相比較的
+> 數字，要縮放就一起縮放；距離與次數（射程、視野、噪音、濺射、彈匣、AP、`searchTimer`、
+> 地圖尺寸）是另一回事，放大會直接破壞遊戲。`scale.test.ts` 會把後者逐項釘死。
 
 > **v0.3 的已知副作用，本次刻意不處理**：四方向移動讓地圖的有效距離變長
 > （原本斜向 3 步的路徑現在要 6 步），任務回合數會上升；曼哈頓射程也讓現有射程數值
@@ -267,6 +311,11 @@ IDLE 的敵人一定要選得到、打得到，偷襲是核心玩法。
 | 觸控命中區 ≥ 48×48 且互不重疊、無水平捲動 | `scripts/a11y.mjs`（320px 實測） |
 | 士兵在地圖任何位置，自己與四鄰格都沒被 UI 蓋住 | `camera.test.ts`、`scripts/a11y.mjs` |
 | 相同種子＋相同指令序列 → 相同最終狀態 | `determinism.test.ts`、`integration.test.ts` |
+| 數值 ×10 前後事件序列完全等價 | `scale.test.ts` + `tests/fixtures/scale-baseline.json` |
+| 射程／視野／彈匣／AP 未隨生命值縮放 | `scale.test.ts` |
+| 三種戰鬥結果在畫面上可區分 | `effects.test.ts`、`feedback.test.ts` |
+| 動畫不阻塞輸入、不延後回合 | `ui.test.ts` |
+| `GameState` 不含動畫狀態 | `feedback.test.ts` |
 | 未命中路徑（強制命中率 0）完整可用、UI 不崩潰 | `misspath.test.ts`、`ui.test.ts` |
 | 全程無 `Math.random()`；`core/` 無瀏覽器 API | `determinism.test.ts` |
 

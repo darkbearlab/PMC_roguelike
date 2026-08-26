@@ -5,6 +5,13 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState } from '../src/core/setup';
 import { applyCommand } from '../src/core/commands';
+import type { Command } from '../src/core/commands';
+
+/** applyCommand 現在回傳 { state, events }（§8.6）；這裡只取狀態。 */
+function run(s: GameState, cmd: Command): GameState {
+  return applyCommand(s, cmd).state;
+}
+
 import { findPath } from '../src/core/pathfind';
 import { activePlayerUnit, unitAt } from '../src/core/state';
 import { findTiles } from '../src/core/map';
@@ -65,9 +72,9 @@ function botTurn(s: GameState, goal: Vec2): GameState {
 
   // v0.3：相鄰即可互動，不必站上去
   if (manhattan(u.pos, goal) <= 1) {
-    const acted = applyCommand(s, { type: 'INTERACT', pos: goal });
+    const acted = run(s, { type: 'INTERACT', pos: goal });
     if (acted !== s) return acted;
-    return applyCommand(s, { type: 'WAIT' });
+    return run(s, { type: 'WAIT' });
   }
 
   // 相鄰或射程內有敵人就開火
@@ -79,20 +86,20 @@ function botTurn(s: GameState, goal: Vec2): GameState {
     const d = manhattan(u.pos, e.pos);
     if (d < best) { best = d; target = e.pos; }
   }
-  if (target) return applyCommand(s, { type: 'FIRE', target });
-  if (u.equipped && u.equipped.ammo === 0) return applyCommand(s, { type: 'RELOAD' });
+  if (target) return run(s, { type: 'FIRE', target });
+  if (u.equipped && u.equipped.ammo === 0) return run(s, { type: 'RELOAD' });
 
   const path = findPath(s, u.pos, goal, { ignoreUnitIds: [u.id] });
   if (path && path.length > 0) {
     const step = path[0];
-    if (unitAt(s, step)) return applyCommand(s, { type: 'WAIT' });
+    if (unitAt(s, step)) return run(s, { type: 'WAIT' });
     const dir = facingFromDelta(step.x - u.pos.x, step.y - u.pos.y);
     if (dir) {
-      const next = applyCommand(s, { type: 'MOVE', dir: dir as Facing });
+      const next = run(s, { type: 'MOVE', dir: dir as Facing });
       if (next !== s) return next;
     }
   }
-  return applyCommand(s, { type: 'WAIT' });
+  return run(s, { type: 'WAIT' });
 }
 
 describe('整場任務一定會收斂（不卡死）', () => {
@@ -103,12 +110,12 @@ describe('整場任務一定會收斂（不卡死）', () => {
 
     while (s.result === 'ONGOING' && steps++ < LIMIT) {
       if (s.pendingReinforcement) {
-        s = applyCommand(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
+        s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
         continue;
       }
       if (s.phase === 'ENEMY') {
         const before = s;
-        s = applyCommand(s, { type: 'ENEMY_STEP' });
+        s = run(s, { type: 'ENEMY_STEP' });
         expect(s, '敵人回合卡住了').not.toBe(before);
         continue;
       }
@@ -129,20 +136,20 @@ describe('整場任務一定會收斂（不卡死）', () => {
   });
 
   it('同一場跑兩次結果完全一致', () => {
-    const run = (): string => {
+    const playOnce = (): string => {
       let s = createInitialState(20260826);
       let steps = 0;
       while (s.result === 'ONGOING' && steps++ < 20000) {
         if (s.pendingReinforcement) {
-          s = applyCommand(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
+          s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
         } else if (s.phase === 'ENEMY') {
-          s = applyCommand(s, { type: 'ENEMY_STEP' });
+          s = run(s, { type: 'ENEMY_STEP' });
         } else {
           s = botTurn(s, s.objectives.main.done ? s.map.startDropPoint : s.objectives.main.pos);
         }
       }
       return JSON.stringify({ r: s.result, t: s.turn, c: s.casualties, log: s.log.length });
     };
-    expect(run()).toBe(run());
+    expect(playOnce()).toBe(playOnce());
   });
 });

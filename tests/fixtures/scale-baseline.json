@@ -1,0 +1,1657 @@
+{
+ "events": [
+  {
+   "kind": "AI_STATE",
+   "unitId": "E01",
+   "pos": {
+    "x": 11,
+    "y": 9
+   },
+   "from": "IDLE",
+   "to": "ALERT"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 5,
+    "y": 9
+   },
+   "to": {
+    "x": 8,
+    "y": 9
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E01",
+   "pos": {
+    "x": 8,
+    "y": 9
+   },
+   "amount": 3,
+   "blocked": 0,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 5,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 5,
+    "y": 9
+   },
+   "to": {
+    "x": 8,
+    "y": 9
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E01",
+   "pos": {
+    "x": 8,
+    "y": 9
+   },
+   "amount": 3,
+   "blocked": 0,
+   "lethal": true
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 5,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "KILL",
+   "unitId": "E01",
+   "pos": {
+    "x": 8,
+    "y": 9
+   },
+   "faction": "ENEMY",
+   "name": "衝鋒型-01"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 6,
+    "y": 9
+   },
+   "to": {
+    "x": 12,
+    "y": 11
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E02",
+   "pos": {
+    "x": 12,
+    "y": 11
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 6,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "AI_STATE",
+   "unitId": "E02",
+   "pos": {
+    "x": 12,
+    "y": 11
+   },
+   "from": "IDLE",
+   "to": "ALERT"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 7,
+    "y": 9
+   },
+   "to": {
+    "x": 13,
+    "y": 11
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E02",
+   "pos": {
+    "x": 13,
+    "y": 11
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "AI_STATE",
+   "unitId": "E04",
+   "pos": {
+    "x": 19,
+    "y": 9
+   },
+   "from": "IDLE",
+   "to": "ALERT"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 7,
+    "y": 9
+   },
+   "to": {
+    "x": 13,
+    "y": 10
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E02",
+   "pos": {
+    "x": 13,
+    "y": 10
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 7,
+    "y": 9
+   },
+   "to": {
+    "x": 13,
+    "y": 10
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E02",
+   "pos": {
+    "x": 13,
+    "y": 10
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "AMMO_OUT",
+   "unitId": "K-441",
+   "pos": {
+    "x": 7,
+    "y": 9
+   }
+  },
+  {
+   "kind": "RELOAD",
+   "unitId": "K-441",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "weaponName": "AR-9 制式步槍"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 7,
+    "y": 9
+   },
+   "to": {
+    "x": 13,
+    "y": 9
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E02",
+   "pos": {
+    "x": 13,
+    "y": 9
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 7,
+    "y": 9
+   },
+   "to": {
+    "x": 12,
+    "y": 9
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E02",
+   "pos": {
+    "x": 12,
+    "y": 9
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 7,
+    "y": 9
+   },
+   "to": {
+    "x": 12,
+    "y": 9
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E02",
+   "pos": {
+    "x": 12,
+    "y": 9
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 7,
+    "y": 9
+   },
+   "to": {
+    "x": 11,
+    "y": 9
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E02",
+   "pos": {
+    "x": 11,
+    "y": 9
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 7,
+    "y": 9
+   },
+   "to": {
+    "x": 11,
+    "y": 9
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E02",
+   "pos": {
+    "x": 11,
+    "y": 9
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 12,
+    "y": 11
+   },
+   "to": {
+    "x": 7,
+    "y": 9
+   },
+   "hit": true,
+   "weaponId": "shooter_smg",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "K-441",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "amount": 2,
+   "blocked": 0,
+   "lethal": false
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 7,
+    "y": 9
+   },
+   "to": {
+    "x": 10,
+    "y": 9
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E02",
+   "pos": {
+    "x": 10,
+    "y": 9
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "AMMO_OUT",
+   "unitId": "K-441",
+   "pos": {
+    "x": 7,
+    "y": 9
+   }
+  },
+  {
+   "kind": "RELOAD",
+   "unitId": "K-441",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "weaponName": "AR-9 制式步槍"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 12,
+    "y": 11
+   },
+   "to": {
+    "x": 7,
+    "y": 9
+   },
+   "hit": true,
+   "weaponId": "shooter_smg",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "K-441",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "amount": 2,
+   "blocked": 0,
+   "lethal": false
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 7,
+    "y": 9
+   },
+   "to": {
+    "x": 9,
+    "y": 9
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E02",
+   "pos": {
+    "x": 9,
+    "y": 9
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 7,
+    "y": 9
+   },
+   "to": {
+    "x": 9,
+    "y": 9
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E02",
+   "pos": {
+    "x": 9,
+    "y": 9
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": true
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "KILL",
+   "unitId": "E02",
+   "pos": {
+    "x": 9,
+    "y": 9
+   },
+   "faction": "ENEMY",
+   "name": "裝甲型-02"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 12,
+    "y": 11
+   },
+   "to": {
+    "x": 7,
+    "y": 9
+   },
+   "hit": true,
+   "weaponId": "shooter_smg",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "K-441",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "amount": 2,
+   "blocked": 0,
+   "lethal": false
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 7,
+    "y": 9
+   },
+   "to": {
+    "x": 12,
+    "y": 11
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E04",
+   "pos": {
+    "x": 12,
+    "y": 11
+   },
+   "amount": 3,
+   "blocked": 0,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 7,
+    "y": 9
+   },
+   "to": {
+    "x": 12,
+    "y": 11
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E04",
+   "pos": {
+    "x": 12,
+    "y": 11
+   },
+   "amount": 3,
+   "blocked": 0,
+   "lethal": true
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 7,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "KILL",
+   "unitId": "E04",
+   "pos": {
+    "x": 12,
+    "y": 11
+   },
+   "faction": "ENEMY",
+   "name": "射手型-04"
+  },
+  {
+   "kind": "AI_STATE",
+   "unitId": "E03",
+   "pos": {
+    "x": 18,
+    "y": 12
+   },
+   "from": "IDLE",
+   "to": "ALERT"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 11,
+    "y": 9
+   },
+   "to": {
+    "x": 16,
+    "y": 11
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E03",
+   "pos": {
+    "x": 16,
+    "y": 11
+   },
+   "amount": 3,
+   "blocked": 0,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 11,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 11,
+    "y": 9
+   },
+   "to": {
+    "x": 16,
+    "y": 11
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E03",
+   "pos": {
+    "x": 16,
+    "y": 11
+   },
+   "amount": 3,
+   "blocked": 0,
+   "lethal": true
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 11,
+    "y": 9
+   },
+   "radius": 6
+  },
+  {
+   "kind": "AMMO_OUT",
+   "unitId": "K-441",
+   "pos": {
+    "x": 11,
+    "y": 9
+   }
+  },
+  {
+   "kind": "KILL",
+   "unitId": "E03",
+   "pos": {
+    "x": 16,
+    "y": 11
+   },
+   "faction": "ENEMY",
+   "name": "衝鋒型-03"
+  },
+  {
+   "kind": "RELOAD",
+   "unitId": "K-441",
+   "pos": {
+    "x": 11,
+    "y": 9
+   },
+   "weaponName": "AR-9 制式步槍"
+  },
+  {
+   "kind": "AI_STATE",
+   "unitId": "E06",
+   "pos": {
+    "x": 26,
+    "y": 10
+   },
+   "from": "IDLE",
+   "to": "ALERT"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 26,
+    "y": 10
+   },
+   "to": {
+    "x": 20,
+    "y": 11
+   },
+   "hit": true,
+   "weaponId": "shooter_smg",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "K-441",
+   "pos": {
+    "x": 20,
+    "y": 11
+   },
+   "amount": 2,
+   "blocked": 0,
+   "lethal": false
+  },
+  {
+   "kind": "AI_STATE",
+   "unitId": "E08",
+   "pos": {
+    "x": 28,
+    "y": 13
+   },
+   "from": "IDLE",
+   "to": "ALERT"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 20,
+    "y": 11
+   },
+   "to": {
+    "x": 26,
+    "y": 10
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E06",
+   "pos": {
+    "x": 26,
+    "y": 10
+   },
+   "amount": 3,
+   "blocked": 0,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 20,
+    "y": 11
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 20,
+    "y": 11
+   },
+   "to": {
+    "x": 26,
+    "y": 10
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E06",
+   "pos": {
+    "x": 26,
+    "y": 10
+   },
+   "amount": 3,
+   "blocked": 0,
+   "lethal": true
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 20,
+    "y": 11
+   },
+   "radius": 6
+  },
+  {
+   "kind": "KILL",
+   "unitId": "E06",
+   "pos": {
+    "x": 26,
+    "y": 10
+   },
+   "faction": "ENEMY",
+   "name": "射手型-06"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 20,
+    "y": 11
+   },
+   "to": {
+    "x": 24,
+    "y": 11
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E08",
+   "pos": {
+    "x": 24,
+    "y": 11
+   },
+   "amount": 3,
+   "blocked": 0,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 20,
+    "y": 11
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 20,
+    "y": 11
+   },
+   "to": {
+    "x": 24,
+    "y": 11
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E08",
+   "pos": {
+    "x": 24,
+    "y": 11
+   },
+   "amount": 3,
+   "blocked": 0,
+   "lethal": true
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 20,
+    "y": 11
+   },
+   "radius": 6
+  },
+  {
+   "kind": "KILL",
+   "unitId": "E08",
+   "pos": {
+    "x": 24,
+    "y": 11
+   },
+   "faction": "ENEMY",
+   "name": "衝鋒型-08"
+  },
+  {
+   "kind": "AI_STATE",
+   "unitId": "E07",
+   "pos": {
+    "x": 28,
+    "y": 16
+   },
+   "from": "IDLE",
+   "to": "ALERT"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 22,
+    "y": 12
+   },
+   "to": {
+    "x": 28,
+    "y": 14
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E07",
+   "pos": {
+    "x": 28,
+    "y": 14
+   },
+   "amount": 3,
+   "blocked": 0,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 22,
+    "y": 12
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 28,
+    "y": 13
+   },
+   "to": {
+    "x": 22,
+    "y": 12
+   },
+   "hit": true,
+   "weaponId": "shooter_smg",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "K-441",
+   "pos": {
+    "x": 22,
+    "y": 12
+   },
+   "amount": 2,
+   "blocked": 0,
+   "lethal": true
+  },
+  {
+   "kind": "KILL",
+   "unitId": "K-441",
+   "pos": {
+    "x": 22,
+    "y": 12
+   },
+   "faction": "PLAYER",
+   "name": "K-441"
+  },
+  {
+   "kind": "DEPLOY",
+   "unitId": "K-442",
+   "pos": {
+    "x": 23,
+    "y": 16
+   }
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 23,
+    "y": 16
+   },
+   "to": {
+    "x": 28,
+    "y": 13
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E07",
+   "pos": {
+    "x": 28,
+    "y": 13
+   },
+   "amount": 3,
+   "blocked": 0,
+   "lethal": true
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 23,
+    "y": 16
+   },
+   "radius": 6
+  },
+  {
+   "kind": "KILL",
+   "unitId": "E07",
+   "pos": {
+    "x": 28,
+    "y": 13
+   },
+   "faction": "ENEMY",
+   "name": "射手型-07"
+  },
+  {
+   "kind": "AI_STATE",
+   "unitId": "E10",
+   "pos": {
+    "x": 26,
+    "y": 21
+   },
+   "from": "IDLE",
+   "to": "ALERT"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 24,
+    "y": 16
+   },
+   "to": {
+    "x": 27,
+    "y": 21
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E10",
+   "pos": {
+    "x": 27,
+    "y": 21
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 24,
+    "y": 16
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 24,
+    "y": 16
+   },
+   "to": {
+    "x": 27,
+    "y": 21
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E10",
+   "pos": {
+    "x": 27,
+    "y": 21
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 24,
+    "y": 16
+   },
+   "radius": 6
+  },
+  {
+   "kind": "AI_STATE",
+   "unitId": "E10",
+   "pos": {
+    "x": 28,
+    "y": 21
+   },
+   "from": "ALERT",
+   "to": "SEARCH"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 25,
+    "y": 18
+   },
+   "to": {
+    "x": 27,
+    "y": 21
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E10",
+   "pos": {
+    "x": 27,
+    "y": 21
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 25,
+    "y": 18
+   },
+   "radius": 6
+  },
+  {
+   "kind": "AI_STATE",
+   "unitId": "E10",
+   "pos": {
+    "x": 27,
+    "y": 21
+   },
+   "from": "SEARCH",
+   "to": "ALERT"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 25,
+    "y": 18
+   },
+   "to": {
+    "x": 28,
+    "y": 21
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E10",
+   "pos": {
+    "x": 28,
+    "y": 21
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 25,
+    "y": 18
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 25,
+    "y": 18
+   },
+   "to": {
+    "x": 28,
+    "y": 21
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E10",
+   "pos": {
+    "x": 28,
+    "y": 21
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 25,
+    "y": 18
+   },
+   "radius": 6
+  },
+  {
+   "kind": "AMMO_OUT",
+   "unitId": "K-442",
+   "pos": {
+    "x": 25,
+    "y": 18
+   }
+  },
+  {
+   "kind": "RELOAD",
+   "unitId": "K-442",
+   "pos": {
+    "x": 25,
+    "y": 18
+   },
+   "weaponName": "AR-9 制式步槍"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 25,
+    "y": 18
+   },
+   "to": {
+    "x": 28,
+    "y": 20
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E10",
+   "pos": {
+    "x": 28,
+    "y": 20
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 25,
+    "y": 18
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 25,
+    "y": 19
+   },
+   "to": {
+    "x": 28,
+    "y": 19
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E10",
+   "pos": {
+    "x": 28,
+    "y": 19
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 25,
+    "y": 19
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 25,
+    "y": 19
+   },
+   "to": {
+    "x": 27,
+    "y": 19
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E10",
+   "pos": {
+    "x": 27,
+    "y": 19
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 25,
+    "y": 19
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 25,
+    "y": 19
+   },
+   "to": {
+    "x": 27,
+    "y": 19
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E10",
+   "pos": {
+    "x": 27,
+    "y": 19
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 25,
+    "y": 19
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 25,
+    "y": 19
+   },
+   "to": {
+    "x": 26,
+    "y": 19
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E10",
+   "pos": {
+    "x": 26,
+    "y": 19
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 25,
+    "y": 19
+   },
+   "radius": 6
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 25,
+    "y": 19
+   },
+   "to": {
+    "x": 26,
+    "y": 19
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E10",
+   "pos": {
+    "x": 26,
+    "y": 19
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": false
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 25,
+    "y": 19
+   },
+   "radius": 6
+  },
+  {
+   "kind": "AMMO_OUT",
+   "unitId": "K-442",
+   "pos": {
+    "x": 25,
+    "y": 19
+   }
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 26,
+    "y": 19
+   },
+   "to": {
+    "x": 25,
+    "y": 19
+   },
+   "hit": true,
+   "weaponId": "hulk_slam",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "K-442",
+   "pos": {
+    "x": 25,
+    "y": 19
+   },
+   "amount": 6,
+   "blocked": 0,
+   "lethal": false
+  },
+  {
+   "kind": "RELOAD",
+   "unitId": "K-442",
+   "pos": {
+    "x": 25,
+    "y": 19
+   },
+   "weaponName": "AR-9 制式步槍"
+  },
+  {
+   "kind": "SHOT",
+   "from": {
+    "x": 25,
+    "y": 19
+   },
+   "to": {
+    "x": 26,
+    "y": 19
+   },
+   "hit": true,
+   "weaponId": "ar9",
+   "splash": 0
+  },
+  {
+   "kind": "IMPACT",
+   "unitId": "E10",
+   "pos": {
+    "x": 26,
+    "y": 19
+   },
+   "amount": 1,
+   "blocked": 2,
+   "lethal": true
+  },
+  {
+   "kind": "NOISE",
+   "pos": {
+    "x": 25,
+    "y": 19
+   },
+   "radius": 6
+  },
+  {
+   "kind": "KILL",
+   "unitId": "E10",
+   "pos": {
+    "x": 26,
+    "y": 19
+   },
+   "faction": "ENEMY",
+   "name": "裝甲型-10"
+  },
+  {
+   "kind": "OBJECTIVE",
+   "pos": {
+    "x": 29,
+    "y": 21
+   },
+   "text": "主目標完成"
+  }
+ ],
+ "result": "SUCCESS",
+ "turn": 66,
+ "casualties": 1,
+ "deployed": 2,
+ "hp": [
+  {
+   "id": "E05",
+   "hp": 5,
+   "maxHp": 5,
+   "armor": 0
+  },
+  {
+   "id": "E09",
+   "hp": 4,
+   "maxHp": 4,
+   "armor": 0
+  },
+  {
+   "id": "K-442",
+   "hp": 4,
+   "maxHp": 10,
+   "armor": 0
+  }
+ ]
+}

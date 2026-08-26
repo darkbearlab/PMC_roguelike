@@ -15,6 +15,7 @@ import { canAttack, performAttack } from './combat';
 import { findPath, occupiedBy } from './pathfind';
 import { RULES } from './content';
 import { pushLog } from './log';
+import type { EventSink } from './events';
 
 /** CONTINUE = 這個敵人可能還能再動；DONE = 從行動佇列移除。 */
 export type StepOutcome = 'CONTINUE' | 'DONE';
@@ -39,7 +40,7 @@ export function beginEnemyTurn(state: GameState): void {
  * 偵測（§7.4）：對玩家單位有視線且距離 <= sightRange 則進入 ALERT。
  * 面向不影響視野（360 度）。每一步都重新檢查，讓「移動途中取得視線」也能生效。
  */
-function perceive(state: GameState, e: Unit): void {
+function perceive(state: GameState, e: Unit, events?: EventSink): void {
   const player = activePlayerUnit(state);
   const canSee =
     !!player &&
@@ -47,12 +48,20 @@ function perceive(state: GameState, e: Unit): void {
     unitsSeeEachOther(state.map, e, player);
 
   if (canSee && player) {
-    if (e.aiState !== 'ALERT') pushLog(state, 'AI', e.name + ' 發現目標');
+    if (e.aiState !== 'ALERT') {
+      pushLog(state, 'AI', e.name + ' 發現目標');
+      events?.push({
+        kind: 'AI_STATE', unitId: e.id, pos: { x: e.pos.x, y: e.pos.y }, from: e.aiState, to: 'ALERT',
+      });
+    }
     e.aiState = 'ALERT';
     e.lastKnownTarget = { x: player.pos.x, y: player.pos.y };
     return;
   }
   if (e.aiState === 'ALERT') {
+    events?.push({
+      kind: 'AI_STATE', unitId: e.id, pos: { x: e.pos.x, y: e.pos.y }, from: 'ALERT', to: 'SEARCH',
+    });
     e.aiState = 'SEARCH';
     e.searchTimer = RULES.ai.searchTimer;
     pushLog(state, 'AI', e.name + ' 失去目標，開始搜索');
@@ -85,11 +94,11 @@ function moveToward(state: GameState, e: Unit, goal: Vec2): StepOutcome {
  * 執行一個敵人的單一動作。
  * 保證：回傳 CONTINUE 時一定有消耗 AP，因此驅動迴圈不會空轉。
  */
-export function stepEnemy(state: GameState, enemyId: string): StepOutcome {
+export function stepEnemy(state: GameState, enemyId: string, events?: EventSink): StepOutcome {
   const e = findUnit(state, enemyId);
   if (!e || e.faction !== 'ENEMY') return 'DONE';
 
-  perceive(state, e);
+  perceive(state, e, events);
   if (e.ap <= 0) return 'DONE';
 
   // ---- IDLE：原地不動（MVP 不做巡邏）----
@@ -106,7 +115,7 @@ export function stepEnemy(state: GameState, enemyId: string): StepOutcome {
     }
     const weapon = e.equipped;
     if (canAttack(state, e, player.pos, weapon).ok) {
-      performAttack(state, e.id, player.pos);
+      performAttack(state, e.id, player.pos, events);
       return 'CONTINUE';
     }
     // 已達本回合攻擊上限且目標仍在射程內 → 原地待命，不做無意義的位移。
@@ -122,6 +131,9 @@ export function stepEnemy(state: GameState, enemyId: string): StepOutcome {
     !e.lastKnownTarget ||
     sameTile(e.pos, e.lastKnownTarget)
   ) {
+    events?.push({
+      kind: 'AI_STATE', unitId: e.id, pos: { x: e.pos.x, y: e.pos.y }, from: e.aiState, to: 'IDLE',
+    });
     e.aiState = 'IDLE';
     e.lastKnownTarget = null;
     pushLog(state, 'AI', e.name + ' 放棄搜索');

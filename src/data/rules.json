@@ -22,10 +22,11 @@
 
   "combat": {
     "_hitToggle": "§17 命中率總開關。true = MVP 固定必中；false = 啟用 §8.1 預留公式。",
+    "_minDamage": "保底傷害。與生命值同單位，生命值規模變動時要一起調，否則等於實質取消保底。",
     "alwaysHit": true,
     "hitFloor": 0.05,
     "hitCeil": 1.0,
-    "minDamage": 1
+    "minDamage": 10
   },
 
   "movement": {

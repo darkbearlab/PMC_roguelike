@@ -20,6 +20,7 @@ import { beginEnemyTurn, stepEnemy } from './ai';
 import { RULES } from './content';
 import { makeReinforcementSoldier } from './setup';
 import { pushLog } from './log';
+import type { CombatEvent, EventSink } from './events';
 
 export type WeaponSlot = 'EQUIPPED' | 'STOWED';
 
@@ -207,31 +208,46 @@ function cloneState(state: GameState): GameState {
   return structuredClone(state);
 }
 
-export function applyCommand(state: GameState, cmd: Command): GameState {
-  if (!checkLegal(state, cmd).ok) return state;
+/** 指令套用的完整結果：新狀態 + 這次產生的事件（§8.6）。 */
+export interface CommandResult {
+  state: GameState;
+  events: CombatEvent[];
+}
+
+const NO_EVENTS: CombatEvent[] = [];
+
+/**
+ * 規則層唯一入口。
+ *
+ * 非法指令回傳「原本那個 state 物件」（`result.state === state`），
+ * 讓 UI 與測試可以直接用 identity 比對。
+ */
+export function applyCommand(state: GameState, cmd: Command): CommandResult {
+  if (!checkLegal(state, cmd).ok) return { state, events: NO_EVENTS };
   const s = cloneState(state);
+  const events: EventSink = [];
 
   switch (cmd.type) {
-    case 'ABORT': {
+    case 'ABORT':
       s.result = 'ABORTED';
       s.phase = 'MISSION_END';
       s.pendingReinforcement = null;
       pushLog(s, 'MISSION', '指揮部下令止損，任務中止。');
-      return s;
-    }
+      break;
     case 'DEPLOY_REINFORCEMENT':
-      deployReinforcement(s, cmd.soldierId);
-      return s;
+      deployReinforcement(s, cmd.soldierId, events);
+      break;
     case 'ENEMY_STEP':
-      enemyStep(s);
-      return s;
+      enemyStep(s, events);
+      break;
     default:
-      applyPlayerCommand(s, cmd);
-      return s;
+      applyPlayerCommand(s, cmd, events);
+      break;
   }
+  return { state: s, events };
 }
 
-function applyPlayerCommand(s: GameState, cmd: Command): void {
+function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void {
   const u = activePlayerUnit(s);
   if (!u) return;
   let forceEndTurn = false;
@@ -260,8 +276,8 @@ function applyPlayerCommand(s: GameState, cmd: Command): void {
       break;
     case 'FIRE': {
       const weapon = u.equipped as Weapon;
-      performAttack(s, u.id, cmd.target);
-      processDeaths(s);
+      performAttack(s, u.id, cmd.target, events);
+      processDeaths(s, events);
       if (weapon.endsTurn) forceEndTurn = true;
       break;
     }
@@ -269,6 +285,7 @@ function applyPlayerCommand(s: GameState, cmd: Command): void {
       const w = u.equipped as Weapon;
       u.ap -= w.reloadCost;
       w.ammo = w.magazine;
+      events.push({ kind: 'RELOAD', unitId: u.id, pos: { x: u.pos.x, y: u.pos.y }, weaponName: w.name });
       pushLog(s, 'INFO', u.name + ' 裝填 ' + w.name);
       break;
     }
@@ -300,11 +317,13 @@ function applyPlayerCommand(s: GameState, cmd: Command): void {
       u.ap -= RULES.ap.interactCost;
       if (kind === 'TERMINAL') {
         s.objectives.main.done = true;
+        events.push({ kind: 'OBJECTIVE', pos: { ...cmd.pos }, text: '主目標完成' });
         pushLog(s, 'OBJECTIVE', '主目標完成：終端資料已取得。撤離點為初始空投點。');
       } else if (kind === 'SUPPLY') {
         const o = s.objectives.secondary.find((x) => sameTile(x.pos, cmd.pos));
         if (o) o.done = true;
         const n = s.objectives.secondary.filter((x) => x.done).length;
+        events.push({ kind: 'OBJECTIVE', pos: { ...cmd.pos }, text: '次要目標 ' + n + '/' + s.objectives.secondary.length });
         pushLog(s, 'OBJECTIVE', '次要目標完成（' + n + '/' + s.objectives.secondary.length + '）');
       } else if (kind === 'EXTRACT') {
         s.result = 'SUCCESS';
@@ -355,7 +374,7 @@ function endEnemyTurn(s: GameState): void {
 }
 
 /** 敵人回合的一個原子步驟。UI 反覆送出 ENEMY_STEP 直到 phase 回到 PLAYER。 */
-function enemyStep(s: GameState): void {
+function enemyStep(s: GameState, events: EventSink): void {
   if (s.enemyQueue.length === 0) {
     endEnemyTurn(s);
     return;
@@ -367,8 +386,8 @@ function enemyStep(s: GameState): void {
     return;
   }
   const apBefore = before.ap;
-  const outcome = stepEnemy(s, id);
-  processDeaths(s);
+  const outcome = stepEnemy(s, id, events);
+  processDeaths(s, events);
 
   const after = findUnit(s, id);
   // 沒有實際消耗 AP 的 CONTINUE 一律當作 DONE，確保驅動迴圈必定收斂。
@@ -385,11 +404,15 @@ function enemyStep(s: GameState): void {
 // 死亡、增援與屍體（§10）
 // ============================================================================
 
-export function processDeaths(s: GameState): void {
+export function processDeaths(s: GameState, events?: EventSink): void {
   const dead = s.units.filter((u) => u.hp <= 0);
   for (const u of dead) {
     s.units = s.units.filter((x) => x.id !== u.id);
     s.enemyQueue = s.enemyQueue.filter((id) => id !== u.id);
+
+    events?.push({
+      kind: 'KILL', unitId: u.id, pos: { x: u.pos.x, y: u.pos.y }, faction: u.faction, name: u.name,
+    });
 
     if (u.faction === 'ENEMY') {
       // 敵人死亡：直接移除，不留屍體、不掉落物品（§10.3）
@@ -446,7 +469,7 @@ function findFreeTileNear(s: GameState, origin: Vec2): Vec2 | null {
   return null;
 }
 
-function deployReinforcement(s: GameState, soldierId: string): void {
+function deployReinforcement(s: GameState, soldierId: string, events: EventSink): void {
   const pending = s.pendingReinforcement;
   if (!pending) return;
   const spawn = reinforcementSpawn(s, pending.deathPos);
@@ -466,6 +489,7 @@ function deployReinforcement(s: GameState, soldierId: string): void {
   s.activePlayerUnitId = unit.id;
   s.deployed += 1;
   s.pendingReinforcement = null;
+  events.push({ kind: 'DEPLOY', unitId: unit.id, pos: { x: spawn.x, y: spawn.y } });
   pushLog(
     s, 'INFO',
     soldierId + ' 自空投點 (' + spawn.x + ',' + spawn.y + ') 落地，僅配發 AR-9。本回合無法行動。',

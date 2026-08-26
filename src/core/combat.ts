@@ -12,6 +12,7 @@ import { hasLineOfSight } from './los';
 import { nextFloat } from './rng';
 import { RULES } from './content';
 import { pushLog } from './log';
+import type { EventSink } from './events';
 
 export interface AttackResult {
   hit: boolean;
@@ -74,9 +75,24 @@ export function toHitChance(
 // 傷害
 // ============================================================================
 
-/** 實際傷害 = max(1, 原始傷害 - 護甲)（§8.2）。 */
+/**
+ * 實際傷害 = max(保底, 原始傷害 - 護甲)（§8.2）。
+ * 保底值來自 data/rules.json 的 combat.minDamage，不寫死 ——
+ * 生命值規模放大時保底也要跟著放大，否則等於實質取消保底。
+ */
 export function damageAfterArmor(raw: number, armor: number): number {
   return Math.max(RULES.combat.minDamage, raw - armor);
+}
+
+/**
+ * 這一槍打在這個目標身上會造成多少傷害。
+ *
+ * 目前上下限相同（傷害不浮動）。回傳區間是為了讓 UI 現在就用區間格式排版，
+ * 日後加入浮動傷害時只要改這個函式，版面不用動（§12.4）。
+ */
+export function damageRange(weapon: Weapon, targetArmor: number): { min: number; max: number } {
+  const d = damageAfterArmor(weapon.damage, targetArmor);
+  return { min: d, max: d };
 }
 
 // ============================================================================
@@ -119,12 +135,16 @@ export function canAttack(
  * 開火噪音。半徑內處於 IDLE 的敵人轉為 SEARCH 並把開火位置記為 lastKnownTarget。
  * 噪音刻意不受牆壁阻擋。
  */
-export function emitNoise(state: GameState, origin: Vec2, radius: number): void {
+export function emitNoise(state: GameState, origin: Vec2, radius: number, events?: EventSink): void {
   if (radius <= 0) return;
+  events?.push({ kind: 'NOISE', pos: { x: origin.x, y: origin.y }, radius });
   for (const u of state.units) {
     if (u.faction !== 'ENEMY') continue;
     if (u.aiState !== 'IDLE') continue;
     if (manhattan(u.pos, origin) > radius) continue;
+    events?.push({
+      kind: 'AI_STATE', unitId: u.id, pos: { x: u.pos.x, y: u.pos.y }, from: u.aiState, to: 'SEARCH',
+    });
     u.aiState = 'SEARCH';
     u.lastKnownTarget = { x: origin.x, y: origin.y };
     u.searchTimer = RULES.ai.searchTimer;
@@ -145,6 +165,7 @@ export function resolveAttack(
   attackerId: string,
   targetPos: Vec2,
   weapon: Weapon,
+  events?: EventSink,
 ): AttackResult {
   const attacker = findUnit(state, attackerId);
   if (!attacker) throw new Error('resolveAttack: 找不到攻擊者 ' + attackerId);
@@ -162,14 +183,24 @@ export function resolveAttack(
   const impactPos: Vec2 = { x: targetPos.x, y: targetPos.y };
 
   const damageByUnit: { unitId: string; amount: number }[] = [];
+  /** 每個受害者被護甲吃掉多少，供回饋層區分「打中但沒用」與「沒打中」。 */
+  const blockedByUnit = new Map<string, number>();
+
+  events?.push({
+    kind: 'SHOT',
+    from: { x: attacker.pos.x, y: attacker.pos.y },
+    to: { x: targetPos.x, y: targetPos.y },
+    hit,
+    weaponId: weapon.id,
+    splash: weapon.splash,
+  });
 
   if (hit) {
     const primary = unitAt(state, impactPos);
     if (primary) {
-      damageByUnit.push({
-        unitId: primary.id,
-        amount: damageAfterArmor(weapon.damage, primary.armor),
-      });
+      const amount = damageAfterArmor(weapon.damage, primary.armor);
+      damageByUnit.push({ unitId: primary.id, amount });
+      blockedByUnit.set(primary.id, Math.max(0, weapon.damage - amount));
     }
     if (weapon.splash > 0) {
       // 濺射對半徑內其他單位造成 floor(damage / 2)，同樣扣減護甲、同樣保底 1。
@@ -178,7 +209,9 @@ export function resolveAttack(
       for (const u of state.units) {
         if (primary && u.id === primary.id) continue;
         if (manhattan(u.pos, impactPos) > weapon.splash) continue;
-        damageByUnit.push({ unitId: u.id, amount: damageAfterArmor(splashRaw, u.armor) });
+        const amount = damageAfterArmor(splashRaw, u.armor);
+        damageByUnit.push({ unitId: u.id, amount });
+        blockedByUnit.set(u.id, Math.max(0, splashRaw - amount));
       }
     }
   }
@@ -188,6 +221,21 @@ export function resolveAttack(
     const u = findUnit(state, d.unitId);
     if (!u) continue;
     u.hp -= d.amount;
+    events?.push({
+      kind: 'IMPACT',
+      unitId: u.id,
+      pos: { x: u.pos.x, y: u.pos.y },
+      amount: d.amount,
+      blocked: blockedByUnit.get(u.id) ?? 0,
+      lethal: u.hp <= 0,
+    });
+  }
+  if (!hit) {
+    events?.push({
+      kind: 'MISS',
+      pos: { x: targetPos.x, y: targetPos.y },
+      impactPos: { x: impactPos.x, y: impactPos.y },
+    });
   }
 
   // ---- 紀錄（未命中也必須看得到）----
@@ -203,7 +251,7 @@ export function resolveAttack(
   }
 
   // ---- 噪音：命中與否都照樣產生（§8.1 未命中路徑）----
-  emitNoise(state, attacker.pos, weapon.noiseRadius);
+  emitNoise(state, attacker.pos, weapon.noiseRadius, events);
 
   return { hit, roll, chance, impactPos, damageByUnit };
 }
@@ -216,6 +264,7 @@ export function performAttack(
   state: GameState,
   attackerId: string,
   targetPos: Vec2,
+  events?: EventSink,
 ): AttackResult {
   const attacker = findUnit(state, attackerId);
   if (!attacker || !attacker.equipped) {
@@ -228,6 +277,10 @@ export function performAttack(
   attacker.shotsThisTurn += 1;
   const f = facingToward(attacker.pos, targetPos);
   if (f) attacker.facing = f;
-
-  return resolveAttack(state, attackerId, targetPos, weapon);
+  const result = resolveAttack(state, attackerId, targetPos, weapon, events);
+  // 空倉提示排在彈道與傷害之後，順序才符合玩家看到的因果
+  if (weapon.ammo <= 0 && weapon.magazine < 99) {
+    events?.push({ kind: 'AMMO_OUT', unitId: attacker.id, pos: { x: attacker.pos.x, y: attacker.pos.y } });
+  }
+  return result;
 }

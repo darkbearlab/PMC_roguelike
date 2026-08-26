@@ -5,8 +5,15 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Command } from '../src/core/commands';
-import { applyCommand } from '../src/core/commands';
+
 import { createInitialState } from '../src/core/setup';
+import { applyCommand } from '../src/core/commands';
+import type { GameState } from '../src/core/state';
+
+/** applyCommand 現在回傳 { state, events }（§8.6）；這裡只取狀態。 */
+function run(s: GameState, cmd: Command): GameState {
+  return applyCommand(s, cmd).state;
+}
 import { createRng, nextFloat } from '../src/core/rng';
 import { MISSION_01 } from '../src/core/content';
 
@@ -40,18 +47,18 @@ function play(seed: number): string {
   for (const cmd of SCRIPT) {
     let guard = 0;
     while (s.phase === 'ENEMY' && !s.pendingReinforcement && guard++ < 2000) {
-      s = applyCommand(s, { type: 'ENEMY_STEP' });
+      s = run(s, { type: 'ENEMY_STEP' });
     }
     if (s.pendingReinforcement && s.roster.length) {
-      s = applyCommand(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
+      s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
       continue;
     }
     if (s.result !== 'ONGOING') break;
-    s = applyCommand(s, cmd);
+    s = run(s, cmd);
   }
   let guard = 0;
   while (s.phase === 'ENEMY' && !s.pendingReinforcement && guard++ < 2000) {
-    s = applyCommand(s, { type: 'ENEMY_STEP' });
+    s = run(s, { type: 'ENEMY_STEP' });
   }
   return JSON.stringify(s);
 }
@@ -65,30 +72,30 @@ describe('決定論', () => {
     let s = createInitialState(999);
     for (let i = 0; i < 8; i++) {
       const cmd = SCRIPT[i];
-      while (s.phase === 'ENEMY') s = applyCommand(s, { type: 'ENEMY_STEP' });
-      s = applyCommand(s, cmd);
+      while (s.phase === 'ENEMY') s = run(s, { type: 'ENEMY_STEP' });
+      s = run(s, cmd);
     }
     const snapshot = JSON.stringify(s);
     const restored = JSON.parse(snapshot);
     expect(JSON.stringify(restored)).toBe(snapshot);
 
-    const contA = applyCommand(s, { type: 'FIRE', target: { x: 11, y: 9 } });
-    const contB = applyCommand(restored, { type: 'FIRE', target: { x: 11, y: 9 } });
+    const contA = run(s, { type: 'FIRE', target: { x: 11, y: 9 } });
+    const contB = run(restored, { type: 'FIRE', target: { x: 11, y: 9 } });
     expect(JSON.stringify(contB)).toBe(JSON.stringify(contA));
   });
 
   it('applyCommand 不會修改傳入的狀態', () => {
     const s = createInitialState(7);
     const before = JSON.stringify(s);
-    applyCommand(s, { type: 'MOVE', dir: 'S' });
-    applyCommand(s, { type: 'TOGGLE_STANCE' });
+    run(s, { type: 'MOVE', dir: 'S' });
+    run(s, { type: 'TOGGLE_STANCE' });
     expect(JSON.stringify(s)).toBe(before);
   });
 
   it('非法指令回傳同一個 state 物件', () => {
     const s = createInitialState(7);
-    expect(applyCommand(s, { type: 'MOVE', dir: 'N' })).toBe(s); // 撞牆
-    expect(applyCommand(s, { type: 'ENEMY_STEP' })).toBe(s);     // 不是敵人回合
+    expect(run(s, { type: 'MOVE', dir: 'N' })).toBe(s); // 撞牆
+    expect(run(s, { type: 'ENEMY_STEP' })).toBe(s);     // 不是敵人回合
   });
 
   it('rngSeed 可從外部指定，不同種子產生不同亂數序列', () => {
@@ -104,7 +111,7 @@ describe('決定論', () => {
 
   it('RNG 狀態隨 GameState 一起序列化還原', () => {
     let s = createInitialState(42);
-    s = applyCommand(s, { type: 'FIRE', target: { x: 11, y: 9 } });
+    s = run(s, { type: 'FIRE', target: { x: 11, y: 9 } });
     const restored = JSON.parse(JSON.stringify(s));
     expect(nextFloat(restored.rng)).toBe(nextFloat(structuredClone(s).rng));
   });

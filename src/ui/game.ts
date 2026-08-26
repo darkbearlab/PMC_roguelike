@@ -14,13 +14,14 @@ import {
   applyCommand, checkLegal, interactKindAt, interactTarget, movePath, swapCost,
 } from '../core/commands';
 import { createInitialState } from '../core/setup';
-import { toHitChance } from '../core/combat';
+import { damageRange, toHitChance } from '../core/combat';
 import { facingFromDelta, manhattan, sameTile } from '../core/grid';
 import { inBounds } from '../core/map';
 import type { Camera } from '../render/camera';
 import { computeCamera, screenToTile } from '../render/camera';
 import type { Ghost, InteractPreview, Lock, MovePreview } from '../render/renderer';
 import { draw } from '../render/renderer';
+import { EffectLayer } from '../render/effects';
 import type { Vision } from '../render/vision';
 import { computeVision, isVisible, visionKey } from '../render/vision';
 import { $, $$, esc, show } from './dom';
@@ -79,6 +80,8 @@ export class Game {
   private viewH = 1;
   /** 沒有被 HUD 與控制列蓋住的那一段畫面。攝影機夾制用（見 render/camera.ts）。 */
   private safe = { top: 0, bottom: 1 };
+  /** 戰場回饋層。動畫狀態只活在這裡，不進 GameState（§12.9）。 */
+  private effects = new EffectLayer();
 
   /** 測試用入口。正式流程一律走 canvas 的 pointer 事件與 rAF 迴圈。 */
   readonly test = {
@@ -111,9 +114,10 @@ export class Game {
   // ---------------------------------------------------------------- 指令
 
   dispatch(cmd: Command): boolean {
-    const next = applyCommand(this.state, cmd);
-    if (next === this.state) return false;
-    this.state = next;
+    const { state, events } = applyCommand(this.state, cmd);
+    if (state === this.state) return false;
+    this.state = state;
+    this.effects.push(events, performance.now());
     this.pan = { x: 0, y: 0 };
     this.refresh();
     return true;
@@ -127,6 +131,7 @@ export class Game {
     this.pan = { x: 0, y: 0 };
     this.modal = 'NONE';
     this.skillOpen = false;
+    this.effects.clear();
     hideModal();
     this.refresh();
   }
@@ -667,9 +672,10 @@ export class Game {
       const hpBefore = activePlayerUnit(this.state)?.hp ?? 0;
       const phaseBefore = this.state.phase;
 
-      const next = applyCommand(this.state, { type: 'ENEMY_STEP' });
-      if (next === this.state) break;
-      this.state = next;
+      const { state, events } = applyCommand(this.state, { type: 'ENEMY_STEP' });
+      if (state === this.state) break;
+      this.state = state;
+      this.effects.push(events, performance.now());
       this.syncVision();
 
       const after = id ? findUnit(this.state, id) : null;
@@ -700,6 +706,8 @@ export class Game {
       name: foe.name,
       chance: legal.ok ? toHitChance(me, foe, me.equipped, this.state) : null,
       reason: legal.reason,
+      damage: damageRange(me.equipped, foe.armor),
+      armor: foe.armor,
     };
   }
 
@@ -733,5 +741,7 @@ export class Game {
       interactPreview: this.buildInteractPreview(),
       time: now,
     });
+    // 回饋層畫在最上層。它只是被畫出來，不會擋住輸入也不會延後回合推進。
+    this.effects.draw(this.ctx, this.cam, now);
   }
 }
