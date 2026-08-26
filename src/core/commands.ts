@@ -12,7 +12,7 @@ import type {
   Corpse, Facing, GameState, Stance, Unit, Vec2, Weapon,
 } from './state';
 import { activePlayerUnit, corpseAt, findUnit } from './state';
-import { DIR_VEC, facingToward, sameTile } from './grid';
+import { DIR_VEC, facingToward, manhattan, sameTile } from './grid';
 import { findTiles, tileAt } from './map';
 import { canStep, findPath, nearestFreeTileOfType, occupiedBy, terrainPassable } from './pathfind';
 import { canAttack, performAttack, type Legality } from './combat';
@@ -32,7 +32,7 @@ export type Command =
   | { type: 'RELOAD' }
   | { type: 'SWAP_WEAPON' }
   | { type: 'PICKUP'; corpseId: string; weaponIndex: number; slot: WeaponSlot }
-  | { type: 'INTERACT' }
+  | { type: 'INTERACT'; pos: Vec2 }
   | { type: 'WAIT' }
   | { type: 'ENEMY_STEP' }
   | { type: 'DEPLOY_REINFORCEMENT'; soldierId: string }
@@ -147,7 +147,7 @@ function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
     }
     case 'INTERACT': {
       if (u.ap < RULES.ap.interactCost) return no('AP 不足');
-      return interactTargetLegality(state, u);
+      return interactTargetLegality(state, u, cmd.pos);
     }
     case 'WAIT':
       return OK;
@@ -156,31 +156,43 @@ function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
   }
 }
 
-/** 站在腳下這一格能不能互動，以及互動的意義是什麼。 */
 export type InteractKind = 'TERMINAL' | 'SUPPLY' | 'EXTRACT';
 
-export function interactTarget(state: GameState, u: Unit): InteractKind | null {
-  const t = tileAt(state.map, u.pos);
+/** 互動距離：站在目標格上或正交相鄰皆可（曼哈頓 <= 1）。 */
+export const INTERACT_REACH = 1;
+
+/**
+ * 指定格子上有什麼可以互動的（§11.1）。
+ * v0.3 起改為「相鄰格互動」，不必站上去。
+ */
+export function interactKindAt(state: GameState, pos: Vec2): InteractKind | null {
+  const t = tileAt(state.map, pos);
   if (t === 'TERMINAL') {
-    return state.objectives.main.done || !sameTile(state.objectives.main.pos, u.pos)
-      ? null
-      : 'TERMINAL';
+    return !state.objectives.main.done && sameTile(state.objectives.main.pos, pos)
+      ? 'TERMINAL'
+      : null;
   }
   if (t === 'SUPPLY') {
-    const o = state.objectives.secondary.find((s) => sameTile(s.pos, u.pos));
+    const o = state.objectives.secondary.find((x) => sameTile(x.pos, pos));
     return o && !o.done ? 'SUPPLY' : null;
   }
-  if (t === 'DROP_POINT' && sameTile(u.pos, state.map.startDropPoint)) {
+  if (t === 'DROP_POINT' && sameTile(pos, state.map.startDropPoint)) {
     return state.objectives.main.done ? 'EXTRACT' : null;
   }
   return null;
 }
 
-function interactTargetLegality(state: GameState, u: Unit): Legality {
-  const kind = interactTarget(state, u);
-  if (kind) return OK;
-  const t = tileAt(state.map, u.pos);
-  if (t === 'DROP_POINT' && sameTile(u.pos, state.map.startDropPoint)) {
+/** 這個單位現在能不能對 pos 互動。 */
+export function interactTarget(state: GameState, u: Unit, pos: Vec2): InteractKind | null {
+  if (manhattan(u.pos, pos) > INTERACT_REACH) return null;
+  return interactKindAt(state, pos);
+}
+
+function interactTargetLegality(state: GameState, u: Unit, pos: Vec2): Legality {
+  if (manhattan(u.pos, pos) > INTERACT_REACH) return no('距離太遠，要站到相鄰格');
+  if (interactKindAt(state, pos)) return OK;
+  const t = tileAt(state.map, pos);
+  if (t === 'DROP_POINT' && sameTile(pos, state.map.startDropPoint)) {
     return no('主目標尚未完成，無法撤離');
   }
   if (t === 'TERMINAL' || t === 'SUPPLY') return no('這個目標已經完成');
@@ -282,13 +294,15 @@ function applyPlayerCommand(s: GameState, cmd: Command): void {
       break;
     }
     case 'INTERACT': {
-      const kind = interactTarget(s, u);
+      const kind = interactTarget(s, u, cmd.pos);
+      const f = facingToward(u.pos, cmd.pos);
+      if (f) u.facing = f;
       u.ap -= RULES.ap.interactCost;
       if (kind === 'TERMINAL') {
         s.objectives.main.done = true;
         pushLog(s, 'OBJECTIVE', '主目標完成：終端資料已取得。撤離點為初始空投點。');
       } else if (kind === 'SUPPLY') {
-        const o = s.objectives.secondary.find((x) => sameTile(x.pos, u.pos));
+        const o = s.objectives.secondary.find((x) => sameTile(x.pos, cmd.pos));
         if (o) o.done = true;
         const n = s.objectives.secondary.filter((x) => x.done).length;
         pushLog(s, 'OBJECTIVE', '次要目標完成（' + n + '/' + s.objectives.secondary.length + '）');

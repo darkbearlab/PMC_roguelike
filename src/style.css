@@ -14,11 +14,10 @@
   --blur: blur(10px) saturate(115%);
 
   /*
-   * 按鈕視覺縮小，但命中區靠 ::after 外擴 4px 補回 >= 48px（§12.1）。
-   * --btn-gap 必須 >= 外擴的兩倍（8px），否則相鄰按鈕的命中區會互相重疊、
-   * 搶走對方的角落，實測命中區反而不到 48。
+   * v0.3：取消斜向後方向鍵少了四顆，剩下的放大。
+   * 按鈕本身就 >= 52px，不再需要 ::after 外擴，命中區自然不會互相重疊。
    */
-  --btn: clamp(42px, 12vw, 48px);
+  --btn: clamp(52px, 15vw, 64px);
   --btn-gap: 8px;
   --gap: 5px;
 
@@ -45,7 +44,7 @@ html, body {
 #hud {
   position: absolute;
   top: env(safe-area-inset-top); left: 0; right: 0;
-  padding: 6px 8px 7px;
+  padding: 6px 62px 7px 8px;   /* 右側留給日誌鍵 */
   background: linear-gradient(to bottom, var(--glass), rgba(11, 15, 20, 0.34));
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
@@ -53,8 +52,8 @@ html, body {
 }
 .hud-row { display: flex; align-items: center; gap: var(--gap); flex-wrap: wrap; }
 .chip {
-  font-size: 11px; line-height: 1;
-  padding: 5px 7px; border-radius: 5px;
+  font-size: 10.5px; line-height: 1;
+  padding: 5px 6px; border-radius: 5px;
   background: rgba(30, 38, 47, 0.55);
   border: 1px solid var(--glass-line);
   white-space: nowrap;
@@ -75,7 +74,7 @@ html, body {
 
 #turn-banner {
   position: absolute;
-  top: calc(env(safe-area-inset-top) + 70px);
+  top: 70px;   /* 實際位置由 JS 依 HUD 高度覆寫 */
   left: 50%; transform: translateX(-50%);
   background: var(--glass); backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
@@ -94,8 +93,39 @@ html, body {
   display: flex; justify-content: space-between; align-items: flex-end;
   pointer-events: none;   /* 空白處的點擊穿透到地圖 */
 }
-#dpad { display: grid; grid-template-columns: repeat(3, var(--btn)); gap: var(--btn-gap); }
-#actions { display: grid; grid-template-columns: repeat(2, var(--btn)); gap: var(--btn-gap); }
+
+#move-cluster { display: flex; flex-direction: column; align-items: flex-start; }
+/* 待機不可逆：與方向盤之間隔一個按鈕高度，避免誤觸 */
+.btn-wait {
+  margin-bottom: calc(var(--btn) + var(--btn-gap));
+  width: auto !important;
+  min-width: var(--btn);
+  padding: 0 12px;
+  color: var(--warn) !important;
+  font-size: 14px !important;
+}
+#dpad {
+  display: grid;
+  grid-template-columns: repeat(3, var(--btn));
+  gap: var(--btn-gap);
+}
+.pad-blank { width: var(--btn); height: var(--btn); }   /* 左上角留空 */
+
+#actions { position: relative; display: grid; grid-template-columns: var(--btn); gap: var(--btn-gap); }
+
+/* 技能摺疊選單：往上展開，項目順序固定，不依可用性重排 */
+#skill-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(var(--btn) * 3 + var(--btn-gap) * 3);
+  width: max(150px, calc(var(--btn) * 2.6));
+  pointer-events: auto;
+  background: var(--glass-solid);
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-line); border-radius: 10px;
+  padding: 8px;
+}
+#skill-menu .note { margin: 0; text-align: center; }
 
 #controls button {
   pointer-events: auto;
@@ -106,18 +136,31 @@ html, body {
   -webkit-backdrop-filter: var(--blur);
   color: var(--ink);
   border: 1px solid var(--glass-line);
-  border-radius: 9px;
-  font-size: 17px; line-height: 1;
+  border-radius: 11px;
+  font-size: 22px; line-height: 1;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
 }
-/* 視覺縮小但觸控命中區外擴，維持 >= 48x48 CSS px */
-#controls button::after { content: ''; position: absolute; inset: -4px; }
-#controls button b { font-size: 15px; font-weight: 600; }
-#controls button small { font-size: 8.5px; color: var(--ink-dim); }
+#controls button b { font-size: 18px; font-weight: 600; }
+#controls button small { font-size: 9.5px; color: var(--ink-dim); }
 #controls button:active:not([disabled]) { background: rgba(44, 60, 76, 0.9); border-color: var(--accent); }
 #controls button[disabled] { opacity: .26; }
-#controls .btn-wait { font-size: 14px; color: var(--warn); }
+#controls button.on { border-color: var(--accent); background: rgba(20, 62, 84, 0.85); }
+
+/* 日誌開合：畫面右上 */
+#btn-log {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 6px);
+  right: 8px;
+  z-index: 6;
+  width: 48px; height: 48px;
+  background: var(--glass);
+  backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+  border: 1px solid var(--glass-line); border-radius: 10px;
+  color: var(--ink); font-size: 17px; font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
+}
+#btn-log.on { border-color: var(--accent); background: rgba(20, 62, 84, 0.85); }
 
 /* ---------------- 情境／紀錄面板：浮動小卡，不再是佔半個畫面的抽屜 ---------------- */
 .sheet {
@@ -156,11 +199,10 @@ html, body {
 }
 .sheet .close {
   position: relative;
-  min-width: 48px; min-height: 44px;
+  min-width: 48px; min-height: 48px;
   background: rgba(30, 38, 47, 0.6); border: 1px solid var(--glass-line);
   color: var(--ink-dim); border-radius: 6px; font-size: 11px;
 }
-.sheet .close::after { content: ''; position: absolute; inset: -5px; }
 
 .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); margin: 7px 0; }
 .stat {

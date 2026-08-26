@@ -4,7 +4,6 @@
 import type { Corpse, GameState, Unit, Vec2 } from '../core/state';
 import { activePlayerUnit, corpseAt } from '../core/state';
 import { inBounds, tileAt } from '../core/map';
-import { sightPath } from '../core/los';
 import { sameTile } from '../core/grid';
 import type { Camera } from './camera';
 import { screenToTile, tileCenter, tileToScreen } from './camera';
@@ -32,10 +31,14 @@ const C = {
   lit: 'rgba(255,238,205,0.055)',
   player: '#4fd6ff',
   corpse: '#6d5a52',
-  select: '#ffd24d',
-  losOk: 'rgba(79,214,255,0.85)',
-  losBad: 'rgba(255,91,74,0.85)',
-  path: 'rgba(79,214,255,0.55)',
+  frameLegal: 'rgba(210, 230, 245, 0.75)',
+  frameAlert: '#ff5b4a',
+  laser: '#ff4d3d',
+  laserDead: '#7d8a97',
+  path: '#4fd6ff',
+  pathBad: '#ffb648',
+  interact: '#ffd35c',
+  inkDim: '#b7c3ce',
 };
 
 const FOE: Record<string, string> = {
@@ -49,14 +52,40 @@ export interface Ghost {
   pos: Vec2;
 }
 
+/** 鎖定中的目標。持續顯示在戰場上，不是對話框。 */
+export interface Lock {
+  unitId: string;
+  pos: Vec2;
+  name: string;
+  /** 命中率 0..1；null 代表目前打不到（顯示原因）。 */
+  chance: number | null;
+  reason: string;
+}
+
+export interface MovePreview {
+  path: Vec2[];
+  ap: number;
+  affordable: boolean;
+}
+
+export interface InteractPreview {
+  pos: Vec2;
+  label: string;
+  ap: number;
+}
+
 export interface Scene {
   state: GameState;
   vision: Vision;
   cam: Camera;
   ghosts: Ghost[];
-  selection: Vec2 | null;
-  fireTarget: Vec2 | null;
-  previewPath: Vec2[] | null;
+  /** 現在打得到的敵人 id —— 決定「靜態細框」畫在誰身上。 */
+  legalTargets: string[];
+  lock: Lock | null;
+  movePreview: MovePreview | null;
+  interactPreview: InteractPreview | null;
+  /** 毫秒時間戳，用於點滅動畫。 */
+  time: number;
 }
 
 export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, sc: Scene): void {
@@ -78,9 +107,10 @@ export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, sc: Sc
   drawCorpses(ctx, sc, Math.max(0, x0), Math.max(0, y0), x1, y1);
   drawGhosts(ctx, sc);
   drawUnits(ctx, sc);
-  drawPreviewPath(ctx, sc);
-  drawFireLine(ctx, sc);
-  drawSelection(ctx, sc);
+  drawMovePreview(ctx, sc);
+  drawInteractPreview(ctx, sc);
+  drawTargetFrames(ctx, sc);
+  drawLock(ctx, sc);
   drawVignette(ctx, w, h);
 }
 
@@ -321,61 +351,147 @@ function drawGhosts(ctx: CanvasRenderingContext2D, sc: Scene): void {
   }
 }
 
-function drawPreviewPath(ctx: CanvasRenderingContext2D, sc: Scene): void {
-  if (!sc.previewPath || sc.previewPath.length === 0) return;
-  const { cam } = sc;
+/**
+ * 目標框：兩種訊息，兩種表現，可以同時出現在同一個敵人身上。
+ *   靜態細框 = 這個目標我現在打得到（視線、射程、彈藥、AP 皆成立）
+ *   點滅紅框 = 這個敵人不是 IDLE（ALERT 或 SEARCH）
+ * 框只表達狀態，不決定可否點擊 —— IDLE 的敵人一樣選得到、打得到。
+ */
+function drawTargetFrames(ctx: CanvasRenderingContext2D, sc: Scene): void {
+  const { state, cam, vision } = sc;
   const t = cam.tile;
-  ctx.fillStyle = C.path;
-  for (const p of sc.previewPath) {
-    const c = tileCenter(cam, p);
-    ctx.beginPath();
-    ctx.arc(c.x, c.y, Math.max(2.5, t * 0.11), 0, Math.PI * 2);
-    ctx.fill();
+  const legal = new Set(sc.legalTargets);
+  const blink = 0.5 + 0.5 * Math.sin(sc.time / 260);
+
+  for (const u of state.units) {
+    if (u.faction !== 'ENEMY') continue;
+    if (!isVisible(vision, state.map, u.pos)) continue;
+    const s = tileToScreen(cam, u.pos);
+
+    if (legal.has(u.id)) {
+      ctx.strokeStyle = C.frameLegal;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(s.x + 2.5, s.y + 2.5, t - 5, t - 5);
+    }
+    if (u.aiState !== 'IDLE') {
+      ctx.save();
+      ctx.globalAlpha = 0.35 + 0.65 * blink;
+      ctx.strokeStyle = C.frameAlert;
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(s.x - 1.5, s.y - 1.5, t + 3, t + 3);
+      ctx.restore();
+    }
   }
 }
 
-/** 射擊前先把視線畫出來（§12.4：玩家要在確認前就知道自己在承擔什麼）。 */
-function drawFireLine(ctx: CanvasRenderingContext2D, sc: Scene): void {
-  const target = sc.fireTarget;
-  if (!target) return;
+/** 雷射瞄準線 + 紅點準星 + 行內的名稱與命中率。持續顯示，不是對話框。 */
+function drawLock(ctx: CanvasRenderingContext2D, sc: Scene): void {
+  const lock = sc.lock;
+  if (!lock) return;
   const me = activePlayerUnit(sc.state);
   if (!me) return;
   const { cam } = sc;
   const a = tileCenter(cam, me.pos);
-  const b = tileCenter(cam, target);
+  const b = tileCenter(cam, lock.pos);
+  const live = lock.chance !== null;
+  const beam = live ? C.laser : C.laserDead;
 
   ctx.save();
-  ctx.setLineDash([6, 4]);
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = C.losOk;
-  ctx.beginPath();
-  ctx.moveTo(a.x, a.y);
-  ctx.lineTo(b.x, b.y);
-  ctx.stroke();
+  // 雷射：外層柔光 + 內層細線
+  ctx.globalAlpha = 0.22;
+  ctx.strokeStyle = beam;
+  ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  ctx.globalAlpha = live ? 0.95 : 0.5;
+  ctx.lineWidth = 1.4;
+  if (!live) ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
   ctx.setLineDash([]);
 
-  // 經過的格子淡淡標一下，讓「這條線碰到哪些掩體」看得見
-  ctx.fillStyle = 'rgba(79,214,255,0.10)';
-  for (const p of sightPath(me.pos, target)) {
-    const s = tileToScreen(cam, p);
-    ctx.fillRect(s.x, s.y, cam.tile, cam.tile);
-  }
-
-  ctx.strokeStyle = C.losBad;
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.arc(b.x, b.y, cam.tile * 0.42, 0, Math.PI * 2);
-  ctx.stroke();
+  // 紅點準星
+  const r = cam.tile * 0.13;
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = beam;
+  ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 0.55;
+  ctx.strokeStyle = beam;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.arc(b.x, b.y, r * 2.6, 0, Math.PI * 2); ctx.stroke();
   ctx.restore();
+
+  const label = live
+    ? lock.name + '　' + Math.round((lock.chance as number) * 100) + '%'
+    : lock.name + '　' + lock.reason;
+  drawLabel(ctx, b.x, b.y - cam.tile * 0.62, label, live ? C.laser : C.inkDim);
 }
 
-function drawSelection(ctx: CanvasRenderingContext2D, sc: Scene): void {
-  if (!sc.selection) return;
-  const s = tileToScreen(sc.cam, sc.selection);
-  const t = sc.cam.tile;
-  ctx.strokeStyle = C.select;
-  ctx.lineWidth = 2.5;
-  ctx.strokeRect(s.x + 1.5, s.y + 1.5, t - 3, t - 3);
+function drawMovePreview(ctx: CanvasRenderingContext2D, sc: Scene): void {
+  const mp = sc.movePreview;
+  if (!mp || mp.path.length === 0) return;
+  const { cam } = sc;
+  const t = cam.tile;
+  const colour = mp.affordable ? C.path : C.pathBad;
+
+  ctx.save();
+  ctx.fillStyle = colour;
+  for (let i = 0; i < mp.path.length; i++) {
+    const c = tileCenter(cam, mp.path[i]);
+    const last = i === mp.path.length - 1;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, last ? t * 0.2 : Math.max(2, t * 0.09), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const end = tileCenter(cam, mp.path[mp.path.length - 1]);
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(end.x - t / 2 + 2, end.y - t / 2 + 2, t - 4, t - 4);
+  ctx.restore();
+
+  drawLabel(ctx, end.x, end.y - t * 0.62,
+    mp.ap + ' AP' + (mp.affordable ? '' : '（不足）'),
+    mp.affordable ? C.path : C.pathBad);
+}
+
+function drawInteractPreview(ctx: CanvasRenderingContext2D, sc: Scene): void {
+  const ip = sc.interactPreview;
+  if (!ip) return;
+  const { cam } = sc;
+  const t = cam.tile;
+  const c = tileCenter(cam, ip.pos);
+  ctx.save();
+  ctx.strokeStyle = C.interact;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(c.x - t / 2 + 2, c.y - t / 2 + 2, t - 4, t - 4);
+  ctx.restore();
+  drawLabel(ctx, c.x, c.y - t * 0.62, ip.label + '　' + ip.ap + ' AP', C.interact);
+}
+
+/** 戰場上的行內小標籤：深底 + 彩色文字，確保任何地形上都讀得到。 */
+function drawLabel(ctx: CanvasRenderingContext2D, cx: number, cy: number, text: string, ink: string): void {
+  ctx.save();
+  ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const w = ctx.measureText(text).width + 12;
+  const h = 18;
+  ctx.fillStyle = 'rgba(8, 11, 15, 0.82)';
+  ctx.beginPath();
+  const x = cx - w / 2;
+  const y = cy - h / 2;
+  const r = 5;
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(150,180,210,0.22)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = ink;
+  ctx.fillText(text, cx, cy + 0.5);
+  ctx.restore();
 }
 
 /** 供 UI 判斷點到的是不是屍體。 */

@@ -1,5 +1,5 @@
-/** 攝影機：玩家單位永遠鎖在畫面正中央。 */
-import type { Vec2 } from '../core/state';
+/** 攝影機：士兵原則上置中，但接近地圖邊緣時停止捲動（邊界夾制）。 */
+import type { MapData, Vec2 } from '../core/state';
 import { clamp } from '../core/grid';
 
 export interface Camera {
@@ -19,23 +19,29 @@ export function tileSizeFor(viewW: number, viewH: number): number {
 }
 
 /**
- * 玩家單位永遠在畫面正中央 —— 攝影機不夾在地圖範圍內。
- * 因此地圖邊界外會露出畫面，由 renderer 畫成「界外岩層」（§6 邊界視同 WALL）。
+ * v0.3：邊界夾制。士兵原則上置中，但接近地圖邊緣時鏡頭停住，
+ * 避免角落時大面積畫面浪費在界外區。地圖比視窗小的那個軸則置中。
  *
- * @param pan 暫時的手動平移。任何指令執行後都會歸零，鏡頭自動回到士兵身上。
+ * @param pan 暫時的手動平移。任何指令執行後都會歸零。
  */
 export function computeCamera(
+  map: MapData,
   viewW: number,
   viewH: number,
   focus: Vec2,
   pan: Vec2,
 ): Camera {
   const tile = tileSizeFor(viewW, viewH);
-  return {
-    tile,
-    ox: viewW / 2 - (focus.x + 0.5) * tile + pan.x,
-    oy: viewH / 2 - (focus.y + 0.5) * tile + pan.y,
-  };
+  const mapW = map.width * tile;
+  const mapH = map.height * tile;
+
+  let ox = viewW / 2 - (focus.x + 0.5) * tile + pan.x;
+  let oy = viewH / 2 - (focus.y + 0.5) * tile + pan.y;
+
+  ox = mapW <= viewW ? (viewW - mapW) / 2 : clamp(ox, viewW - mapW, 0);
+  oy = mapH <= viewH ? (viewH - mapH) / 2 : clamp(oy, viewH - mapH, 0);
+
+  return { tile, ox, oy };
 }
 
 export function tileToScreen(cam: Camera, t: Vec2): Vec2 {

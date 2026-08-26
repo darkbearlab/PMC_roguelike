@@ -1,14 +1,15 @@
 /**
- * 移動合法性與尋路（§5.3 / §6）。
+ * 移動合法性與尋路（§6）。
  *
- * 所有移動成本一律 1 AP（含斜向），所以最短路徑用 BFS 就是最佳解，
- * 不需要 A*。鄰居展開順序固定為 N, NE, E, SE, S, SW, W, NW，
- * 保證平手時的結果完全決定性（§9.1 要求 AI 不得用亂數決勝）。
+ * v0.3 起只能四方向移動，每步 1 AP，所以最短路徑用 BFS 就是最佳解，不需要 A*。
+ * 鄰居展開順序固定為 N, E, S, W，保證平手時的結果完全決定性
+ * （§9.1 要求 AI 不得用亂數決勝）。
+ *
+ * 取消斜向之後，原本的「斜向切角」規則連同它的歧義一起消失了。
  */
 import type { GameState, Vec2 } from './state';
 import { blocksMovement, inBounds } from './map';
-import { DIRECTIONS, DIR_VEC, sameTile } from './grid';
-import { RULES } from './content';
+import { DIR_VEC, MOVE_DIRECTIONS, sameTile } from './grid';
 
 export interface PathOptions {
   /** 目標格即使被單位佔據也允許作為終點（AI 追人時用）。 */
@@ -29,39 +30,21 @@ export function occupiedBy(state: GameState, pos: Vec2, ignoreUnitIds: string[] 
   return u ? u.id : null;
 }
 
-/**
- * 斜向切角規則（§5.3）。
- *
- * STRICT   ：任一相鄰正交格為阻擋物就禁止斜穿（標準「禁止切角」）。
- * GAP_ONLY ：只有當兩個正交格都是阻擋物時才禁止（§5.3 的字面解）。
- *
- * 預設 STRICT。要改的話動 data/rules.json 的 movement.diagonalCornerRule 一個字串即可，
- * 程式碼不用動。屍體不算阻擋物（§10.2），這裡只看地形。
- */
-export function diagonalAllowed(state: GameState, from: Vec2, to: Vec2): boolean {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  if (dx === 0 || dy === 0) return true;
-  const sideA = blocksMovement(state.map, { x: from.x + dx, y: from.y });
-  const sideB = blocksMovement(state.map, { x: from.x, y: from.y + dy });
-  return RULES.movement.diagonalCornerRule === 'GAP_ONLY'
-    ? !(sideA && sideB)
-    : !(sideA || sideB);
+/** 這一步是不是正交的一格（斜向一律不合法）。 */
+export function isOrthogonalStep(from: Vec2, to: Vec2): boolean {
+  return Math.abs(to.x - from.x) + Math.abs(to.y - from.y) === 1;
 }
 
-/** 單步移動是否合法：相鄰、地形可通行、無單位佔據、不切角。 */
+/** 單步移動是否合法：正交相鄰、地形可通行、無單位佔據。 */
 export function canStep(
   state: GameState,
   from: Vec2,
   to: Vec2,
   opts: PathOptions = {},
 ): boolean {
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
-  if (Math.abs(dx) > 1 || Math.abs(dy) > 1 || (dx === 0 && dy === 0)) return false;
+  if (!isOrthogonalStep(from, to)) return false;
   if (!terrainPassable(state, to)) return false;
-  if (occupiedBy(state, to, opts.ignoreUnitIds ?? [])) return false;
-  return diagonalAllowed(state, from, to);
+  return !occupiedBy(state, to, opts.ignoreUnitIds ?? []);
 }
 
 const key = (p: Vec2): number => p.y * 1024 + p.x;
@@ -87,13 +70,12 @@ export function findPath(
 
   while (head < queue.length) {
     const cur = queue[head++];
-    for (const d of DIRECTIONS) {
+    for (const d of MOVE_DIRECTIONS) {
       const v = DIR_VEC[d];
       const nxt = { x: cur.x + v.x, y: cur.y + v.y };
       const k = key(nxt);
       if (prev.has(k)) continue;
       if (!terrainPassable(state, nxt)) continue;
-      if (!diagonalAllowed(state, cur, nxt)) continue;
 
       const isGoal = sameTile(nxt, goal);
       if (occupiedBy(state, nxt, ignore) && !(isGoal && opts.allowGoalOccupied)) continue;
@@ -128,7 +110,7 @@ export function nearestFreeTileOfType(
     // 以實際步行距離為準；走不到的落點退回用直線距離排序（仍然決定性）。
     const path = findPath(state, origin, c);
     const walk = path ? path.length : Number.POSITIVE_INFINITY;
-    const straight = Math.max(Math.abs(c.x - origin.x), Math.abs(c.y - origin.y));
+    const straight = Math.abs(c.x - origin.x) + Math.abs(c.y - origin.y);
     const score = walk === Number.POSITIVE_INFINITY ? 100000 + straight : walk;
     // 平手時取 y 小、再取 x 小的，保持決定性。
     if (

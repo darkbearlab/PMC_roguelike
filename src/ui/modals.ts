@@ -1,5 +1,7 @@
 /** 增援選單、止損二次確認、任務結算（§10.1 / §11.3 / §11.4）。 */
-import type { GameState } from '../core/state';
+import type { GameState, Vec2 } from '../core/state';
+import { activePlayerUnit, unitAt } from '../core/state';
+import { damageAfterArmor } from '../core/combat';
 import { $, esc, show } from './dom';
 import { abandonedList, ledgerText } from './hud';
 
@@ -54,6 +56,40 @@ export function showAbortConfirm(state: GameState, onConfirm: () => void, onCanc
     + '<div class="menu-actions">'
     + '<button class="danger" data-yes="1">確認止損<em>結束任務</em></button>'
     + '<button data-no="1">繼續作戰</button>'
+    + '</div>',
+  );
+  (r.querySelector('button[data-yes]') as HTMLButtonElement).addEventListener('click', onConfirm);
+  (r.querySelector('button[data-no]') as HTMLButtonElement).addEventListener('click', onCancel);
+}
+
+/**
+ * 全遊戲唯一保留的確認彈窗：濺射範圍會涵蓋玩家自己時（§3.4）。
+ * 重武器開火要花掉整個回合也不另外確認 —— 兩段式點擊本身已經夠了。
+ */
+export function showSplashConfirm(
+  state: GameState,
+  target: Vec2,
+  onConfirm: () => void,
+  onCancel: () => void,
+): void {
+  const me = activePlayerUnit(state);
+  const w = me ? me.equipped : null;
+  const foe = unitAt(state, target);
+  if (!me || !w) return;
+  const selfDmg = damageAfterArmor(Math.floor(w.damage / 2), me.armor);
+  const r = open(
+    '<h2 class="abort">你會被自己的濺射打到</h2>'
+    + '<p>' + esc(w.name) + ' 的濺射半徑為 ' + w.splash + ' 格，'
+    + '而你距離彈著點只有 ' + (Math.abs(me.pos.x - target.x) + Math.abs(me.pos.y - target.y)) + ' 格。'
+    + '本作刻意不做友軍傷害豁免。</p>'
+    + '<div class="stat-grid">'
+    + '<div class="stat"><span>目標</span><b>' + esc(foe ? foe.name : '地面') + '</b></div>'
+    + '<div class="stat accent"><span>你會受到</span><b>' + selfDmg + '</b></div>'
+    + '<div class="stat"><span>你的 HP</span><b>' + Math.max(0, me.hp) + '/' + me.maxHp + '</b></div>'
+    + '</div>'
+    + '<div class="menu-actions">'
+    + '<button class="danger" data-yes="1">照樣開火<em>' + (me.hp - selfDmg <= 0 ? '這一發會打死自己' : '扣 ' + selfDmg + ' HP') + '</em></button>'
+    + '<button data-no="1">取消</button>'
     + '</div>',
   );
   (r.querySelector('button[data-yes]') as HTMLButtonElement).addEventListener('click', onConfirm);

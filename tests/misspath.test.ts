@@ -23,7 +23,7 @@ describe('未命中路徑', () => {
   const build = () =>
     testState(ROOM, [
       { archetype: 'HULK', pos: { x: 4, y: 1 } },
-      { archetype: 'RUNNER', pos: { x: 6, y: 3 } }, // 噪音半徑 6 內的 IDLE 敵人
+      { archetype: 'RUNNER', pos: { x: 5, y: 3 } }, // 曼哈頓距離 6，剛好在噪音半徑內
     ]);
 
   it('MVP 預設固定必中（chance = 1.0）', () => {

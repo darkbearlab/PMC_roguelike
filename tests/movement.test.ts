@@ -20,11 +20,15 @@ describe('§5.2 AP 扣減', () => {
     expect(player(s).pos).toEqual({ x: 2, y: 1 });
   });
 
-  it('斜向移動成本與正向相同（1 AP）', () => {
-    let s = testState(OPEN);
-    s = applyCommand(s, { type: 'MOVE', dir: 'SE' });
-    expect(player(s).ap).toBe(1);
-    expect(player(s).pos).toEqual({ x: 2, y: 2 });
+  it('不能斜向移動（v0.3 起只有四方向）', () => {
+    const s = testState(OPEN);
+    for (const dir of ['NE', 'SE', 'SW', 'NW'] as const) {
+      expect(checkLegal(s, { type: 'MOVE', dir }).ok, dir).toBe(false);
+      expect(applyCommand(s, { type: 'MOVE', dir }), dir).toBe(s);
+    }
+    for (const dir of ['E', 'S'] as const) {
+      expect(checkLegal(s, { type: 'MOVE', dir }).ok, dir).toBe(true);
+    }
   });
 
   it('AP 歸零時自動結束玩家回合，並進入敵人回合', () => {
@@ -88,23 +92,22 @@ describe('§5.3 / §6 地形與切角', () => {
     expect(checkLegal(s, { type: 'MOVE', dir: 'N' }).ok).toBe(false); // (3,2) = '+'
   });
 
-  it('禁止斜穿角落：對角縫隙不可穿越', () => {
-    //  y=1 #D.#
-    //  y=2 #.##      從 (1,2) 想斜走到 (2,1) 會擦過 (2,2)='#'
+  it('四方向移動下沒有「切角」這種走法：對角格必須繞兩步', () => {
     const s = testState(['#####', '#D.T#', '#.#.#', '#...#', '#####']);
     placePlayer(s, { x: 1, y: 2 });
-    // (2,2) 是牆 → NE 斜穿被禁止（STRICT 規則）
     expect(checkLegal(s, { type: 'MOVE', dir: 'NE' }).ok).toBe(false);
-    // 正交繞路則合法
     expect(checkLegal(s, { type: 'MOVE', dir: 'N' }).ok).toBe(true);
+    // (1,2) -> (2,1) 走不了斜線，得經過 (1,1) 或 (2,2)，(2,2) 是牆 → 只剩 2 步繞路
+    expect(movePath(s, { x: 2, y: 1 })!.length).toBe(2);
   });
 
-  it('尋路成本 = 路徑長度 = 所需 AP，且不會穿越角落', () => {
+  it('尋路成本 = 路徑長度 = 所需 AP（四方向）', () => {
     const s = testState(['#####', '#D.T#', '#.#.#', '#...#', '#####']);
-    const path = movePath(s, { x: 3, y: 2 });
-    expect(path).not.toBeNull();
-    // (1,1) -> (2,1) -> (3,1)? (3,1)='T' 可通行 -> (3,2)
-    expect(path!.length).toBe(3);
+    // (1,1) -> (2,1) -> (3,1)='T' 可通行 -> (3,2)
+    expect(movePath(s, { x: 3, y: 2 })!.length).toBe(3);
+    // 曼哈頓距離就是無障礙時的步數
+    const open = testState(OPEN);
+    expect(movePath(open, { x: 4, y: 3 })!.length).toBe(5); // (1,1)->(4,3) = 3+2
   });
 
   it('單位不可重疊', () => {

@@ -23,7 +23,7 @@ export interface Rules {
   };
   ai: { searchTimer: number };
   combat: { alwaysHit: boolean; hitFloor: number; hitCeil: number; minDamage: number };
-  movement: { diagonalCornerRule: 'STRICT' | 'GAP_ONLY' };
+  movement: { _comment: string };
   log: { maxEntries: number };
 }
 

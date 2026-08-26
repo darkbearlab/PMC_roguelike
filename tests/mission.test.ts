@@ -131,8 +131,8 @@ describe('§11 任務目標與結束', () => {
   it('主目標需站在 TERMINAL 上互動，花 1 AP', () => {
     const s = testState(ROOM);
     player(s).pos = { x: 14, y: 1 };
-    expect(checkLegal(s, { type: 'INTERACT' }).ok).toBe(true);
-    const after = applyCommand(s, { type: 'INTERACT' });
+    expect(checkLegal(s, { type: 'INTERACT', pos: { x: 14, y: 1 } }).ok).toBe(true);
+    const after = applyCommand(s, { type: 'INTERACT', pos: { x: 14, y: 1 } });
     expect(after.objectives.main.done).toBe(true);
     expect(after.units[0].ap).toBe(1);
   });
@@ -141,14 +141,14 @@ describe('§11 任務目標與結束', () => {
     let s = testState(ROOM);
     expect(s.objectives.secondary).toHaveLength(2);
     player(s).pos = { x: 1, y: 4 };
-    s = applyCommand(s, { type: 'INTERACT' });
+    s = applyCommand(s, { type: 'INTERACT', pos: { x: 1, y: 4 } });
     expect(s.objectives.secondary.filter((o) => o.done)).toHaveLength(1);
   });
 
   it('主目標未完成時不能從初始空投點撤離', () => {
     const s = testState(ROOM);
     expect(player(s).pos).toEqual({ x: 1, y: 1 });
-    const r = checkLegal(s, { type: 'INTERACT' });
+    const r = checkLegal(s, { type: 'INTERACT', pos: { x: 1, y: 1 } });
     expect(r.ok).toBe(false);
     expect(r.reason).toContain('主目標');
   });
@@ -156,9 +156,9 @@ describe('§11 任務目標與結束', () => {
   it('完成主目標後回到初始空投點互動 → SUCCESS', () => {
     let s = testState(ROOM);
     player(s).pos = { x: 14, y: 1 };
-    s = applyCommand(s, { type: 'INTERACT' });
+    s = applyCommand(s, { type: 'INTERACT', pos: { x: 14, y: 1 } });
     player(s).pos = { x: 1, y: 1 };
-    s = applyCommand(s, { type: 'INTERACT' });
+    s = applyCommand(s, { type: 'INTERACT', pos: { x: 1, y: 1 } });
     expect(s.result).toBe('SUCCESS');
     expect(s.phase).toBe('MISSION_END');
   });

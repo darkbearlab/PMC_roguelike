@@ -7,7 +7,7 @@
  */
 import type { GameState, Unit, Vec2, Weapon } from './state';
 import { findUnit, unitAt } from './state';
-import { chebyshev, clamp, facingToward } from './grid';
+import { clamp, facingToward, manhattan } from './grid';
 import { hasLineOfSight } from './los';
 import { nextFloat } from './rng';
 import { RULES } from './content';
@@ -40,7 +40,7 @@ export const alwaysHitChance: ToHitFn = () => RULES.combat.hitCeil;
 
 /** 預留公式。combat.alwaysHit = false 時啟用。 */
 export const rolledHitChance: ToHitFn = (attacker, target, weapon) => {
-  const dist = target ? chebyshev(attacker.pos, target.pos) : 0;
+  const dist = target ? manhattan(attacker.pos, target.pos) : 0;
   const falloff = Math.max(0, dist - weapon.optimalRange) * weapon.falloffPerTile;
   const raw = weapon.accuracy + attacker.aim - (target ? target.evasion : 0) - falloff;
   return clamp(raw, RULES.combat.hitFloor, RULES.combat.hitCeil);
@@ -101,7 +101,7 @@ export function canAttack(
   if (weapon.ammo <= 0) return no('彈藥耗盡');
   if (attacker.ap < weapon.fireCost) return no('AP 不足（需要 ' + weapon.fireCost + '）');
   if (attacker.shotsThisTurn >= attacker.attacksPerTurn) return no('本回合攻擊次數已達上限');
-  if (chebyshev(attacker.pos, targetPos) > weapon.range) return no('超出射程');
+  if (manhattan(attacker.pos, targetPos) > weapon.range) return no('超出射程');
 
   const target = unitAt(state, targetPos);
   const targetStance = target ? target.stance : 'STAND';
@@ -124,7 +124,7 @@ export function emitNoise(state: GameState, origin: Vec2, radius: number): void 
   for (const u of state.units) {
     if (u.faction !== 'ENEMY') continue;
     if (u.aiState !== 'IDLE') continue;
-    if (chebyshev(u.pos, origin) > radius) continue;
+    if (manhattan(u.pos, origin) > radius) continue;
     u.aiState = 'SEARCH';
     u.lastKnownTarget = { x: origin.x, y: origin.y };
     u.searchTimer = RULES.ai.searchTimer;
@@ -177,7 +177,7 @@ export function resolveAttack(
       const splashRaw = Math.floor(weapon.damage / 2);
       for (const u of state.units) {
         if (primary && u.id === primary.id) continue;
-        if (chebyshev(u.pos, impactPos) > weapon.splash) continue;
+        if (manhattan(u.pos, impactPos) > weapon.splash) continue;
         damageByUnit.push({ unitId: u.id, amount: damageAfterArmor(splashRaw, u.armor) });
       }
     }

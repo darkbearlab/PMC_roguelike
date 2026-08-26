@@ -50,7 +50,7 @@ const target = await page.evaluate(() => {
   const foes = g.state.units.filter(u => u.faction === 'ENEMY');
   const cam = g.cam;
   for (const f of foes) {
-    const d = Math.max(Math.abs(f.pos.x - me.pos.x), Math.abs(f.pos.y - me.pos.y));
+    const d = Math.abs(f.pos.x - me.pos.x) + Math.abs(f.pos.y - me.pos.y);
     if (d <= 8) return { pos: f.pos, id: f.id, sx: cam.ox + (f.pos.x + 0.5) * cam.tile, sy: cam.oy + (f.pos.y + 0.5) * cam.tile };
   }
   return null;
@@ -58,21 +58,26 @@ const target = await page.evaluate(() => {
 
 if (target) {
   const box = await page.locator('#map').boundingBox();
+  // 第一下：鎖定（不得消耗任何資源）
+  const before = await page.evaluate(() => JSON.stringify(window.__game.state));
   await page.mouse.click(box.x + target.sx, box.y + target.sy);
   await page.waitForTimeout(250);
-  await page.screenshot({ path: OUT + '/10-fire-preview.png' });
-  const panel = await page.locator('#tile-menu').textContent();
-  console.log('fire panel:', panel.replace(/\s+/g, ' ').slice(0, 160));
+  const sel = await page.evaluate(() => window.__game.test.selection());
+  const after = await page.evaluate(() => JSON.stringify(window.__game.state));
+  console.log('第一下 → 鎖定', sel, '｜狀態未變:', before === after);
+  await page.screenshot({ path: OUT + '/10-lock.png' });
 
-  const confirm = page.locator('#tile-menu button[data-do="fire"]');
-  if (await confirm.count()) {
-    const before = await page.evaluate((id) => window.__game.state.units.find(u => u.id === id)?.hp, target.id);
-    await confirm.click();
-    await page.waitForTimeout(200);
-    const after = await page.evaluate((id) => window.__game.state.units.find(u => u.id === id)?.hp ?? 'dead', target.id);
-    console.log('target hp:', before, '->', after);
-    await page.screenshot({ path: OUT + '/11-after-fire.png' });
-  }
+  // 第二下：開火，鎖定保留
+  const hpBefore = await page.evaluate((id) => window.__game.state.units.find(u => u.id === id)?.hp, target.id);
+  await page.mouse.click(box.x + target.sx, box.y + target.sy);
+  await page.waitForTimeout(250);
+  const hpAfter = await page.evaluate((id) => {
+    const u = window.__game.state.units.find(x => x.id === id);
+    return u ? u.hp : 'dead';
+  }, target.id);
+  console.log('第二下 → 開火，目標 HP', hpBefore, '->', hpAfter,
+    '｜鎖定保留:', await page.evaluate(() => window.__game.test.selection()));
+  await page.screenshot({ path: OUT + '/11-after-fire.png' });
 } else {
   console.log('沒有敵人在射程內');
   await page.screenshot({ path: OUT + '/10-no-target.png' });

@@ -34,28 +34,32 @@
 
       <div id="turn-banner" class="hidden"></div>
 
+      <button id="btn-log" type="button" title="戰鬥紀錄">誌</button>
+
       <section id="tile-menu" class="sheet hidden" aria-live="polite"></section>
       <section id="log-panel" class="sheet hidden"></section>
 
       <footer id="controls">
-        <div id="dpad">
-          <button type="button" data-dir="NW">↖</button>
-          <button type="button" data-dir="N">↑</button>
-          <button type="button" data-dir="NE">↗</button>
-          <button type="button" data-dir="W">←</button>
-          <button type="button" data-act="WAIT" class="btn-wait">待</button>
-          <button type="button" data-dir="E">→</button>
-          <button type="button" data-dir="SW">↙</button>
-          <button type="button" data-dir="S">↓</button>
-          <button type="button" data-dir="SE">↘</button>
+        <!-- 左：移動區。取消斜向後空出四格，剩下的按鈕放大。
+             待機是這一區唯一不可逆的動作，獨立在方向盤上方、隔一個按鈕高度。 -->
+        <div id="move-cluster">
+          <button type="button" data-act="WAIT" class="btn-wait">待機</button>
+          <div id="dpad">
+            <span class="pad-blank"></span>
+            <button type="button" data-dir="N">↑</button>
+            <button type="button" data-act="STANCE"><b id="lbl-stance">蹲</b></button>
+            <button type="button" data-dir="W">←</button>
+            <button type="button" data-dir="S">↓</button>
+            <button type="button" data-dir="E">→</button>
+          </div>
         </div>
+
+        <!-- 右：動作區。開火鍵已刪除，射擊一律透過地圖點擊。 -->
         <div id="actions">
-          <button type="button" data-act="STANCE"><b id="lbl-stance">蹲</b><small>0</small></button>
-          <button type="button" data-act="FIRE"><b>火</b><small id="lbl-fire">1</small></button>
+          <div id="skill-menu" class="hidden"></div>
+          <button type="button" data-act="SKILL"><b>技能</b></button>
           <button type="button" data-act="RELOAD"><b>彈</b><small id="lbl-reload">1</small></button>
           <button type="button" data-act="SWAP"><b>換</b><small id="lbl-swap">—</small></button>
-          <button type="button" data-act="INTERACT"><b>用</b><small>1</small></button>
-          <button type="button" data-act="LOG"><b>誌</b><small>紀錄</small></button>
         </div>
       </footer>
     </div>

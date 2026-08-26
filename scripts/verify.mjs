@@ -72,8 +72,8 @@ await page.evaluate(() => {
   const g = window.__game;
   const me = g.state.units.find((u) => u.faction === 'PLAYER');
   me.pos = { x: 3, y: 11 };
-  g.selection = { x: 3, y: 11 };
-  g.updateMenu();
+  g.test.refresh();
+  g.test.tap({ x: 3, y: 11 });
 });
 await page.waitForTimeout(250);
 await page.screenshot({ path: OUT + '/21-corpse-menu.png' });

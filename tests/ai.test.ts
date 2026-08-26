@@ -78,7 +78,7 @@ describe('§9.1 AI 狀態機', () => {
     //  一整排半身掩體把上下兩半完全隔開（沒有繞路可走），
     //  這樣測到的就純粹是姿勢對視線的影響，不會被 AI 的走位干擾。
     //       01234567
-    //  y=1  #D.....#   玩家 (2,1)
+    //  y=1  #D....T#   玩家 (2,1)
     //  y=2  #++++++#
     //  y=3  #......#   敵人 (2,3)
     let s = testState(
@@ -135,7 +135,7 @@ describe('§9.1 AI 狀態機', () => {
       ],
       [
         { archetype: 'HULK', pos: { x: 3, y: 1 } },   // 射擊目標
-        { archetype: 'RUNNER', pos: { x: 7, y: 3 } }, // 牆後、噪音半徑 6 內（距離 6）
+        { archetype: 'RUNNER', pos: { x: 7, y: 1 } }, // 牆的另一側，曼哈頓距離剛好 6
       ],
     );
     const before = { ...unit(s, 'E02').pos };
@@ -148,7 +148,7 @@ describe('§9.1 AI 狀態機', () => {
     const after = unit(s, 'E02').pos;
     expect(after).not.toEqual(before);
     // 距離開火點變近了
-    const d = (p: { x: number; y: number }) => Math.max(Math.abs(p.x - 1), Math.abs(p.y - 1));
+    const d = (p: { x: number; y: number }) => Math.abs(p.x - 1) + Math.abs(p.y - 1);
     expect(d(after)).toBeLessThan(d(before));
   });
 

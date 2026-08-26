@@ -120,8 +120,8 @@ describe('§8.3 噪音', () => {
       ],
       [
         { archetype: 'HULK', pos: { x: 3, y: 1 } },   // 目標
-        { archetype: 'RUNNER', pos: { x: 6, y: 3 } }, // 噪音半徑 6 內
-        { archetype: 'RUNNER', pos: { x: 18, y: 3 } },// 半徑外
+        { archetype: 'RUNNER', pos: { x: 5, y: 3 } }, // 曼哈頓 6，剛好在噪音半徑內
+        { archetype: 'RUNNER', pos: { x: 18, y: 3 } },// 曼哈頓 19，半徑外
       ],
     );
     s = applyCommand(s, { type: 'FIRE', target: { x: 3, y: 1 } });

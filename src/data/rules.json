@@ -29,8 +29,7 @@
   },
 
   "movement": {
-    "_diagonalCornerRule": "STRICT = 斜向移動時任一相鄰正交格為阻擋物即禁止（禁止切角）。GAP_ONLY = 僅當兩個正交格都是阻擋物時才禁止（§5.3 字面解）。",
-    "diagonalCornerRule": "STRICT"
+    "_comment": "v0.3 起只能四方向移動，斜向切角規則連同它的歧義一起移除。所有距離一律用曼哈頓。"
   },
 
   "log": {

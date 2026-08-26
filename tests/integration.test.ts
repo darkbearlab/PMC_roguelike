@@ -9,7 +9,7 @@ import { findPath } from '../src/core/pathfind';
 import { activePlayerUnit, unitAt } from '../src/core/state';
 import { findTiles } from '../src/core/map';
 import { canAttack } from '../src/core/combat';
-import { chebyshev, facingFromDelta, sameTile } from '../src/core/grid';
+import { facingFromDelta, manhattan } from '../src/core/grid';
 import type { Facing, GameState, Vec2 } from '../src/core/state';
 
 describe('mission_01 地圖完整性（§13.1）', () => {
@@ -22,7 +22,7 @@ describe('mission_01 地圖完整性（§13.1）', () => {
     const back = findPath(s, t, start, { ignoreUnitIds: s.units.map((u) => u.id) });
     expect(there).not.toBeNull();
     expect(back).not.toBeNull();
-    expect(there!.length).toBeGreaterThan(20); // 終端放在離起點最遠的一端
+    expect(there!.length).toBeGreaterThan(30); // 四方向下路徑更長；終端在離起點最遠的一端
   });
 
   it('兩個次要目標都走得到，且都在主路線之外（需要繞路）', () => {
@@ -63,8 +63,9 @@ function botTurn(s: GameState, goal: Vec2): GameState {
   const u = activePlayerUnit(s);
   if (!u) return s;
 
-  if (sameTile(u.pos, goal)) {
-    const acted = applyCommand(s, { type: 'INTERACT' });
+  // v0.3：相鄰即可互動，不必站上去
+  if (manhattan(u.pos, goal) <= 1) {
+    const acted = applyCommand(s, { type: 'INTERACT', pos: goal });
     if (acted !== s) return acted;
     return applyCommand(s, { type: 'WAIT' });
   }
@@ -75,7 +76,7 @@ function botTurn(s: GameState, goal: Vec2): GameState {
   for (const e of s.units) {
     if (e.faction !== 'ENEMY') continue;
     if (!canAttack(s, u, e.pos, u.equipped).ok) continue;
-    const d = chebyshev(u.pos, e.pos);
+    const d = manhattan(u.pos, e.pos);
     if (d < best) { best = d; target = e.pos; }
   }
   if (target) return applyCommand(s, { type: 'FIRE', target });

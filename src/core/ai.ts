@@ -9,7 +9,7 @@
  */
 import type { GameState, Unit, Vec2 } from './state';
 import { activePlayerUnit, findUnit } from './state';
-import { chebyshev, facingToward, sameTile } from './grid';
+import { manhattan, facingToward, sameTile } from './grid';
 import { unitsSeeEachOther } from './los';
 import { canAttack, performAttack } from './combat';
 import { findPath, occupiedBy } from './pathfind';
@@ -43,7 +43,7 @@ function perceive(state: GameState, e: Unit): void {
   const player = activePlayerUnit(state);
   const canSee =
     !!player &&
-    chebyshev(e.pos, player.pos) <= e.sightRange &&
+    manhattan(e.pos, player.pos) <= e.sightRange &&
     unitsSeeEachOther(state.map, e, player);
 
   if (canSee && player) {
@@ -110,7 +110,7 @@ export function stepEnemy(state: GameState, enemyId: string): StepOutcome {
       return 'CONTINUE';
     }
     // 已達本回合攻擊上限且目標仍在射程內 → 原地待命，不做無意義的位移。
-    if (weapon && e.shotsThisTurn >= e.attacksPerTurn && chebyshev(e.pos, player.pos) <= weapon.range) {
+    if (weapon && e.shotsThisTurn >= e.attacksPerTurn && manhattan(e.pos, player.pos) <= weapon.range) {
       return 'DONE';
     }
     return moveToward(state, e, player.pos);

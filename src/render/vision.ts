@@ -5,7 +5,7 @@
 import type { GameState, Vec2 } from '../core/state';
 import { activePlayerUnit } from '../core/state';
 import { hasLineOfSight } from '../core/los';
-import { chebyshev } from '../core/grid';
+import { manhattan } from '../core/grid';
 
 export interface Vision {
   /** index = y * width + x */
@@ -32,7 +32,7 @@ export function computeVision(state: GameState): Vision {
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const p = { x, y };
-      if (chebyshev(u.pos, p) > u.sightRange) continue;
+      if (manhattan(u.pos, p) > u.sightRange) continue;
       if (hasLineOfSight(state.map, u.pos, u.stance, p, 'STAND')) tiles[y * width + x] = 1;
     }
   }

@@ -9,51 +9,63 @@ await p.waitForTimeout(300);
 async function audit(label) {
   return p.evaluate((tag) => {
     const bad = [];
-    let checked = 0;
-    // 量的是「實際命中區」而不是視覺方框：按鈕視覺縮小了，命中區靠 ::after 外擴，
-    // 所以用 elementFromPoint 測 48x48 的四角才準。
+    const boxes = [];
     for (const el of document.querySelectorAll('button, [role="button"]')) {
       const r = el.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) continue;
       if (el.disabled) continue;
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
       // 被浮動面板／modal 蓋住的按鈕本來就點不到，那是遮擋不是尺寸問題，跳過。
-      const centre = document.elementFromPoint(cx, cy);
+      const centre = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       if (!(centre === el || el.contains(centre))) continue;
-      checked++;
-      const corners = [[-23.5, -23.5], [23.5, -23.5], [-23.5, 23.5], [23.5, 23.5]];
-      const miss = corners.filter(([dx, dy]) => {
-        const hit = document.elementFromPoint(cx + dx, cy + dy);
-        return !(hit === el || el.contains(hit));
-      });
-      if (miss.length) {
-        bad.push(`${tag}: <${el.tagName.toLowerCase()}> "${(el.textContent || '').trim().slice(0, 12)}" `
-          + `視覺 ${Math.round(r.width)}x${Math.round(r.height)}，48x48 命中測試漏 ${miss.length}/4 角`);
+
+      const name = `<${el.tagName.toLowerCase()}> "${(el.textContent || '').trim().slice(0, 10)}"`;
+      // §6.5 之一：命中區 >= 48x48 CSS px
+      if (r.width < 48 || r.height < 48) {
+        bad.push(`${tag}: ${name} 只有 ${Math.round(r.width)}x${Math.round(r.height)}`);
+      }
+      boxes.push({ name, r });
+    }
+    // §6.5 之二：相鄰按鈕的命中區不得互相重疊
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i].r;
+        const b = boxes[j].r;
+        const overlapW = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        const overlapH = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        if (overlapW > 0.5 && overlapH > 0.5) {
+          bad.push(`${tag}: ${boxes[i].name} 與 ${boxes[j].name} 命中區重疊 `
+            + `${Math.round(overlapW)}x${Math.round(overlapH)}px`);
+        }
       }
     }
     const doc = document.documentElement;
-    return { bad, checked, tag, hScroll: doc.scrollWidth > doc.clientWidth };
+    return { bad, checked: boxes.length, tag, hScroll: doc.scrollWidth > doc.clientWidth };
   }, label);
 }
 
 const results = [];
 results.push(await audit('主畫面'));
 
-// 開啟情境選單（點自己）
+// 情境卡片（點自己）
 await p.evaluate(() => {
   const g = window.__game;
-  g.selection = { ...g.state.units.find(u => u.faction === 'PLAYER').pos };
-  g.updateMenu();
+  g.test.tap({ ...g.state.units.find(u => u.faction === 'PLAYER').pos });
 });
 await p.waitForTimeout(150);
-results.push(await audit('情境選單'));
+results.push(await audit('自己的詳細狀態'));
+await p.evaluate(() => window.__game.test.tap({ x: -1, y: -1 }));
+
+// 技能摺疊選單
+await p.locator('#controls button[data-act="SKILL"]').click();
+await p.waitForTimeout(150);
+results.push(await audit('技能選單'));
+await p.locator('#controls button[data-act="SKILL"]').click();
 
 // 紀錄面板
-await p.locator('#actions button[data-act="LOG"]').click();
+await p.locator('#btn-log').click();
 await p.waitForTimeout(150);
 results.push(await audit('紀錄面板'));
-await p.locator('#actions button[data-act="LOG"]').click();
+await p.locator('#btn-log').click();
 
 // 止損只在「當前士兵陣亡」時出現：製造一次陣亡
 await p.evaluate(() => {
@@ -72,9 +84,8 @@ await p.locator('#modal-root button[data-yes]').click();
 await p.waitForTimeout(250);
 results.push(await audit('結算畫面'));
 
-for (const r of results) console.log(`   ${r.tag}: 檢查了 ${r.checked} 個可點擊元素`);
 const bad = results.flatMap(r => r.bad);
 const scroll = results.filter(r => r.hScroll);
-console.log(bad.length ? '❌ 觸控區過小:\n  ' + bad.join('\n  ') : '✅ 所有可點擊元素 >= 48x48 CSS px (320px 寬視窗)');
+console.log(bad.length ? '❌ 觸控區過小:\n  ' + bad.join('\n  ') : '✅ 所有可點擊元素 >= 48x48 CSS px 且命中區互不重疊 (320px 寬視窗)');
 console.log(scroll.length ? '❌ 有水平捲動 ' + JSON.stringify(scroll[0]) : '✅ 沒有水平捲動');
 await b.close();

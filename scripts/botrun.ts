@@ -4,14 +4,14 @@ import { applyCommand } from '../src/core/commands';
 import { findPath } from '../src/core/pathfind';
 import { activePlayerUnit, unitAt } from '../src/core/state';
 import { canAttack } from '../src/core/combat';
-import { chebyshev, facingFromDelta, sameTile } from '../src/core/grid';
+import { facingFromDelta, manhattan } from '../src/core/grid';
 import type { Facing, GameState, Vec2 } from '../src/core/state';
 
 function botTurn(s: GameState, goal: Vec2): GameState {
   const u = activePlayerUnit(s);
   if (!u) return s;
-  if (sameTile(u.pos, goal)) {
-    const acted = applyCommand(s, { type: 'INTERACT' });
+  if (manhattan(u.pos, goal) <= 1) {
+    const acted = applyCommand(s, { type: 'INTERACT', pos: goal });
     if (acted !== s) return acted;
     return applyCommand(s, { type: 'WAIT' });
   }
@@ -20,7 +20,7 @@ function botTurn(s: GameState, goal: Vec2): GameState {
   for (const e of s.units) {
     if (e.faction !== 'ENEMY') continue;
     if (!canAttack(s, u, e.pos, u.equipped).ok) continue;
-    const d = chebyshev(u.pos, e.pos);
+    const d = manhattan(u.pos, e.pos);
     if (d < best) { best = d; target = e.pos; }
   }
   if (target) return applyCommand(s, { type: 'FIRE', target });
