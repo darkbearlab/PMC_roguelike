@@ -1,0 +1,88 @@
+/** 增援選單、止損二次確認、任務結算（§10.1 / §11.3 / §11.4）。 */
+import type { GameState } from '../core/state';
+import { $, esc, show } from './dom';
+import { abandonedList, ledgerText } from './hud';
+
+function root(): HTMLElement {
+  return $('#modal-root');
+}
+
+export function hideModal(): void {
+  const r = root();
+  r.innerHTML = '';
+  show(r, false);
+}
+
+function open(html: string): HTMLElement {
+  const r = root();
+  r.innerHTML = '<div class="modal">' + html + '</div>';
+  show(r, true);
+  return r;
+}
+
+/** §10.1 第 4 點：陣亡後從名冊選一位。MVP 名冊 4 人數值完全相同。 */
+export function showReinforcement(state: GameState, onPick: (id: string) => void, onAbort: () => void): void {
+  const p = state.pendingReinforcement;
+  if (!p) return;
+  const r = open(
+    '<h2 class="lose">' + esc(p.deadUnitId) + ' 已陣亡</h2>'
+    + '<p>屍體與其攜帶的所有裝備留在 (' + p.deathPos.x + ',' + p.deathPos.y + ')。'
+    + '接替者只會配發一把 AR-9，並從<b>最近的空投點</b>落地，該回合無法行動。</p>'
+    + '<p>' + esc(ledgerText(state)) + '</p>'
+    + '<p>名冊剩餘 <b>' + state.roster.length + '</b> 人。MVP 階段四人數值完全相同。</p>'
+    + '<div class="menu-actions">'
+    + state.roster.map((id) =>
+      '<button class="primary" data-pick="' + esc(id) + '">投入 ' + esc(id)
+      + '<em>配發 AR-9（滿彈）</em></button>').join('')
+    + '<button class="danger" data-abort="1">改為止損撤出<em>任務結束</em></button>'
+    + '</div>',
+  );
+  r.querySelectorAll<HTMLButtonElement>('button[data-pick]').forEach((b) => {
+    b.addEventListener('click', () => onPick(b.dataset.pick as string));
+  });
+  const ab = r.querySelector<HTMLButtonElement>('button[data-abort]');
+  if (ab) ab.addEventListener('click', onAbort);
+}
+
+/** §11.3：止損按鈕任何時候都可以按，按下後顯示戰況損益並二次確認。 */
+export function showAbortConfirm(state: GameState, onConfirm: () => void, onCancel: () => void): void {
+  const r = open(
+    '<h2 class="abort">確認止損？</h2>'
+    + '<p>任務將立即中止。已完成的目標會計入結算，留在戰場上的裝備視為損失。</p>'
+    + '<p>' + esc(ledgerText(state)) + '</p>'
+    + '<ul>' + abandonedList(state) + '</ul>'
+    + '<div class="menu-actions">'
+    + '<button class="danger" data-yes="1">確認止損<em>結束任務</em></button>'
+    + '<button data-no="1">繼續作戰</button>'
+    + '</div>',
+  );
+  (r.querySelector('button[data-yes]') as HTMLButtonElement).addEventListener('click', onConfirm);
+  (r.querySelector('button[data-no]') as HTMLButtonElement).addEventListener('click', onCancel);
+}
+
+const RESULT_TITLE: Record<string, [string, string]> = {
+  SUCCESS: ['任務成功', 'win'],
+  ABORTED: ['任務中止（止損）', 'abort'],
+  WIPED: ['名冊耗盡 — 任務失敗', 'lose'],
+  ONGOING: ['任務進行中', ''],
+};
+
+/** §11.4 結算畫面。 */
+export function showSummary(state: GameState, onRestart: () => void): void {
+  const [title, cls] = RESULT_TITLE[state.result] ?? RESULT_TITLE.ONGOING;
+  const sec = state.objectives.secondary;
+  const r = open(
+    '<h2 class="' + cls + '">' + esc(title) + '</h2>'
+    + '<div class="stat-grid">'
+    + '<div class="stat"><span>回合數</span><b>' + state.turn + '</b></div>'
+    + '<div class="stat"><span>投入士兵</span><b>' + state.deployed + '</b></div>'
+    + '<div class="stat"><span>陣亡</span><b>' + state.casualties + '</b></div>'
+    + '</div>'
+    + '<p>主目標：<b>' + (state.objectives.main.done ? '已完成' : '未完成') + '</b>'
+    + '　次要目標：<b>' + sec.filter((o) => o.done).length + '/' + sec.length + '</b></p>'
+    + '<p>尚留在戰場上的裝備（未回收的損失）：</p>'
+    + '<ul>' + abandonedList(state) + '</ul>'
+    + '<div class="menu-actions"><button class="primary" data-restart="1">重新開始</button></div>',
+  );
+  (r.querySelector('button[data-restart]') as HTMLButtonElement).addEventListener('click', onRestart);
+}

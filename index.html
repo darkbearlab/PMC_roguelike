@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, maximum-scale=1"
+    />
+    <meta name="theme-color" content="#0d1013" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230d1013'/%3E%3Ccircle cx='8' cy='8' r='4' fill='%234fd6ff'/%3E%3C/svg%3E"
+    />
+    <title>複製人 PMC — 廢棄水處理廠</title>
+  </head>
+  <body>
+    <div id="app">
+      <header id="hud">
+        <div class="hud-row hud-top">
+          <div class="chip chip-ap" id="hud-ap" title="行動點"></div>
+          <div class="chip" id="hud-hp"></div>
+          <div class="chip" id="hud-weapon"></div>
+          <div class="chip" id="hud-stance"></div>
+          <div class="chip" id="hud-roster"></div>
+          <div class="chip" id="hud-foes"></div>
+          <button class="chip chip-danger" id="btn-abort" type="button">止損</button>
+        </div>
+        <div class="hud-row hud-ledger" id="hud-ledger"></div>
+      </header>
+
+      <main id="stage">
+        <canvas id="map"></canvas>
+        <div id="turn-banner" class="hidden"></div>
+        <section id="tile-menu" class="sheet hidden" aria-live="polite"></section>
+        <section id="log-panel" class="sheet hidden"></section>
+      </main>
+
+      <footer id="controls">
+        <div id="dpad">
+          <button type="button" data-dir="NW">↖</button>
+          <button type="button" data-dir="N">↑</button>
+          <button type="button" data-dir="NE">↗</button>
+          <button type="button" data-dir="W">←</button>
+          <button type="button" data-act="WAIT" class="btn-wait">待</button>
+          <button type="button" data-dir="E">→</button>
+          <button type="button" data-dir="SW">↙</button>
+          <button type="button" data-dir="S">↓</button>
+          <button type="button" data-dir="SE">↘</button>
+        </div>
+        <div id="actions">
+          <button type="button" data-act="STANCE"><b id="lbl-stance">蹲</b><small>0 AP</small></button>
+          <button type="button" data-act="FIRE"><b>火</b><small id="lbl-fire">1 AP</small></button>
+          <button type="button" data-act="RELOAD"><b>彈</b><small id="lbl-reload">1 AP</small></button>
+          <button type="button" data-act="SWAP"><b>換</b><small id="lbl-swap">— AP</small></button>
+          <button type="button" data-act="INTERACT"><b>用</b><small>1 AP</small></button>
+          <button type="button" data-act="LOG"><b>誌</b><small>紀錄</small></button>
+        </div>
+      </footer>
+    </div>
+
+    <div id="modal-root" class="hidden"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

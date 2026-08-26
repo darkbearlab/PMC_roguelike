@@ -1,0 +1,36 @@
+[
+  {
+    "id": "ar9",
+    "name": "AR-9 制式步槍",
+    "class": "LIGHT",
+    "damage": 3,
+    "range": 8,
+    "magazine": 6,
+    "ammo": 6,
+    "fireCost": 1,
+    "reloadCost": 1,
+    "endsTurn": false,
+    "noiseRadius": 6,
+    "splash": 0,
+    "accuracy": 0.85,
+    "optimalRange": 5,
+    "falloffPerTile": 0.08
+  },
+  {
+    "id": "rr4",
+    "name": "RR-4 無後座力砲",
+    "class": "HEAVY",
+    "damage": 12,
+    "range": 12,
+    "magazine": 1,
+    "ammo": 1,
+    "fireCost": 2,
+    "reloadCost": 2,
+    "endsTurn": false,
+    "noiseRadius": 14,
+    "splash": 1,
+    "accuracy": 0.75,
+    "optimalRange": 8,
+    "falloffPerTile": 0.10
+  }
+]

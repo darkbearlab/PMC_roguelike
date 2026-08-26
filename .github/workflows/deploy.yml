@@ -1,0 +1,64 @@
+name: Deploy to GitHub Pages
+
+# main 是唯一的分支：推上去就自動測試、建置、部署。
+# 手機重新整理就會拿到最新版（資產檔名帶 hash，不會吃到舊快取）。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: 型別檢查
+        run: npm run typecheck
+
+      - name: 測試（core/ 規則層 + UI 接線）
+        run: npm test
+
+      - name: 地圖資料檔與產生器一致
+        run: |
+          npm run map:build
+          git diff --exit-code -- src/data/maps/mission_01.json
+
+      - name: 建置
+        run: npx vite build
+        env:
+          VITE_BUILD_ID: ${{ github.sha }}
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

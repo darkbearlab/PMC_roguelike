@@ -1,0 +1,5 @@
+# 全部文字檔在 repo 與工作區都用 LF，避免 Windows 的 CRLF 造成假 diff
+# （CI 有一項檢查是「地圖 JSON 必須與產生器輸出逐位元組相同」）。
+* text=auto eol=lf
+*.png binary
+*.jpg binary

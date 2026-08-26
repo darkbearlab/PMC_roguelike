@@ -1,0 +1,102 @@
+{
+  "_comment": "玩家士兵與敵人原型。敵人的攻擊以一把合成的 Weapon 表示，讓 core/combat.ts 的解算管線對雙方完全一致。",
+
+  "SOLDIER": {
+    "name": "複製兵",
+    "faction": "PLAYER",
+    "hp": 10,
+    "armor": 0,
+    "maxAp": 2,
+    "sightRange": 12,
+    "aim": 0,
+    "evasion": 0,
+    "attacksPerTurn": 99
+  },
+
+  "RUNNER": {
+    "name": "衝鋒型",
+    "faction": "ENEMY",
+    "hp": 4,
+    "armor": 0,
+    "maxAp": 3,
+    "sightRange": 10,
+    "aim": 0,
+    "evasion": 0,
+    "attacksPerTurn": 99,
+    "attack": {
+      "id": "runner_claw",
+      "name": "衝擊爪",
+      "class": "LIGHT",
+      "damage": 3,
+      "range": 1,
+      "magazine": 99,
+      "ammo": 99,
+      "fireCost": 1,
+      "reloadCost": 0,
+      "endsTurn": false,
+      "noiseRadius": 0,
+      "splash": 0,
+      "accuracy": 0.9,
+      "optimalRange": 1,
+      "falloffPerTile": 0
+    }
+  },
+
+  "HULK": {
+    "name": "裝甲型",
+    "faction": "ENEMY",
+    "hp": 12,
+    "armor": 2,
+    "maxAp": 1,
+    "sightRange": 8,
+    "aim": 0,
+    "evasion": 0,
+    "attacksPerTurn": 99,
+    "attack": {
+      "id": "hulk_slam",
+      "name": "重擊",
+      "class": "HEAVY",
+      "damage": 6,
+      "range": 1,
+      "magazine": 99,
+      "ammo": 99,
+      "fireCost": 1,
+      "reloadCost": 0,
+      "endsTurn": false,
+      "noiseRadius": 0,
+      "splash": 0,
+      "accuracy": 0.9,
+      "optimalRange": 1,
+      "falloffPerTile": 0
+    }
+  },
+
+  "SHOOTER": {
+    "name": "射手型",
+    "faction": "ENEMY",
+    "hp": 5,
+    "armor": 0,
+    "maxAp": 2,
+    "sightRange": 12,
+    "aim": 0,
+    "evasion": 0,
+    "attacksPerTurn": 1,
+    "attack": {
+      "id": "shooter_smg",
+      "name": "制壓槍",
+      "class": "LIGHT",
+      "damage": 2,
+      "range": 7,
+      "magazine": 99,
+      "ammo": 99,
+      "fireCost": 1,
+      "reloadCost": 0,
+      "endsTurn": false,
+      "noiseRadius": 0,
+      "splash": 0,
+      "accuracy": 0.8,
+      "optimalRange": 5,
+      "falloffPerTile": 0.05
+    }
+  }
+}

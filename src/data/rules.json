@@ -1,0 +1,39 @@
+{
+  "_comment": "§17 待調整數值。所有平衡數字集中在 data/ 的 JSON，不寫死在程式碼裡。",
+
+  "roster": {
+    "size": 4,
+    "idPrefix": "K-44"
+  },
+
+  "ap": {
+    "moveCost": 1,
+    "pickupCost": 1,
+    "dropCost": 0,
+    "interactCost": 1,
+    "stanceCost": 0,
+    "facingCost": 0,
+    "swapCost": { "LIGHT": 1, "HEAVY": 2 }
+  },
+
+  "ai": {
+    "searchTimer": 3
+  },
+
+  "combat": {
+    "_hitToggle": "§17 命中率總開關。true = MVP 固定必中；false = 啟用 §8.1 預留公式。",
+    "alwaysHit": true,
+    "hitFloor": 0.05,
+    "hitCeil": 1.0,
+    "minDamage": 1
+  },
+
+  "movement": {
+    "_diagonalCornerRule": "STRICT = 斜向移動時任一相鄰正交格為阻擋物即禁止（禁止切角）。GAP_ONLY = 僅當兩個正交格都是阻擋物時才禁止（§5.3 字面解）。",
+    "diagonalCornerRule": "STRICT"
+  },
+
+  "log": {
+    "maxEntries": 60
+  }
+}
