@@ -1,5 +1,5 @@
-/** 攝影機：跟隨玩家單位，允許手動平移，並夾在地圖範圍內。 */
-import type { MapData, Vec2 } from '../core/state';
+/** 攝影機：玩家單位永遠鎖在畫面正中央。 */
+import type { Vec2 } from '../core/state';
 import { clamp } from '../core/grid';
 
 export interface Camera {
@@ -9,7 +9,7 @@ export interface Camera {
 }
 
 /** 視野內大約要看到幾格（取畫布短邊）。 */
-const TARGET_TILES_ACROSS = 13;
+const TARGET_TILES_ACROSS = 12;
 const MIN_TILE = 18;
 const MAX_TILE = 46;
 
@@ -19,29 +19,23 @@ export function tileSizeFor(viewW: number, viewH: number): number {
 }
 
 /**
- * @param insetBottom 底部被面板遮住的高度。焦點會置中於「沒被遮住的那塊」，
- *                    但畫面仍然填滿整個 canvas —— 面板背後還是有畫面，只是不再把主角壓在底下。
+ * 玩家單位永遠在畫面正中央 —— 攝影機不夾在地圖範圍內。
+ * 因此地圖邊界外會露出畫面，由 renderer 畫成「界外岩層」（§6 邊界視同 WALL）。
+ *
+ * @param pan 暫時的手動平移。任何指令執行後都會歸零，鏡頭自動回到士兵身上。
  */
 export function computeCamera(
-  map: MapData,
   viewW: number,
   viewH: number,
   focus: Vec2,
   pan: Vec2,
-  insetBottom = 0,
 ): Camera {
   const tile = tileSizeFor(viewW, viewH);
-  const mapW = map.width * tile;
-  const mapH = map.height * tile;
-  const usableH = Math.max(tile * 3, viewH - insetBottom);
-
-  let ox = viewW / 2 - (focus.x + 0.5) * tile + pan.x;
-  let oy = usableH / 2 - (focus.y + 0.5) * tile + pan.y;
-
-  ox = mapW <= viewW ? (viewW - mapW) / 2 : clamp(ox, viewW - mapW, 0);
-  oy = mapH <= viewH ? (viewH - mapH) / 2 : clamp(oy, viewH - mapH, 0);
-
-  return { tile, ox, oy };
+  return {
+    tile,
+    ox: viewW / 2 - (focus.x + 0.5) * tile + pan.x,
+    oy: viewH / 2 - (focus.y + 0.5) * tile + pan.y,
+  };
 }
 
 export function tileToScreen(cam: Camera, t: Vec2): Vec2 {

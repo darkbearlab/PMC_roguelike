@@ -9,16 +9,31 @@ await p.waitForTimeout(300);
 async function audit(label) {
   return p.evaluate((tag) => {
     const bad = [];
+    let checked = 0;
+    // 量的是「實際命中區」而不是視覺方框：按鈕視覺縮小了，命中區靠 ::after 外擴，
+    // 所以用 elementFromPoint 測 48x48 的四角才準。
     for (const el of document.querySelectorAll('button, [role="button"]')) {
-      if (!el.offsetParent && el.offsetWidth === 0) continue;
       const r = el.getBoundingClientRect();
       if (r.width === 0 && r.height === 0) continue;
-      if (r.width < 48 || r.height < 48) {
-        bad.push(`${tag}: <${el.tagName.toLowerCase()}> "${(el.textContent || '').trim().slice(0, 12)}" ${Math.round(r.width)}x${Math.round(r.height)}`);
+      if (el.disabled) continue;
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      // 被浮動面板／modal 蓋住的按鈕本來就點不到，那是遮擋不是尺寸問題，跳過。
+      const centre = document.elementFromPoint(cx, cy);
+      if (!(centre === el || el.contains(centre))) continue;
+      checked++;
+      const corners = [[-23.5, -23.5], [23.5, -23.5], [-23.5, 23.5], [23.5, 23.5]];
+      const miss = corners.filter(([dx, dy]) => {
+        const hit = document.elementFromPoint(cx + dx, cy + dy);
+        return !(hit === el || el.contains(hit));
+      });
+      if (miss.length) {
+        bad.push(`${tag}: <${el.tagName.toLowerCase()}> "${(el.textContent || '').trim().slice(0, 12)}" `
+          + `視覺 ${Math.round(r.width)}x${Math.round(r.height)}，48x48 命中測試漏 ${miss.length}/4 角`);
       }
     }
     const doc = document.documentElement;
-    return { bad, hScroll: doc.scrollWidth > doc.clientWidth, sw: doc.scrollWidth, cw: doc.clientWidth };
+    return { bad, checked, tag, hScroll: doc.scrollWidth > doc.clientWidth };
   }, label);
 }
 
@@ -40,14 +55,24 @@ await p.waitForTimeout(150);
 results.push(await audit('紀錄面板'));
 await p.locator('#actions button[data-act="LOG"]').click();
 
-// 止損確認 modal
-await p.locator('#btn-abort').click();
-await p.waitForTimeout(150);
+// 止損只在「當前士兵陣亡」時出現：製造一次陣亡
+await p.evaluate(() => {
+  const g = window.__game;
+  const me = g.state.units.find((u) => u.faction === 'PLAYER');
+  me.hp = 3;
+  g.dispatch({ type: 'FIRE', target: { ...me.pos } });
+});
+await p.waitForTimeout(300);
+results.push(await audit('增援選單'));
+
+await p.locator('#modal-root button[data-abort]').click();
+await p.waitForTimeout(200);
 results.push(await audit('止損確認'));
 await p.locator('#modal-root button[data-yes]').click();
-await p.waitForTimeout(200);
+await p.waitForTimeout(250);
 results.push(await audit('結算畫面'));
 
+for (const r of results) console.log(`   ${r.tag}: 檢查了 ${r.checked} 個可點擊元素`);
 const bad = results.flatMap(r => r.bad);
 const scroll = results.filter(r => r.hScroll);
 console.log(bad.length ? '❌ 觸控區過小:\n  ' + bad.join('\n  ') : '✅ 所有可點擊元素 >= 48x48 CSS px (320px 寬視窗)');

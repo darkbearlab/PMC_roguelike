@@ -66,6 +66,7 @@ export class Game {
     const next = applyCommand(this.state, cmd);
     if (next === this.state) return false;
     this.state = next;
+    this.pan = { x: 0, y: 0 };   // 指令一下去，鏡頭立刻回到士兵身上
     this.refresh();
     return true;
   }
@@ -152,11 +153,12 @@ export class Game {
     en('#actions button[data-act="INTERACT"]', checkLegal(s, { type: 'INTERACT' }).ok);
     $<HTMLButtonElement>('#actions button[data-act="LOG"]').disabled = false;
 
+    // 按鈕縮小後只放數字（AP 成本），單位交給 HUD 的 AP 圓點表達
     $('#lbl-stance').textContent = u && u.stance === 'STAND' ? '蹲' : '站';
-    $('#lbl-fire').textContent = u && u.equipped ? u.equipped.fireCost + ' AP' : '— AP';
-    $('#lbl-reload').textContent = u && u.equipped ? u.equipped.reloadCost + ' AP' : '— AP';
+    $('#lbl-fire').textContent = u && u.equipped ? String(u.equipped.fireCost) : '—';
+    $('#lbl-reload').textContent = u && u.equipped ? String(u.equipped.reloadCost) : '—';
     const sc = u ? swapCost(u) : Infinity;
-    $('#lbl-swap').textContent = Number.isFinite(sc) ? sc + ' AP' : '— AP';
+    $('#lbl-swap').textContent = Number.isFinite(sc) ? String(sc) : '—';
 
     this.updateBanner();
   }
@@ -206,6 +208,7 @@ export class Game {
       return;
     }
     host.innerHTML = html;
+    this.placeSheet(host, this.selection);
     show(host, true);
     this.updateBanner();
     wireMenu(host, this.selection, {
@@ -220,6 +223,17 @@ export class Game {
     });
   }
 
+  /**
+   * 小卡靠上還是靠下：士兵永遠在畫面正中央，所以只要看目標在他上方還下方，
+   * 把卡片放到相反那一側，主角與目標就都不會被蓋住。
+   */
+  private placeSheet(host: HTMLElement, at: Vec2 | null): void {
+    const me = activePlayerUnit(this.state);
+    const below = !!me && !!at && at.y > me.pos.y;
+    host.classList.toggle('sheet--top', below);
+    host.classList.toggle('sheet--bottom', !below);
+  }
+
   private updateLog(): void {
     const host = $('#log-panel');
     if (!this.logOpen) { show(host, false); this.updateBanner(); return; }
@@ -229,6 +243,7 @@ export class Game {
     host.innerHTML = '<h3>戰鬥紀錄<button class="close" data-close="1">關閉</button></h3>'
       + '<p class="note">build ' + esc(BUILD_ID) + '　seed ' + this.state.rngSeed + '</p>'
       + '<ol>' + items + '</ol>';
+    this.placeSheet(host, null);
     show(host, true);
     this.updateBanner();
     const btn = host.querySelector<HTMLButtonElement>('button[data-close]');
@@ -253,12 +268,27 @@ export class Game {
             hideModal();
             this.dispatch({ type: 'DEPLOY_REINFORCEMENT', soldierId: id });
           },
-          () => { this.modal = 'NONE'; hideModal(); this.dispatch({ type: 'ABORT' }); },
+          () => this.askAbort(),
         );
       }
       return;
     }
     if (this.modal === 'REINFORCE') { this.modal = 'NONE'; hideModal(); }
+  }
+
+  /**
+   * 止損二次確認（§11.3）。HUD 上不再有止損按鈕 ——
+   * 只有「當前士兵陣亡」的那個當下才會浮現這個選項，
+   * 讓止損變成必須先付出一條人命才做得到的決定。取消則退回增援選單。
+   */
+  private askAbort(): void {
+    this.modal = 'ABORT';
+    hideModal();
+    showAbortConfirm(
+      this.state,
+      () => { this.modal = 'NONE'; hideModal(); this.dispatch({ type: 'ABORT' }); },
+      () => { this.modal = 'NONE'; hideModal(); this.refresh(); },
+    );
   }
 
   private closeMenu(): void {
@@ -289,6 +319,11 @@ export class Game {
     }
     this.moveQueue = dirs;
     this.closeMenu();
+  }
+
+  /** 測試用：直接以地圖座標模擬一次點擊（正式流程走 canvas 的 pointer 事件）。 */
+  tapTileForTest(p: Vec2): void {
+    this.tapTile(p);
   }
 
   private tapTile(p: Vec2): void {
@@ -356,18 +391,6 @@ export class Game {
       if (fn) btn.addEventListener('click', fn);
     }
 
-    $('#btn-abort').addEventListener('click', () => {
-      if (this.state.result !== 'ONGOING') return;
-      const prev = this.modal;
-      this.modal = 'ABORT';
-      hideModal();
-      showAbortConfirm(
-        this.state,
-        () => { this.modal = 'NONE'; hideModal(); this.dispatch({ type: 'ABORT' }); },
-        () => { this.modal = prev === 'ABORT' ? 'NONE' : prev; hideModal(); this.refresh(); },
-      );
-    });
-
     this.bindCanvas();
     this.bindKeyboard();
   }
@@ -404,7 +427,6 @@ export class Game {
       const p = local(e);
       downAt = 0;
       if (!dragging && elapsed < TAP_MS) {
-        this.pan = { x: 0, y: 0 };
         this.tapTile(screenToTile(this.cam, p.x, p.y));
       }
     };
@@ -439,7 +461,7 @@ export class Game {
   // ---------------------------------------------------------------- 畫面
 
   private observeResize(): void {
-    const stage = $('#stage');
+    const stage = $('#app');
     const fit = (): void => {
       const r = stage.getBoundingClientRect();
       const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -512,30 +534,9 @@ export class Game {
     this.refresh();
   }
 
-  /** 面板打開時擋住的高度，讓攝影機把焦點推到看得見的區域。 */
-  private sheetInset(): number {
-    let inset = 0;
-    for (const sel of ['#tile-menu', '#log-panel']) {
-      const el = document.querySelector<HTMLElement>(sel);
-      if (el && !el.classList.contains('hidden')) inset = Math.max(inset, el.offsetHeight);
-    }
-    return inset;
-  }
-
-  /** 射擊預覽時把攝影機對準「射手與目標的中點」，讓整條視線都看得到。 */
-  private cameraFocus(): Vec2 {
-    if (!this.fireTarget) return this.focus;
-    return {
-      x: (this.focus.x + this.fireTarget.x) / 2,
-      y: (this.focus.y + this.fireTarget.y) / 2,
-    };
-  }
-
   private render(): void {
-    this.cam = computeCamera(
-      this.state.map, this.viewW, this.viewH,
-      this.cameraFocus(), this.pan, this.sheetInset(),
-    );
+    // 士兵永遠在畫面正中央（pan 只是暫時的手動窺看，任何指令後歸零）
+    this.cam = computeCamera(this.viewW, this.viewH, this.focus, this.pan);
     draw(this.ctx, this.viewW, this.viewH, {
       state: this.state,
       vision: this.vision,

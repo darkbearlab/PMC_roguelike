@@ -78,7 +78,7 @@ function firePanel(state: GameState, pos: Vec2): string {
     + (legal.ok
       ? '<button class="primary" data-do="fire">確認射擊<em>或再點一次目標</em></button>'
       : '<button disabled>無法射擊<em>' + esc(legal.reason) + '</em></button>' + moveButton(state, pos))
-    + '<button data-do="close">取消</button></div>';
+    + '</div>';
 }
 
 function corpsePanel(state: GameState, pos: Vec2): string {
@@ -120,7 +120,7 @@ function corpsePanel(state: GameState, pos: Vec2): string {
   });
 
   if (!standing) html += moveButton(state, pos);
-  html += '<button data-do="close">關閉</button></div>';
+  html += '</div>';
   return html;
 }
 
@@ -149,7 +149,7 @@ function selfPanel(state: GameState): string {
       ? '<button data-do="interact" ' + (legal.ok ? 'class="primary"' : 'disabled') + '>'
         + esc(interactLabel) + '<em>' + (legal.ok ? '1 AP' : esc(legal.reason)) + '</em></button>'
       : '')
-    + '<button data-do="close">關閉</button></div>';
+    + '</div>';
 }
 
 function tilePanel(state: GameState, pos: Vec2): string {
@@ -182,7 +182,7 @@ function tilePanel(state: GameState, pos: Vec2): string {
   } else {
     html += moveButton(state, pos);
   }
-  html += '<button data-do="close">關閉</button></div>';
+  html += '</div>';
   return html;
 }
 

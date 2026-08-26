@@ -3,7 +3,7 @@
  */
 import type { Corpse, GameState, Unit, Vec2 } from '../core/state';
 import { activePlayerUnit, corpseAt } from '../core/state';
-import { tileAt } from '../core/map';
+import { inBounds, tileAt } from '../core/map';
 import { sightPath } from '../core/los';
 import { sameTile } from '../core/grid';
 import type { Camera } from './camera';
@@ -26,6 +26,9 @@ const C = {
   supply: '#14493f',
   supplyInk: '#5cf0cd',
   fog: 'rgba(5,8,12,0.62)',
+  voidFill: '#0a0d11',
+  voidHatch: 'rgba(105,121,139,0.085)',
+  edge: 'rgba(105,121,139,0.55)',
   lit: 'rgba(255,238,205,0.055)',
   player: '#4fd6ff',
   corpse: '#6d5a52',
@@ -57,24 +60,42 @@ export interface Scene {
 }
 
 export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, sc: Scene): void {
-  const { state, cam } = sc;
+  const { cam } = sc;
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, w, h);
 
+  // 士兵永遠置中 ⇒ 攝影機不夾邊界 ⇒ 畫面會露出地圖之外。
+  // 界外照 §6「地圖邊界視同 WALL」畫成整片岩層，再描一圈可作戰範圍的邊。
   const tl = screenToTile(cam, 0, 0);
   const br = screenToTile(cam, w, h);
-  const x0 = Math.max(0, tl.x - 1);
-  const y0 = Math.max(0, tl.y - 1);
-  const x1 = Math.min(state.map.width - 1, br.x + 1);
-  const y1 = Math.min(state.map.height - 1, br.y + 1);
+  const x0 = tl.x - 1;
+  const y0 = tl.y - 1;
+  const x1 = br.x + 1;
+  const y1 = br.y + 1;
 
   drawTiles(ctx, sc, x0, y0, x1, y1);
-  drawCorpses(ctx, sc, x0, y0, x1, y1);
+  drawMapEdge(ctx, sc);
+  drawCorpses(ctx, sc, Math.max(0, x0), Math.max(0, y0), x1, y1);
   drawGhosts(ctx, sc);
   drawUnits(ctx, sc);
   drawPreviewPath(ctx, sc);
   drawFireLine(ctx, sc);
   drawSelection(ctx, sc);
+  drawVignette(ctx, w, h);
+}
+
+/**
+ * 邊角壓暗。士兵鎖在正中央，在地圖角落時畫面會露出大片界外岩層 ——
+ * 暈影讓那片區域自然退到背景，視線集中回中央的士兵。
+ */
+function drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number): void {
+  const cx = w / 2;
+  const cy = h / 2;
+  const g = ctx.createRadialGradient(cx, cy, Math.min(w, h) * 0.32, cx, cy, Math.max(w, h) * 0.72);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(0,0,0,0.42)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
 }
 
 function drawTiles(ctx: CanvasRenderingContext2D, sc: Scene, x0: number, y0: number, x1: number, y1: number): void {
@@ -84,6 +105,11 @@ function drawTiles(ctx: CanvasRenderingContext2D, sc: Scene, x0: number, y0: num
     for (let x = x0; x <= x1; x++) {
       const p = { x, y };
       const s = tileToScreen(cam, p);
+
+      if (!inBounds(state.map, p)) {
+        drawVoid(ctx, s, t, x, y);
+        continue;
+      }
       const kind = tileAt(state.map, p);
 
       ctx.fillStyle = C.floor;
@@ -118,6 +144,35 @@ function drawTiles(ctx: CanvasRenderingContext2D, sc: Scene, x0: number, y0: num
       ctx.fillRect(s.x, s.y, t, t);
     }
   }
+}
+
+/** 界外岩層：實心底色 + 斜線紋理，一眼看得出「這裡永遠去不了」。 */
+function drawVoid(ctx: CanvasRenderingContext2D, s: Vec2, t: number, tx: number, ty: number): void {
+  ctx.fillStyle = C.voidFill;
+  ctx.fillRect(s.x, s.y, t, t);
+  ctx.strokeStyle = C.voidHatch;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  // 用格座標決定相位，鏡頭移動時紋理不會跟著游移
+  const step = t / 3;
+  const phase = ((((tx + ty) % 3) + 3) % 3) * (step / 3);
+  for (let i = phase; i < t * 2; i += step) {
+    ctx.moveTo(s.x + i, s.y);
+    ctx.lineTo(s.x + i - t, s.y + t);
+  }
+  ctx.stroke();
+}
+
+/** 可作戰範圍的外框。 */
+function drawMapEdge(ctx: CanvasRenderingContext2D, sc: Scene): void {
+  const { cam, state } = sc;
+  const a = tileToScreen(cam, { x: 0, y: 0 });
+  ctx.save();
+  ctx.strokeStyle = C.edge;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([9, 5]);
+  ctx.strokeRect(a.x - 1, a.y - 1, state.map.width * cam.tile + 2, state.map.height * cam.tile + 2);
+  ctx.restore();
 }
 
 function marker(

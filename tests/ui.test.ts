@@ -82,16 +82,35 @@ describe('UI 冒煙測試', () => {
     expect(document.querySelector('#lbl-stance')!.textContent).toBe('站');
   });
 
-  it('止損按鈕跳出二次確認，確認後顯示結算畫面', async () => {
+  it('HUD 上沒有止損按鈕，止損只在當前士兵陣亡時才出現', async () => {
     const { Game } = await import('../src/ui/game');
     const g = new Game(1);
-    document.querySelector<HTMLButtonElement>('#btn-abort')!.click();
+    expect(document.querySelector('#btn-abort')).toBeNull();
+    expect(document.querySelector('#modal-root')!.classList.contains('hidden')).toBe(true);
+
+    // 製造一次陣亡 → 增援選單，止損選項在這裡才浮現
+    const me = g.state.units.find((u) => u.faction === 'PLAYER')!;
+    me.hp = 3;
+    g.dispatch({ type: 'FIRE', target: { ...me.pos } });
+
     const modal = document.querySelector('#modal-root')!;
     expect(modal.classList.contains('hidden')).toBe(false);
-    expect(modal.textContent).toContain('確認止損');
-    expect(modal.textContent).toContain('投入 1 名');
+    expect(modal.textContent).toContain('已陣亡');
+    expect(modal.querySelector('button[data-abort]')).not.toBeNull();
 
-    modal.querySelector<HTMLButtonElement>('button[data-yes]')!.click();
+    // 止損仍需二次確認（§11.3）
+    modal.querySelector<HTMLButtonElement>('button[data-abort]')!.click();
+    expect(document.querySelector('#modal-root')!.textContent).toContain('確認止損');
+    expect(document.querySelector('#modal-root')!.textContent).toContain('投入 1 名');
+
+    // 取消 → 退回增援選單，任務繼續
+    document.querySelector<HTMLButtonElement>('#modal-root button[data-no]')!.click();
+    expect(g.state.result).toBe('ONGOING');
+    expect(document.querySelector('#modal-root')!.textContent).toContain('已陣亡');
+
+    // 再按一次並確認 → 結算
+    document.querySelector<HTMLButtonElement>('#modal-root button[data-abort]')!.click();
+    document.querySelector<HTMLButtonElement>('#modal-root button[data-yes]')!.click();
     expect(g.state.result).toBe('ABORTED');
     expect(document.querySelector('#modal-root')!.textContent).toContain('任務中止');
     expect(document.querySelector('#modal-root')!.textContent).toContain('回合數');
@@ -99,6 +118,19 @@ describe('UI 冒煙測試', () => {
     document.querySelector<HTMLButtonElement>('#modal-root button[data-restart]')!.click();
     expect(g.state.result).toBe('ONGOING');
     expect(g.state.turn).toBe(1);
+  });
+
+  it('浮動面板依目標位置決定靠上或靠下，不會蓋住正中央的士兵', async () => {
+    const { Game } = await import('../src/ui/game');
+    const g = new Game(1);
+    const me = g.state.units.find((u) => u.faction === 'PLAYER')!;
+    const panel = document.querySelector('#tile-menu')!;
+
+    g.tapTileForTest({ x: me.pos.x, y: me.pos.y + 3 });   // 目標在下方
+    expect(panel.classList.contains('sheet--top')).toBe(true);
+
+    g.tapTileForTest({ x: me.pos.x + 2, y: me.pos.y });   // 目標在同高
+    expect(panel.classList.contains('sheet--bottom')).toBe(true);
   });
 
   it('未命中路徑在 UI 上不會炸掉，戰鬥紀錄看得到「未命中」', async () => {

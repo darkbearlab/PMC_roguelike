@@ -44,9 +44,16 @@ await page.screenshot({ path: OUT + '/04-log.png' });
 await page.locator('#actions button[data-act="LOG"]').click();
 
 // 止損確認
-await page.locator('#btn-abort').click();
+await page.evaluate(() => {
+  const g = window.__game;
+  const me = g.state.units.find((u) => u.faction === 'PLAYER');
+  me.hp = 3;
+  g.dispatch({ type: 'FIRE', target: { ...me.pos } });
+});
 await page.waitForTimeout(200);
 await page.screenshot({ path: OUT + '/05-abort.png' });
+await page.locator('#modal-root button[data-abort]').click();
+await page.waitForTimeout(200);
 await page.locator('#modal-root button[data-yes]').click();
 await page.waitForTimeout(300);
 await page.screenshot({ path: OUT + '/06-summary.png' });
