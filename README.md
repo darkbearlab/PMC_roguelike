@@ -13,7 +13,7 @@
 ```bash
 npm install
 npm run dev        # http://localhost:5173  （手機同網段可用 --host 顯示的網址開）
-npm run test       # 102 個測試：core/ 規則層、UI 互動文法、整張正式地圖的整合測試
+npm run test       # 107 個測試：core/ 規則層、UI 互動文法、整張正式地圖的整合測試
 npm run typecheck
 npm run build
 npm run map:build  # 重新產生並驗證 mission_01（會檢查連通性與規格 §13.1 的設計要求）
@@ -147,6 +147,12 @@ IDLE 的敵人一定要選得到、打得到，偷襲是核心玩法。
 
 觸控命中區 ≥ 48×48 CSS px **且互不重疊**，320px 寬視窗實測通過（`scripts/a11y.mjs`）。
 
+**鏡頭夾制的邊界是「可觸區域」而不是視窗。** HUD 與控制列浮在地圖上，若照視窗邊界夾制，
+士兵走到地圖下緣時會被壓到控制列底下——而 v0.3 把開火鍵拿掉之後，射擊與互動全靠點地圖，
+被蓋住就等於完全不能操作。所以垂直方向夾在 HUD 底部與控制列頂部之間。
+`camera.test.ts` 會驗士兵在地圖九個位置（四角、四邊中點、正中）時，
+自己與四個正交鄰格都完整落在可觸區域內；`a11y.mjs` 再在真實瀏覽器上量一次視覺遮擋。
+
 > 這條稽核本身踩過兩次坑，都記在腳本裡：
 > 一是按鈕縮小後用 `::after` 外擴命中區，結果相鄰按鈕的外擴區互相重疊、搶走對方的角落；
 > 二是改用 `elementFromPoint` 測四角時，忘了 `border-radius` 會裁掉圓角的命中區，
@@ -259,6 +265,7 @@ IDLE 的敵人一定要選得到、打得到，偷襲是核心玩法。
 | 右下只有技能／彈／換；技能可展開收合且為空 | `ui.test.ts` |
 | 日誌開合在右上；不可用按鈕灰掉不隱藏 | `ui.test.ts` |
 | 觸控命中區 ≥ 48×48 且互不重疊、無水平捲動 | `scripts/a11y.mjs`（320px 實測） |
+| 士兵在地圖任何位置，自己與四鄰格都沒被 UI 蓋住 | `camera.test.ts`、`scripts/a11y.mjs` |
 | 相同種子＋相同指令序列 → 相同最終狀態 | `determinism.test.ts`、`integration.test.ts` |
 | 未命中路徑（強制命中率 0）完整可用、UI 不崩潰 | `misspath.test.ts`、`ui.test.ts` |
 | 全程無 `Math.random()`；`core/` 無瀏覽器 API | `determinism.test.ts` |

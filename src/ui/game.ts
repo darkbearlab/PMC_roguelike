@@ -77,6 +77,8 @@ export class Game {
   private skillOpen = false;
   private viewW = 1;
   private viewH = 1;
+  /** 沒有被 HUD 與控制列蓋住的那一段畫面。攝影機夾制用（見 render/camera.ts）。 */
+  private safe = { top: 0, bottom: 1 };
 
   /** 測試用入口。正式流程一律走 canvas 的 pointer 事件與 rAF 迴圈。 */
   readonly test = {
@@ -132,6 +134,7 @@ export class Game {
   // ---------------------------------------------------------------- 更新
 
   private refresh(): void {
+    this.measureSafeArea();
     this.syncVision();
     this.updateGhosts();
     const me = activePlayerUnit(this.state);
@@ -143,6 +146,20 @@ export class Game {
     this.updateCard();
     this.updateLog();
     this.updateModal();
+  }
+
+  /**
+   * 量出可觸區域：HUD 底部到控制列頂部。
+   * HUD 會因為 chip 換行而變高，所以每次 refresh 與每次 resize 都重量一次。
+   */
+  private measureSafeArea(): void {
+    const pad = 4;
+    const hud = $('#hud').getBoundingClientRect();
+    const controls = $('#controls').getBoundingClientRect();
+    this.safe = {
+      top: Math.max(0, hud.bottom + pad),
+      bottom: Math.min(this.viewH, controls.top - pad),
+    };
   }
 
   private syncVision(): void {
@@ -607,6 +624,7 @@ export class Game {
       this.canvas.width = Math.floor(this.viewW * dpr);
       this.canvas.height = Math.floor(this.viewH * dpr);
       this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this.measureSafeArea();
     };
     fit();
     new ResizeObserver(fit).observe(stage);
@@ -703,7 +721,7 @@ export class Game {
   }
 
   private render(now: number): void {
-    this.cam = computeCamera(this.state.map, this.viewW, this.viewH, this.focus, this.pan);
+    this.cam = computeCamera(this.state.map, this.viewW, this.viewH, this.focus, this.pan, this.safe);
     draw(this.ctx, this.viewW, this.viewH, {
       state: this.state,
       vision: this.vision,

@@ -67,6 +67,48 @@ await p.waitForTimeout(150);
 results.push(await audit('紀錄面板'));
 await p.locator('#btn-log').click();
 
+// ---- 地圖可觸性：士兵走到地圖任何位置，自己與四個鄰格都不能被浮動 UI 蓋住 ----
+// 量的是「視覺遮擋」（按鈕與 HUD 的矩形），不是 elementFromPoint ——
+// 兩顆按鈕之間的縫隙雖然點得穿，但玩家看不到底下的格子，實務上一樣不能用。
+const spots = [[1,1],[30,1],[1,22],[30,22],[15,1],[15,22],[1,11],[30,11],[15,11]];
+const reachBad = [];
+for (const [x, y] of spots) {
+  await p.evaluate(([x, y]) => {
+    const g = window.__game;
+    g.state.units.find((u) => u.faction === 'PLAYER').pos = { x, y };
+    g.test.refresh();
+  }, [x, y]);
+  await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  const hits = await p.evaluate(([x, y]) => {
+    const cam = window.__game.cam;
+    const blockers = [
+      document.querySelector('#hud').getBoundingClientRect(),
+      ...[...document.querySelectorAll('#controls button, #btn-log')].map((e) => e.getBoundingClientRect()),
+    ];
+    const check = (tx, ty) => {
+      const cx = cam.ox + (tx + 0.5) * cam.tile;
+      const cy = cam.oy + (ty + 0.5) * cam.tile;
+      if (cx < 0 || cy < 0 || cx > innerWidth || cy > innerHeight) return '畫面外';
+      return blockers.some((b) => cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom)
+        ? '被 UI 蓋住' : null;
+    };
+    const out = [];
+    const self = check(x, y);
+    if (self) out.push(`自己 ${self}`);
+    for (const [dx, dy] of [[0,-1],[1,0],[0,1],[-1,0]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 1 || ny < 1 || nx > 30 || ny > 22) continue;
+      const r = check(nx, ny);
+      if (r) out.push(`鄰格(${nx},${ny}) ${r}`);
+    }
+    return out;
+  }, [x, y]);
+  if (hits.length) reachBad.push(`士兵在 (${x},${y})：` + hits.join('、'));
+}
+console.log(reachBad.length
+  ? '❌ 地圖可觸性:\n  ' + reachBad.join('\n  ')
+  : `✅ 士兵在地圖 ${spots.length} 個測試位置時，自己與四個鄰格都沒有被 UI 蓋住`);
+
 // 止損只在「當前士兵陣亡」時出現：製造一次陣亡
 await p.evaluate(() => {
   const g = window.__game;
@@ -84,7 +126,7 @@ await p.locator('#modal-root button[data-yes]').click();
 await p.waitForTimeout(250);
 results.push(await audit('結算畫面'));
 
-const bad = results.flatMap(r => r.bad);
+const bad = [...results.flatMap(r => r.bad), ...reachBad];
 const scroll = results.filter(r => r.hScroll);
 console.log(bad.length ? '❌ 觸控區過小:\n  ' + bad.join('\n  ') : '✅ 所有可點擊元素 >= 48x48 CSS px 且命中區互不重疊 (320px 寬視窗)');
 console.log(scroll.length ? '❌ 有水平捲動 ' + JSON.stringify(scroll[0]) : '✅ 沒有水平捲動');
