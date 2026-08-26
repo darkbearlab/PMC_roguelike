@@ -14,7 +14,8 @@ import {
   applyCommand, checkLegal, interactKindAt, interactTarget, movePath, swapCost,
 } from '../core/commands';
 import { createInitialState } from '../core/setup';
-import { damageRange, toHitChance } from '../core/combat';
+import { armorRange, damageRange, hitBreakdown } from '../core/combat';
+import { COVER_LABEL } from '../core/cover';
 import { facingFromDelta, manhattan, sameTile } from '../core/grid';
 import { inBounds } from '../core/map';
 import type { Camera } from '../render/camera';
@@ -700,14 +701,20 @@ export class Game {
     const foe = findUnit(this.state, s.unitId);
     if (!me || !foe || !me.equipped) return null;
     const legal = checkLegal(this.state, { type: 'FIRE', target: foe.pos });
+    const bd = hitBreakdown(me, foe, me.equipped, this.state);
     return {
       unitId: foe.id,
       pos: { ...foe.pos },
       name: foe.name,
-      chance: legal.ok ? toHitChance(me, foe, me.equipped, this.state) : null,
+      chance: legal.ok ? bd.chance : null,
       reason: legal.reason,
-      damage: damageRange(me.equipped, foe.armor),
-      armor: foe.armor,
+      damage: damageRange(me.equipped, foe),
+      armor: armorRange(foe),
+      // 只給一個變小的數字沒有用：要說出等級與幅度，玩家才知道該繞側翼（§12.10）
+      coverNote: bd.coverLevel === 'NONE'
+        ? ''
+        : COVER_LABEL[bd.coverLevel] + ' −' + Math.round(bd.cover * 100) + '%',
+      coverTiles: bd.coverTiles,
     };
   }
 

@@ -9,9 +9,10 @@
  * 這條測試會抓到「有戰鬥數值寫死在程式碼裡而沒被抽出來」的情況：
  * 只要有一個沒跟著放大，事件序列就會分岔。
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { runMission, type MissionTrace } from './bot';
+import { resetToHitPolicy } from '../src/core/combat';
 import { RULES, WEAPONS, ACTORS } from '../src/core/content';
 
 const SCALE = 10;
@@ -25,16 +26,57 @@ function scaleEvent(e: Record<string, unknown>): Record<string, unknown> {
   return { ...e, amount: (e.amount as number) * SCALE, blocked: (e.blocked as number) * SCALE };
 }
 
-describe('數值規模 ×10 是純資料改動', () => {
-  const now = runMission(20260826);
+/**
+ * v0.5 的新東西必須是**純粹加上去的**：
+ * 把命中擲骰關掉、所有 spread 歸零之後，行為要退回 v0.4 —— 事件序列一模一樣。
+ *
+ * 這條同時守住兩件事：
+ *  1. v0.4 的「×10 是純資料改動」結論仍然成立（基準檔是放大前錄的）。
+ *  2. v0.5 的掩蔽、姿勢、浮動傷害與護甲沒有偷偷改到既有的判定流程。
+ *
+ * spread 為 0 時 rollSpread 仍然會抽亂數（§8.5 的紀律），
+ * 亂數序列因此比 v0.4 長 —— 但沒有任何結果取決於那些多抽的值，所以事件序列不變。
+ */
+describe('v0.5 是純粹加上去的：關掉擲骰與浮動後退回 v0.4', () => {
+  // ACTORS 裡有 _comment 這種說明字串，要濾掉
+  const archIds = Object.keys(ACTORS).filter((k) => !k.startsWith('_'));
+  const saved = {
+    roll: RULES.combat.enableToHitRoll,
+    weapons: WEAPONS.map((w) => w.damageSpread),
+    armor: archIds.map((k) => ACTORS[k].armorSpread),
+    atk: archIds.map((k) => ACTORS[k].attack?.damageSpread ?? 0),
+  };
 
-  it('事件序列與放大前完全等價（只有生命值單位的數字大十倍）', () => {
+  beforeAll(() => {
+    RULES.combat.enableToHitRoll = false;
+    for (const w of WEAPONS) w.damageSpread = 0;
+    for (const k of archIds) {
+      ACTORS[k].armorSpread = 0;
+      if (ACTORS[k].attack) ACTORS[k].attack!.damageSpread = 0;
+    }
+    resetToHitPolicy();
+  });
+
+  afterAll(() => {
+    RULES.combat.enableToHitRoll = saved.roll;
+    WEAPONS.forEach((w, i) => { w.damageSpread = saved.weapons[i]; });
+    archIds.forEach((k, i) => {
+      ACTORS[k].armorSpread = saved.armor[i];
+      if (ACTORS[k].attack) ACTORS[k].attack!.damageSpread = saved.atk[i];
+    });
+    resetToHitPolicy();
+  });
+
+  it('事件序列與 v0.4 完全等價（只有生命值單位的數字大十倍）', () => {
+    const now = runMission(20260826);
     expect(now.events).toHaveLength(baseline.events.length);
-    const expected = baseline.events.map((e) => scaleEvent(e as unknown as Record<string, unknown>));
-    expect(now.events).toEqual(expected);
+    expect(now.events).toEqual(
+      baseline.events.map((e) => scaleEvent(e as unknown as Record<string, unknown>)),
+    );
   });
 
   it('勝負、回合數、投入與陣亡人數完全相同', () => {
+    const now = runMission(20260826);
     expect(now.result).toBe(baseline.result);
     expect(now.turn).toBe(baseline.turn);
     expect(now.casualties).toBe(baseline.casualties);
@@ -42,18 +84,17 @@ describe('數值規模 ×10 是純資料改動', () => {
   });
 
   it('收場時所有單位的血量／護甲剛好是十倍', () => {
-    expect(now.hp.map((u) => u.id)).toEqual(baseline.hp.map((u) => u.id));
+    const now = runMission(20260826);
     now.hp.forEach((u, i) => {
-      const b = baseline.hp[i];
-      expect(u.hp, u.id + ' hp').toBe(b.hp * SCALE);
-      expect(u.maxHp, u.id + ' maxHp').toBe(b.maxHp * SCALE);
-      expect(u.armor, u.id + ' armor').toBe(b.armor * SCALE);
+      expect(u.hp, u.id).toBe(baseline.hp[i].hp * SCALE);
+      expect(u.armor, u.id).toBe(baseline.hp[i].armor * SCALE);
     });
   });
 
-  it('這一場真的有打到護甲（否則上面的等價測試會漏掉護甲路徑）', () => {
-    const blocked = now.events.filter((e) => e.kind === 'IMPACT' && e.blocked > 0);
-    expect(blocked.length).toBeGreaterThan(0);
+  it('這一場真的有打到護甲', () => {
+    const now = runMission(20260826);
+    expect(now.events.filter((e) => e.kind === 'IMPACT' && e.blocked > 0).length)
+      .toBeGreaterThan(0);
   });
 });
 

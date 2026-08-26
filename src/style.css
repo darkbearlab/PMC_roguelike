@@ -59,6 +59,7 @@ html, body {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+.chip.warn { color: #2a0f0c; background: var(--danger); border-color: #ff8b7f; font-weight: 600; }
 .chip-ap { display: flex; align-items: center; gap: 4px; padding: 5px 8px; }
 .chip-ap i {
   width: 10px; height: 10px; border-radius: 50%;

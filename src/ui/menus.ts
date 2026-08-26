@@ -11,6 +11,7 @@ import { activePlayerUnit, corpseAt } from '../core/state';
 import type { WeaponSlot } from '../core/commands';
 import { checkLegal, interactTarget } from '../core/commands';
 import { sameTile } from '../core/grid';
+import { effectiveSightRange } from '../core/stance';
 import { esc } from './dom';
 
 export interface MenuHandlers {
@@ -48,7 +49,7 @@ export function selfPanelHtml(state: GameState): string {
     + '</div>'
     + '<p class="note">手持：' + esc(w ? w.name + ' ' + w.ammo + '/' + w.magazine : '空手')
     + '　收納：' + esc(st ? st.name + ' ' + st.ammo + '/' + st.magazine : '無')
-    + '<br>視野 ' + u.sightRange + ' 格（曼哈頓）・面向 ' + u.facing + '（面向不影響視野，僅美術用）</p>'
+    + '<br>視野 ' + effectiveSightRange(u) + ' 格（曼哈頓，蹲姿縮短）・面向 ' + u.facing + '（面向不影響視野，僅美術用）</p>'
     + '<div class="menu-actions">'
     + (label
       ? '<button data-do="interact" ' + (legal.ok ? 'class="primary"' : 'disabled') + '>'

@@ -21,12 +21,24 @@
   },
 
   "combat": {
-    "_hitToggle": "§17 命中率總開關。true = MVP 固定必中；false = 啟用 §8.1 預留公式。",
+    "_enableToHitRoll": "命中率總開關。false = 一律必中（等價於 v0.4），用來做對照測試。",
     "_minDamage": "保底傷害。與生命值同單位，生命值規模變動時要一起調，否則等於實質取消保底。",
-    "alwaysHit": true,
-    "hitFloor": 0.05,
+    "_hitFloor": "命中率下限刻意訂在 0.15 而非 0.05：掩蔽與蹲姿會疊加，觸底時的正解是換位置，但玩家當下換不了位置時 5% 等於要他空轉二十回合。0.15 讓僵局仍然會被打破，只是很慢。",
+    "enableToHitRoll": true,
+    "hitFloor": 0.15,
     "hitCeil": 1.0,
-    "minDamage": 10
+    "minDamage": 10,
+    "stance": {
+      "_comment": "射手蹲姿加成 / 目標蹲姿減免 / 蹲姿視野係數。",
+      "shooterCrouchBonus": 0.10,
+      "targetCrouchPenalty": 0.15,
+      "crouchSightFactor": 0.6
+    },
+    "cover": {
+      "_comment": "三級列舉，不是每格累加 —— 上界由結構本身保證，不需要額外的封頂規則。",
+      "partial": 0.25,
+      "good": 0.40
+    }
   },
 
   "movement": {

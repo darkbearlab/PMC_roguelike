@@ -22,7 +22,14 @@ export interface Rules {
     swapCost: Record<WeaponClass, number>;
   };
   ai: { searchTimer: number };
-  combat: { alwaysHit: boolean; hitFloor: number; hitCeil: number; minDamage: number };
+  combat: {
+    enableToHitRoll: boolean;
+    hitFloor: number;
+    hitCeil: number;
+    minDamage: number;
+    stance: { shooterCrouchBonus: number; targetCrouchPenalty: number; crouchSightFactor: number };
+    cover: { partial: number; good: number };
+  };
   movement: { _comment: string };
   log: { maxEntries: number };
 }
@@ -32,6 +39,7 @@ export interface ActorArchetype {
   faction: 'PLAYER' | 'ENEMY';
   hp: number;
   armor: number;
+  armorSpread: number;
   maxAp: number;
   sightRange: number;
   aim: number;

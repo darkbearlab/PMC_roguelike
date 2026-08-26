@@ -8,12 +8,12 @@
 資產檔名帶 hash，不會吃到舊快取；戰鬥紀錄面板（右上的 `誌`）頂端顯示 `build <commit>`，
 可以直接確認手機上跑的是哪一版。
 
-規格書：[`clone-pmc-roguelike-mvp-spec.md`](clone-pmc-roguelike-mvp-spec.md)（v0.4，與實作同步）
+規格書：[`clone-pmc-roguelike-mvp-spec.md`](clone-pmc-roguelike-mvp-spec.md)（v0.5，與實作同步）
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173  （手機同網段可用 --host 顯示的網址開）
-npm run test       # 140 個測試：core/ 規則層、UI 互動文法、整張正式地圖的整合測試
+npm run test       # 167 個測試：core/ 規則層、UI 互動文法、整張正式地圖的整合測試
 npm run typecheck
 npm run build
 npm run map:build  # 重新產生並驗證 mission_01（會檢查連通性與規格 §13.1 的設計要求）
@@ -92,6 +92,32 @@ MVP 每一發都必中，但**擲骰管線是完整活著的**：
 - **無論命中率是多少都會抽一個亂數**，讓 MVP 與日後啟用擲骰的 RNG 序列長度一致。
 - 未命中路徑是真的程式碼，不是空分支：不扣血、照扣 AP 與彈藥、照樣產生噪音、紀錄顯示「未命中」。
   `misspath.test.ts` 與 `ui.test.ts` 都會把命中率強制設為 0 走完整條路徑。
+
+---
+
+## 遮蔽 vs 掩蔽：兩個檢查，互不相干
+
+v0.5 最容易搞混的一組概念，所以在程式碼裡也是兩個獨立模組：
+
+| | 回答的問題 | 演算法 | 結果 | 檔案 |
+|---|---|---|---|---|
+| **遮蔽** | 看不看得見 | 幾何射線（對稱 Bresenham） | 二元 | `core/los.ts`（**一行都沒動**） |
+| **掩蔽** | 好不好打中 | 目標鄰格掃描 | 三級 | `core/cover.ts`（新增） |
+
+掩蔽刻意不走射線：現有模型裡射線通過 `WALL` 就直接阻擋，不存在「射線切到牆但仍看得見」的
+中間狀態，所以要讓牆提供掩蔽，來源必須是另一個檢查。
+
+掩蔽只看目標**朝向射手那一側**的正交鄰格（最多兩格），因此**射手繞個角度就能消除它** ——
+側翼是掩蔽的解法，這是整個機制最重要的戰術產出。三級列舉而不是每格累加：
+純疊加沒有上界，掩蔽加蹲姿加射程衰減會把命中率壓到下限、雙方互相打不中、回合空轉。
+
+> 一個反直覺但正確的推論：**正交直線對射時通常沒有掩蔽**。目標朝向射手那一側的鄰格
+> 若是阻擋物，那格必然在射線上，結果是遮蔽（完全看不見）而不是掩蔽。
+> 走廊裡的正面對射因此非常致命 —— 這是設計意圖。
+> 寫測試時我一開始就踩了這個坑：想找「有掩蔽又看得見」的組合，手挑的座標全部是遮蔽。
+> 最後是寫一支腳本掃過整張地圖才找到 —— 那些組合都在**斜向**上。
+
+蹲姿的完整代價：站立可見 95 格，蹲下降至 **32 格**（視野係數 0.6 疊加半身掩體的遮蔽）。
 
 ---
 
@@ -246,6 +272,10 @@ IDLE 的敵人一定要選得到、打得到，偷襲是核心玩法。
 |---|---|
 | 玩家 AP / HP / 視野 | `actors.json → SOLDIER` |
 | 保底傷害 | `rules.json → combat.minDamage` |
+| 命中率開關與下限 | `rules.json → combat.enableToHitRoll / hitFloor` |
+| 姿勢修正與蹲姿視野係數 | `rules.json → combat.stance` |
+| 掩蔽修正（部分／良好） | `rules.json → combat.cover` |
+| 傷害／護甲浮動幅度 | `weapons.json → damageSpread`、`actors.json → armorSpread` |
 | AR-9 彈匣、傷害、噪音半徑 | `weapons.json` |
 | HULK 護甲、RUNNER AP、SHOOTER 每回合次數 | `actors.json` |
 | 名冊人數與編號 | `rules.json → roster` |
@@ -314,6 +344,13 @@ IDLE 的敵人一定要選得到、打得到，偷襲是核心玩法。
 | 數值 ×10 前後事件序列完全等價 | `scale.test.ts` + `tests/fixtures/scale-baseline.json` |
 | 射程／視野／彈匣／AP 未隨生命值縮放 | `scale.test.ts` |
 | 三種戰鬥結果在畫面上可區分 | `effects.test.ts`、`feedback.test.ts` |
+| 掩蔽為獨立鄰格掃描、未改動射線 | `cover.test.ts`、`los.test.ts`（未修改） |
+| 側翼可消除掩蔽 | `cover.test.ts`、`tohit.test.ts` |
+| 命中率公式、下限 0.15、蹲姿修正 | `tohit.test.ts` |
+| 蹲姿視野縮短、姿勢不耗 AP | `tohit.test.ts` |
+| 護甲每發各擲一次、penetration 就位 | `tohit.test.ts` |
+| 三個擲值一律照抽、切換開關不改序列長度 | `misspath.test.ts` |
+| 關掉擲骰與浮動即退回 v0.4 | `scale.test.ts` |
 | 動畫不阻塞輸入、不延後回合 | `ui.test.ts` |
 | `GameState` 不含動畫狀態 | `feedback.test.ts` |
 | 未命中路徑（強制命中率 0）完整可用、UI 不崩潰 | `misspath.test.ts`、`ui.test.ts` |

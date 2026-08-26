@@ -1,14 +1,19 @@
 /**
  * §2 戰場回饋層：規則層必須吐出足以「不開日誌就理解戰況」的事件。
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
 import { applyCommand } from '../src/core/commands';
 import { resetToHitPolicy, setToHitPolicy } from '../src/core/combat';
 import { weaponById } from '../src/core/content';
 import type { CombatEvent } from '../src/core/events';
-import { run, testState, player, unit } from './helpers';
+import { run, testState, player, unit, freezeCombat, thawCombat } from './helpers';
 
 afterEach(() => resetToHitPolicy());
+
+// 這一檔測的是機制不是浮動：把傷害／護甲的 spread 歸零、命中改必中，
+// 斷言才寫得出確切數字。浮動本身另有專門的測試。
+beforeAll(() => freezeCombat());
+afterAll(() => thawCombat());
 
 const ROOM = [
   '################',

@@ -10,6 +10,8 @@ import { findUnit, unitAt } from './state';
 import { clamp, facingToward, manhattan } from './grid';
 import { hasLineOfSight } from './los';
 import { nextFloat } from './rng';
+import { coverAgainst, type CoverLevel } from './cover';
+import { shooterStanceBonus, targetStancePenalty } from './stance';
 import { RULES } from './content';
 import { pushLog } from './log';
 import type { EventSink } from './events';
@@ -36,19 +38,64 @@ export type ToHitFn = (
 // 這兩個實作以外的程式碼與 UI 一律不用動。
 // ============================================================================
 
-/** MVP：固定必中。 */
+/** 對照用：一律必中。把 data/rules.json 的 combat.enableToHitRoll 設為 false 即啟用。 */
 export const alwaysHitChance: ToHitFn = () => RULES.combat.hitCeil;
 
-/** 預留公式。combat.alwaysHit = false 時啟用。 */
-export const rolledHitChance: ToHitFn = (attacker, target, weapon) => {
+/**
+ * 命中率（§8.1）。
+ *
+ *   命中率 = clamp(
+ *       武器基礎命中 + 射手 aim + 射手姿勢加成
+ *     − 目標 evasion − 目標姿勢減免 − 掩蔽減免 − 射程衰減
+ *   , 下限, 1.0)
+ *
+ * 掩蔽是獨立於視線的鄰格掃描（core/cover.ts），不走射線。
+ */
+export const rolledHitChance: ToHitFn = (attacker, target, weapon, state) => {
   const dist = target ? manhattan(attacker.pos, target.pos) : 0;
   const falloff = Math.max(0, dist - weapon.optimalRange) * weapon.falloffPerTile;
-  const raw = weapon.accuracy + attacker.aim - (target ? target.evasion : 0) - falloff;
+  const cover = target ? coverAgainst(state.map, target.pos, attacker.pos).penalty : 0;
+  const raw = weapon.accuracy
+    + attacker.aim
+    + shooterStanceBonus(attacker)
+    - (target ? target.evasion : 0)
+    - targetStancePenalty(target)
+    - cover
+    - falloff;
   return clamp(raw, RULES.combat.hitFloor, RULES.combat.hitCeil);
 };
 
+/** 命中率的組成明細，供 UI 說明「為什麼這麼低」。 */
+export interface HitBreakdown {
+  chance: number;
+  base: number;
+  shooterCrouch: number;
+  targetCrouch: number;
+  cover: number;
+  coverLevel: CoverLevel;
+  coverTiles: Vec2[];
+  falloff: number;
+}
+
+export function hitBreakdown(
+  attacker: Unit, target: Unit, weapon: Weapon, state: GameState,
+): HitBreakdown {
+  const info = coverAgainst(state.map, target.pos, attacker.pos);
+  const dist = manhattan(attacker.pos, target.pos);
+  return {
+    chance: toHitChance(attacker, target, weapon, state),
+    base: weapon.accuracy,
+    shooterCrouch: shooterStanceBonus(attacker),
+    targetCrouch: targetStancePenalty(target),
+    cover: info.penalty,
+    coverLevel: info.level,
+    coverTiles: info.tiles,
+    falloff: Math.max(0, dist - weapon.optimalRange) * weapon.falloffPerTile,
+  };
+}
+
 function defaultPolicy(): ToHitFn {
-  return RULES.combat.alwaysHit ? alwaysHitChance : rolledHitChance;
+  return RULES.combat.enableToHitRoll ? rolledHitChance : alwaysHitChance;
 }
 
 let activePolicy: ToHitFn = defaultPolicy();
@@ -76,23 +123,34 @@ export function toHitChance(
 // ============================================================================
 
 /**
- * 實際傷害 = max(保底, 原始傷害 - 護甲)（§8.2）。
+ * 實際傷害 = max(保底, 傷害擲值 - max(0, 護甲擲值 - 穿甲))（§8.2）。
  * 保底值來自 data/rules.json 的 combat.minDamage，不寫死 ——
  * 生命值規模放大時保底也要跟著放大，否則等於實質取消保底。
  */
-export function damageAfterArmor(raw: number, armor: number): number {
-  return Math.max(RULES.combat.minDamage, raw - armor);
+export function damageAfterArmor(raw: number, armor: number, penetration = 0): number {
+  return Math.max(RULES.combat.minDamage, raw - Math.max(0, armor - penetration));
 }
 
-/**
- * 這一槍打在這個目標身上會造成多少傷害。
- *
- * 目前上下限相同（傷害不浮動）。回傳區間是為了讓 UI 現在就用區間格式排版，
- * 日後加入浮動傷害時只要改這個函式，版面不用動（§12.4）。
- */
-export function damageRange(weapon: Weapon, targetArmor: number): { min: number; max: number } {
-  const d = damageAfterArmor(weapon.damage, targetArmor);
-  return { min: d, max: d };
+/** base ± spread 的均勻整數。spread 為 0 時結果固定，但**仍然消耗一個亂數**。 */
+export function rollSpread(state: GameState, base: number, spread: number): number {
+  const f = nextFloat(state.rng);
+  if (spread <= 0) return base;
+  return base - spread + Math.floor(f * (2 * spread + 1));
+}
+
+/** 傷害區間（UI 用）。已把護甲與穿甲算進去。 */
+export function damageRange(weapon: Weapon, target: Unit | null): { min: number; max: number } {
+  const armor = target ? target.armor : 0;
+  const aSpread = target ? target.armorSpread : 0;
+  const lo = damageAfterArmor(weapon.damage - weapon.damageSpread, armor + aSpread, weapon.penetration);
+  const hi = damageAfterArmor(weapon.damage + weapon.damageSpread, armor - aSpread, weapon.penetration);
+  return { min: Math.min(lo, hi), max: Math.max(lo, hi) };
+}
+
+/** 護甲區間（UI 用）。 */
+export function armorRange(target: Unit | null): { min: number; max: number } {
+  if (!target) return { min: 0, max: 0 };
+  return { min: target.armor - target.armorSpread, max: target.armor + target.armorSpread };
 }
 
 // ============================================================================
@@ -173,10 +231,19 @@ export function resolveAttack(
   const target = unitAt(state, targetPos);
   const chance = toHitChance(attacker, target, weapon, state);
 
-  // 無論 chance 是多少，都必須抽一個亂數。
-  // 這讓 MVP 與日後啟用擲骰時的 RNG 序列長度一致，重播不會錯位（§8.1）。
+  // ------------------------------------------------------------------
+  // 亂數順序紀律（§8.5）：一次攻擊固定抽三個值，順序永遠是
+  //   1. 命中  2. 傷害  3. 主目標護甲
+  // 而且**無論該項是否生效一律照抽** —— 即使擲骰關閉、即使護甲為 0、
+  // 即使這一發沒中。亂數序列的長度必須與設定無關，否則切換開關或調數值
+  // 會讓所有以種子重現的紀錄與測試失效。
+  // ------------------------------------------------------------------
   const roll = nextFloat(state.rng);
   const hit = roll < chance;
+  const damageRoll = rollSpread(state, weapon.damage, weapon.damageSpread);
+  const primaryArmorRoll = target
+    ? rollSpread(state, target.armor, target.armorSpread)
+    : rollSpread(state, 0, 0);
 
   // impactPos 與目標格分離，是為了日後的「未命中偏移」與濺射失準落點。
   // MVP 階段永遠等於目標格。
@@ -198,18 +265,21 @@ export function resolveAttack(
   if (hit) {
     const primary = unitAt(state, impactPos);
     if (primary) {
-      const amount = damageAfterArmor(weapon.damage, primary.armor);
+      const amount = damageAfterArmor(damageRoll, primaryArmorRoll, weapon.penetration);
       damageByUnit.push({ unitId: primary.id, amount });
-      blockedByUnit.set(primary.id, Math.max(0, weapon.damage - amount));
+      blockedByUnit.set(primary.id, Math.max(0, damageRoll - amount));
     }
     if (weapon.splash > 0) {
-      // 濺射對半徑內其他單位造成 floor(damage / 2)，同樣扣減護甲、同樣保底 1。
+      // 濺射對半徑內其他單位造成 floor(傷害擲值 / 2)，同樣扣減護甲、同樣保底。
       // 刻意不做友軍傷害豁免（§8.2）。
-      const splashRaw = Math.floor(weapon.damage / 2);
+      // 每個濺射受害者各自再擲一次護甲（§8.2「每一發都擲」），
+      // 依 state.units 的順序，所以仍然完全決定性。
+      const splashRaw = Math.floor(damageRoll / 2);
       for (const u of state.units) {
         if (primary && u.id === primary.id) continue;
         if (manhattan(u.pos, impactPos) > weapon.splash) continue;
-        const amount = damageAfterArmor(splashRaw, u.armor);
+        const armorRoll = rollSpread(state, u.armor, u.armorSpread);
+        const amount = damageAfterArmor(splashRaw, armorRoll, weapon.penetration);
         damageByUnit.push({ unitId: u.id, amount });
         blockedByUnit.set(u.id, Math.max(0, splashRaw - amount));
       }

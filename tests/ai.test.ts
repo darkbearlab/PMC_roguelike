@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
-import { run, testState, player, unit } from './helpers';
+import { run, testState, player, unit, freezeCombat, thawCombat } from './helpers';
 
 function runEnemyTurn(s0: ReturnType<typeof testState>) {
   let s = s0;
@@ -18,6 +18,10 @@ const HALL = [
   '#.....................T#',
   '########################',
 ];
+
+// 這一檔測的是 AI 行為，不是命中與傷害浮動：凍結浮動讓斷言寫得出確切數字。
+beforeAll(() => freezeCombat());
+afterAll(() => thawCombat());
 
 describe('§9.1 AI 狀態機', () => {
   it('IDLE 的敵人在沒有視線與噪音時原地不動', () => {

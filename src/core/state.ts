@@ -25,6 +25,10 @@ export interface Weapon {
   name: string;
   class: WeaponClass;
   damage: number;
+  /** 傷害浮動幅度：實際傷害在 damage ± damageSpread 之間均勻取整數（§8.2）。 */
+  damageSpread: number;
+  /** 穿甲：抵銷同等的護甲擲值。MVP 一律 0（§8.3）。 */
+  penetration: number;
   range: number;          // 最大射程（格）
   magazine: number;       // 彈匣容量
   ammo: number;           // 目前彈藥
@@ -50,6 +54,8 @@ export interface Unit {
   hp: number;
   maxHp: number;
   armor: number;
+  /** 護甲浮動幅度。**每次受擊各自擲一次**，不是生成時擲一次（§8.2）。 */
+  armorSpread: number;
   aim: number;             // 命中修正，MVP 一律 0，見 §8.1
   evasion: number;         // 迴避修正，MVP 一律 0，見 §8.1
   maxAp: number;

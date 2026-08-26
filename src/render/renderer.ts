@@ -38,6 +38,7 @@ const C = {
   path: '#4fd6ff',
   pathBad: '#ffb648',
   interact: '#ffd35c',
+  coverCause: '#7fd0e8',
   inkDim: '#b7c3ce',
 };
 
@@ -60,10 +61,14 @@ export interface Lock {
   /** 命中率 0..1；null 代表目前打不到（顯示原因）。 */
   chance: number | null;
   reason: string;
-  /** 預期傷害區間。目前上下限相同，欄位先占好版面（§12.4）。 */
+  /** 預期傷害區間（已扣過護甲與穿甲）。 */
   damage: { min: number; max: number };
-  /** 目標護甲。和傷害擺在一起，玩家一眼看得出「為什麼只有這麼點」。 */
-  armor: number;
+  /** 目標護甲區間。和傷害擺在一起，玩家一眼看得出「為什麼只有這麼點」。 */
+  armor: { min: number; max: number };
+  /** 掩蔽說明，例如「良好掩蔽 −40%」；無掩蔽時為空字串。 */
+  coverNote: string;
+  /** 造成掩蔽的格子。標出來玩家才知道該繞哪邊（§12.10）。 */
+  coverTiles: Vec2[];
 }
 
 export interface MovePreview {
@@ -412,6 +417,19 @@ function drawLock(ctx: CanvasRenderingContext2D, sc: Scene): void {
   ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
   ctx.setLineDash([]);
 
+  // 造成掩蔽的格子：標出來玩家才知道該繞哪邊（§12.10）
+  if (lock.coverTiles.length > 0) {
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = C.coverCause;
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([6, 4]);
+    for (const t of lock.coverTiles) {
+      const s2 = tileToScreen(cam, t);
+      ctx.strokeRect(s2.x + 2, s2.y + 2, cam.tile - 4, cam.tile - 4);
+    }
+    ctx.setLineDash([]);
+  }
+
   // 紅點準星
   const r = cam.tile * 0.13;
   ctx.globalAlpha = 1;
@@ -429,7 +447,9 @@ function drawLock(ctx: CanvasRenderingContext2D, sc: Scene): void {
   // 傷害與護甲並排：AR-9 打裝甲型會顯示「傷害 10–10　裝甲 20」，
   // 開槍之前就看得出這把槍對它沒用（§12.9 的教學要在開火前就成立）
   const sub = live
-    ? '傷害 ' + lock.damage.min + '–' + lock.damage.max + '　裝甲 ' + lock.armor
+    ? '傷害 ' + lock.damage.min + '–' + lock.damage.max
+      + '　裝甲 ' + lock.armor.min + '–' + lock.armor.max
+      + (lock.coverNote ? '　' + lock.coverNote : '')
     : '';
   // 標籤放在目標「下方」：浮動傷害數字一律往上飄，兩者才不會疊在一起。
   drawLabel(ctx, b.x, b.y + cam.tile * 0.62 + (sub ? 16 : 9), head, live ? C.laser : C.inkDim, sub);

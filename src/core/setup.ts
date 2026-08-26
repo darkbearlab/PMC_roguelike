@@ -24,6 +24,7 @@ function makeUnit(
     hp: a.hp,
     maxHp: a.hp,
     armor: a.armor,
+    armorSpread: a.armorSpread,
     aim: a.aim,
     evasion: a.evasion,
     maxAp: a.maxAp,
@@ -120,6 +121,11 @@ export function createInitialState(seed: number, rawMap: RawMap = MISSION_01): G
     log: [
       { turn: 1, kind: 'MISSION', text: '任務開始：' + map.name },
       { turn: 1, kind: 'INFO', text: firstId + ' 已投入戰場。' },
+      {
+        turn: 1,
+        kind: 'INFO',
+        text: 'HUD 的防禦狀態採「最差情況」：在所有看得到你的敵人之中取掩蔽最低的那一個。',
+      },
     ],
   };
 }

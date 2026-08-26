@@ -3,10 +3,11 @@
  * UI 層測試：統一的地圖點擊文法（§2）、射擊（§3）、尋路移動（§4）、
  * 目標框（§5）與按鈕配置（§6）。
  */
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resetToHitPolicy, setToHitPolicy } from '../src/core/combat';
 import { weaponById } from '../src/core/content';
+import { freezeCombat, thawCombat } from './helpers';
 import type { Game as GameType } from '../src/ui/game';
 
 function stubCanvas(): void {
@@ -59,6 +60,10 @@ async function scene(foes: { at: [number, number]; archetype?: string }[] = []) 
   g.test.refresh();
   return g;
 }
+
+// UI 測的是互動文法，不是浮動：凍結浮動，斷言才寫得出確切血量。
+beforeAll(() => freezeCombat());
+afterAll(() => thawCombat());
 
 describe('§6 按鈕配置', () => {
   beforeEach(() => { stubCanvas(); mount(); });

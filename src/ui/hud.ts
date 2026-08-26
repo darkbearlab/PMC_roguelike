@@ -1,6 +1,7 @@
 /** HUD 列（§12.3）。永遠可見。 */
 import type { GameState } from '../core/state';
 import { abandonedWeapons, activePlayerUnit, enemies } from '../core/state';
+import { COVER_LABEL, playerDefence } from '../core/cover';
 import { $, esc } from './dom';
 
 /** 武器型號：取名稱的第一個空白之前。 */
@@ -22,7 +23,13 @@ export function renderHud(state: GameState): void {
   // HUD 空間有限，只取型號（"AR-9 制式步槍" → "AR-9"）；完整名稱在詳細面板裡。
   $('#hud-weapon').textContent = w ? `${shortName(w.name)} ${w.ammo}/${w.magazine}` : '空手';
 
-  $('#hud-stance').textContent = u ? (u.stance === 'CROUCH' ? '姿勢 蹲' : '姿勢 站') : '姿勢 —';
+  // 防禦狀態：玩家要在按下結束回合前，知道自己會以什麼狀態承受攻擊（§12.11）
+  const def = playerDefence(state);
+  $('#hud-stance').textContent = u
+    ? (u.stance === 'CROUCH' ? '蹲' : '站') + '・' + COVER_LABEL[def.level]
+      + (def.threats > 0 ? '（' + def.threats + ' 人瞄得到）' : '（無人瞄準）')
+    : '姿勢 —';
+  $('#hud-stance').classList.toggle('warn', def.threats > 0 && def.level === 'NONE');
   $('#hud-roster').textContent = `名冊 ${state.roster.length}`;
   $('#hud-foes').textContent = `敵 ${enemies(state).length}`;
 

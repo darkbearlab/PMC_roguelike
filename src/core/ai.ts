@@ -11,6 +11,7 @@ import type { GameState, Unit, Vec2 } from './state';
 import { activePlayerUnit, findUnit } from './state';
 import { manhattan, facingToward, sameTile } from './grid';
 import { unitsSeeEachOther } from './los';
+import { effectiveSightRange } from './stance';
 import { canAttack, performAttack } from './combat';
 import { findPath, occupiedBy } from './pathfind';
 import { RULES } from './content';
@@ -44,7 +45,7 @@ function perceive(state: GameState, e: Unit, events?: EventSink): void {
   const player = activePlayerUnit(state);
   const canSee =
     !!player &&
-    manhattan(e.pos, player.pos) <= e.sightRange &&
+    manhattan(e.pos, player.pos) <= effectiveSightRange(e) &&
     unitsSeeEachOther(state.map, e, player);
 
   if (canSee && player) {

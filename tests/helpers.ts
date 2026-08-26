@@ -74,3 +74,48 @@ export function placePlayer(s: GameState, pos: Vec2, stance: 'STAND' | 'CROUCH' 
   u.pos = { ...pos };
   u.stance = stance;
 }
+
+// ---------------------------------------------------------------------------
+// v0.5：戰鬥現在有三個擲值。測「機制」的時候要把浮動關掉，
+// 測「浮動」的時候才打開 —— 兩者混在一起會讓斷言變成在賭運氣。
+// ---------------------------------------------------------------------------
+import { resetToHitPolicy, setToHitPolicy } from '../src/core/combat';
+import { ACTORS, RULES, WEAPONS } from '../src/core/content';
+
+/** 強制必中／必不中。測非命中相關的機制時用。 */
+export function forceHit(): void { setToHitPolicy(() => 1); }
+export function forceMiss(): void { setToHitPolicy(() => 0); }
+export function restoreHitPolicy(): void { resetToHitPolicy(); }
+
+const ARCH_IDS = Object.keys(ACTORS).filter((k) => !k.startsWith('_'));
+let frozen: { w: number[]; a: number[]; d: number[]; roll: boolean } | null = null;
+
+/** 把傷害與護甲的浮動歸零、命中改為必中，讓斷言可以寫確切數字。 */
+export function freezeCombat(): void {
+  if (frozen) return;
+  frozen = {
+    w: WEAPONS.map((x) => x.damageSpread),
+    a: ARCH_IDS.map((k) => ACTORS[k].armorSpread),
+    d: ARCH_IDS.map((k) => ACTORS[k].attack?.damageSpread ?? 0),
+    roll: RULES.combat.enableToHitRoll,
+  };
+  for (const x of WEAPONS) x.damageSpread = 0;
+  for (const k of ARCH_IDS) {
+    ACTORS[k].armorSpread = 0;
+    if (ACTORS[k].attack) ACTORS[k].attack!.damageSpread = 0;
+  }
+  RULES.combat.enableToHitRoll = false;
+  resetToHitPolicy();
+}
+
+export function thawCombat(): void {
+  if (!frozen) return;
+  WEAPONS.forEach((x, i) => { x.damageSpread = frozen!.w[i]; });
+  ARCH_IDS.forEach((k, i) => {
+    ACTORS[k].armorSpread = frozen!.a[i];
+    if (ACTORS[k].attack) ACTORS[k].attack!.damageSpread = frozen!.d[i];
+  });
+  RULES.combat.enableToHitRoll = frozen.roll;
+  frozen = null;
+  resetToHitPolicy();
+}
