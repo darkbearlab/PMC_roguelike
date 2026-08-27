@@ -10,6 +10,7 @@
 import type { Facing, GameState, Vec2 } from '../core/state';
 import { activePlayerUnit, lootAt, findUnit, unitAt } from '../core/state';
 import type { Command } from '../core/commands';
+import type { RawMap } from '../core/map';
 import {
   applyCommand, checkLegal, commandTime, interactKindAt, interactTarget, movePath, movePhase,
   swapTime,
@@ -115,11 +116,12 @@ export class Game {
     enemySteps: (): void => this.runEnemySteps(),
   };
 
-  constructor(private seed: number) {
+  /** @param forcedMap `?map=<id>` 指定的地圖；null 代表由種子隨機選（§13.2）。 */
+  constructor(private seed: number, private forcedMap: RawMap | null = null) {
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('取不到 Canvas 2D context');
     this.ctx = ctx;
-    this.state = createInitialState(seed);
+    this.state = createInitialState(seed, forcedMap ?? undefined);
     this.vision = computeVision(this.state);
     this.focus = { ...this.state.map.startDropPoint };
     this.bindInput();
@@ -142,7 +144,7 @@ export class Game {
   }
 
   restart(): void {
-    this.state = createInitialState(this.seed);
+    this.state = createInitialState(this.seed, this.forcedMap ?? undefined);
     this.ghosts.clear();
     this.auto = null;
     this.sel = null;

@@ -10,7 +10,8 @@ import { isPlayerTurn } from '../src/core/scheduler';
 import { activePlayerUnit, unitAt } from '../src/core/state';
 import { canAttack } from '../src/core/combat';
 import { facingFromDelta, manhattan } from '../src/core/grid';
-import { RULES } from '../src/core/content';
+import { MAPS, RULES } from '../src/core/content';
+import type { RawMap } from '../src/core/map';
 import { countAmmo } from '../src/core/inventory';
 import type { Facing, GameState, Vec2 } from '../src/core/state';
 
@@ -56,11 +57,11 @@ function botAction(s: GameState, goal: Vec2): GameState {
  */
 const SEEDS = [1, 42, 999, 20260826, 7777];
 
-function runOne(seed: number): {
+function runOne(seed: number, map?: RawMap): {
   seed: number; result: string; clock: number; deployed: number; casualties: number;
   main: boolean; foes: number; ammoUsed: number; carried: number;
 } {
-  let s = createInitialState(seed);
+  let s = createInitialState(seed, map);
   let guard = 0;
   while (s.result === 'ONGOING' && guard++ < 20000) {
     if (s.pendingReinforcement) { s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] }); continue; }
@@ -88,10 +89,10 @@ function runOne(seed: number): {
   };
 }
 
-function report(label: string): void {
+function report(label: string, map?: RawMap): void {
   console.log('');
   console.log('=== ' + label + ' ===');
-  const rows = SEEDS.map(runOne);
+  const rows = SEEDS.map((seed) => runOne(seed, map));
   for (const r of rows) {
     console.log(
       `seed ${String(r.seed).padStart(9)} → ${r.result.padEnd(8)}`,
@@ -116,7 +117,14 @@ function report(label: string): void {
   );
 }
 
+// v0.11：四張圖各跑一次（§13.3）。
+// 這是本次最實際的收穫 —— 第一次拿到「同一組數值在四種幾何下的表現」。
+for (const m of MAPS) report(m.id + '「' + m.name + '」', m);
+
+// v0.10 的 A/B 仍然保留：戰術 AI 的效果只能靠對照判斷。
+// 拿掩體最密的那張圖來比，才看得出 targetExposure 有沒有東西可用。
+const arena = MAPS[MAPS.length - 1];
 RULES.ai.tacticalBehaviour = false;
-report('v0.9 行為（tacticalBehaviour 關）');
+report('A/B：' + arena.name + '・tacticalBehaviour 關（= v0.9）', arena);
 RULES.ai.tacticalBehaviour = true;
-report('v0.10 戰術 AI（tacticalBehaviour 開）');
+report('A/B：' + arena.name + '・tacticalBehaviour 開（= v0.10）', arena);

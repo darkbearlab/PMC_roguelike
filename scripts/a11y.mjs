@@ -1,9 +1,11 @@
 // §12.1：所有可點擊元素的觸控區不得小於 48×48 CSS px。
+// v0.11 起會隨機選圖，但這支腳本的座標全部是 mission_01 的，
+// 所以網址釘死 map=mission_01 —— 它測的是介面與流程，不是地圖。
 import { chromium } from 'playwright-core';
 const b = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
 const ctx = await b.newContext({ viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true });
 const p = await ctx.newPage();
-await p.goto(process.env.URL || 'http://localhost:4188/?seed=1', { waitUntil: 'networkidle' });
+await p.goto(process.env.URL || 'http://localhost:4188/?seed=1&map=mission_01', { waitUntil: 'networkidle' });
 await p.waitForTimeout(300);
 
 async function audit(label) {

@@ -125,6 +125,7 @@ export function showSummary(state: GameState, onRestart: () => void): void {
     '<h2 class="' + cls + '">' + esc(title) + '</h2>'
     + '<div class="stat-grid">'
     + '<div class="stat"><span>總耗時</span><b>' + state.clock + '</b></div>'
+    + '<div class="stat"><span>地圖</span><b>' + esc(state.map.name) + '</b></div>'
     + '<div class="stat"><span>投入士兵</span><b>' + state.deployed + '</b></div>'
     + '<div class="stat"><span>陣亡</span><b>' + state.casualties + '</b></div>'
     + '</div>'

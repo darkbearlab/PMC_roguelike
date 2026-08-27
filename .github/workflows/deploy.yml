@@ -35,10 +35,12 @@ jobs:
       - name: 測試（core/ 規則層 + UI 接線）
         run: npm test
 
-      - name: 地圖資料檔與產生器一致
+      # build_maps.mjs 同時是**地圖驗證器**（§13.4）：任一張圖驗證失敗即以非零碼結束。
+      # 之後的 git diff 再確認資料檔與統計摘要都是最新的。
+      - name: 地圖驗證 + 資料檔與產生器一致
         run: |
           npm run map:build
-          git diff --exit-code -- src/data/maps/mission_01.json
+          git diff --exit-code -- src/data/maps docs/map-stats.md
 
       - name: 建置
         run: npx vite build

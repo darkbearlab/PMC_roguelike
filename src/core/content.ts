@@ -8,6 +8,9 @@ import actorsJson from '../data/actors.json';
 import itemsJson from '../data/items.json';
 import calloutsJson from '../data/callouts.json';
 import mission01Json from '../data/maps/mission_01.json';
+import mission02Json from '../data/maps/mission_02.json';
+import mission03Json from '../data/maps/mission_03.json';
+import mission04Json from '../data/maps/mission_04.json';
 
 import type { FireMode, Weapon, WeaponClass } from './state';
 import type { RawMap } from './map';
@@ -37,6 +40,19 @@ export interface Rules {
     & { order: FireMode[] };
   /** §4 搜刮。 */
   loot: { takeTime: number; dnaDefId: string };
+  /** §13.5 地圖驗證的門檻。現在防手滑，將來是程序化拼接的約束條件。 */
+  mapRules: {
+    minDropPoints: number;
+    dropSpacing: { min: number; max: number };
+    coverDensity: { min: number; max: number };
+    maxExposedRun: number;
+    maxForcedExposure: number;
+    maxOrphanTiles: number;
+    secondaryObjectives: number;
+    minMainDistance: number;
+    enemies: { min: number; max: number };
+    minCaches: number;
+  };
   sequences: Record<string, unknown>;
   ai: {
     searchTime: number;
@@ -95,7 +111,22 @@ export interface ItemDef {
 export const RULES: Rules = rulesJson as unknown as Rules;
 export const WEAPONS: Weapon[] = weaponsJson as unknown as Weapon[];
 export const ACTORS: Record<string, ActorArchetype> = actorsJson as unknown as Record<string, ActorArchetype>;
-export const MISSION_01: RawMap = mission01Json as unknown as RawMap;
+/**
+ * 四張手刻地圖（§13.1）。順序固定 —— 隨機選圖用的是索引，
+ * 換順序就會改變同一個種子選到的圖。
+ *
+ * 三張新圖不是為了內容變多，是**三個對照實驗**：
+ * 走廊密集、開闊地、掩體密集。mission_01 保留作為與既有數據的基準。
+ */
+export const MAPS: RawMap[] = [
+  mission01Json, mission02Json, mission03Json, mission04Json,
+] as unknown as RawMap[];
+
+export const MISSION_01: RawMap = MAPS[0];
+
+export function mapById(id: string): RawMap | null {
+  return MAPS.find((m) => m.id === id) ?? null;
+}
 export const ITEMS: Record<string, ItemDef> = Object.fromEntries(
   Object.entries(itemsJson as Record<string, unknown>)
     .filter(([k]) => !k.startsWith('_')),

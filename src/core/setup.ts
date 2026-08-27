@@ -4,8 +4,8 @@
 import type { Backpack, Facing, GameState, Item, LootPile, Objective, Unit, Vec2, Weapon } from './state';
 import type { RawMap } from './map';
 import { parseMap, findTiles } from './map';
-import { createRng } from './rng';
-import { ACTORS, MISSION_01, RULES, archetype, cloneWeapon, weaponById } from './content';
+import { createRng, nextFloat } from './rng';
+import { ACTORS, MAPS, RULES, archetype, cloneWeapon, weaponById } from './content';
 import { addItem, emptyBackpack, makeItem } from './inventory';
 
 function makeUnit(
@@ -86,7 +86,7 @@ export function makeReinforcementSoldier(
   // nextActAt 由 deployReinforcement 依 clock 設定
 }
 
-/** @param facing 初始面向（§13.2）。未指定時預設為南。 */
+/** @param facing 初始面向（§13.3）。未指定時預設為南。 */
 export function makeEnemy(archetypeId: string, index: number, pos: Vec2, facing: Facing = 'S'): Unit {
   const a = archetype(archetypeId);
   if (!a.attack) throw new Error('敵人原型 ' + archetypeId + ' 缺少 attack 資料');
@@ -104,8 +104,16 @@ export function rosterIds(): string[] {
   return out;
 }
 
-export function createInitialState(seed: number, rawMap: RawMap = MISSION_01): GameState {
-  const map = parseMap(rawMap);
+/**
+ * @param rawMap 指定地圖。**省略時用可播種亂數從四張圖裡挑一張**（§13.2）——
+ *               選圖是規則的一部分，不是介面的一部分，所以它走 core/rng.ts，
+ *               而且相同種子必然選到相同的圖。
+ */
+export function createInitialState(seed: number, rawMap?: RawMap): GameState {
+  const rng = createRng(seed >>> 0);
+  // 抽在最前面：後面所有的擲值順序才不會因為「有沒有指定地圖」而錯開。
+  const picked = rawMap ?? MAPS[Math.floor(nextFloat(rng) * MAPS.length)];
+  const map = parseMap(picked);
 
   const terminals = findTiles(map, 'TERMINAL');
   if (terminals.length !== 1) throw new Error('地圖必須剛好有 1 個 TERMINAL');
@@ -125,13 +133,13 @@ export function createInitialState(seed: number, rawMap: RawMap = MISSION_01): G
   // 物品與屍體的 id 走同一個流水號，所以先開一個計數器再交給 state
   const serial = { nextEntitySerial: 1 };
   const units: Unit[] = [makeStartingSoldier(serial, firstId, map.startDropPoint)];
-  rawMap.enemies.forEach((e, i) => {
+  picked.enemies.forEach((e, i) => {
     if (!ACTORS[e.archetype]) throw new Error('地圖引用了未知的敵人原型 ' + e.archetype);
     units.push(makeEnemy(e.archetype, i, e.pos, e.facing));
   });
 
   // 地圖搜刮點（§4.1）。地形是 LOOT，內容寫在地圖檔的 caches。
-  const loot: LootPile[] = (rawMap.caches ?? []).map((c) => {
+  const loot: LootPile[] = (picked.caches ?? []).map((c) => {
     const items: Item[] = c.items.map((e) => makeItem(serial as never, e.defId, e.qty));
     return {
       id: 'L' + serial.nextEntitySerial++,
@@ -153,7 +161,7 @@ export function createInitialState(seed: number, rawMap: RawMap = MISSION_01): G
     casualties: 0,
     deployed: 1,
     rngSeed: seed >>> 0,
-    rng: createRng(seed >>> 0),
+    rng,
     result: 'ONGOING',
     pendingReinforcement: null,
     extracted: [],

@@ -1,9 +1,11 @@
 // 在真實瀏覽器裡走一段實戰流程，驗證射擊預覽、視線繪製與蹲掩體。
+// v0.11 起會隨機選圖，但這支腳本的座標全部是 mission_01 的，
+// 所以網址釘死 map=mission_01 —— 它測的是介面與流程，不是地圖。
 import { chromium } from 'playwright-core';
 import { mkdirSync } from 'node:fs';
 
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const URL = process.env.URL || 'http://localhost:4188/?seed=12345';
+const URL = process.env.URL || 'http://localhost:4188/?seed=12345&map=mission_01';
 const OUT = process.env.OUT || 'C:/Users/user/AppData/Local/Temp/claude/c--claude-project-PMC-roguelike/32862969-7ed8-48d9-b72a-983b846d6e1c/scratchpad/shots';
 mkdirSync(OUT, { recursive: true });
 

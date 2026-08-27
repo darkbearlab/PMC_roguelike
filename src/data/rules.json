@@ -58,6 +58,22 @@
     "dnaDefId": "DNA"
   },
 
+  "mapRules": {
+    "_comment": "§13.4 地圖驗證的門檻。現在的用途是防止手刻地圖出現結構性錯誤；將來的用途是程序化區塊拼接的約束條件 —— 沿用一路以來的作法：現在建立鉤子，將來直接使用。",
+    "_coverDensity": "刻意寬：四張圖的密度天差地遠（開闊地圖與掩體密集圖是兩個對照組）。這個區間抓的是『整張圖沒有掩體』或『幾乎不能走』這種結構性錯誤，不是設計約束。實際密度記在 docs/map-stats.md。",
+    "_maxExposedRun": "主推進路線上連續多少格完全無掩蔽算太多。刻意設計成開闊的地圖可以在自己的檔案裡覆寫這一項 —— 那是一句寫下來的設計宣告，不是漏檢。",
+    "minDropPoints": 3,
+    "dropSpacing": { "min": 6, "max": 48 },
+    "coverDensity": { "min": 0.01, "max": 0.4 },
+    "maxExposedRun": 20,
+    "maxForcedExposure": 8,
+    "maxOrphanTiles": 0,
+    "secondaryObjectives": 2,
+    "minMainDistance": 24,
+    "enemies": { "min": 8, "max": 10 },
+    "minCaches": 2
+  },
+
   "sequences": {
     "_comment": "系列動作：效果只在整套走完時發生。走到一半的單位是暴露的、可被打斷的。",
     "RR4_RELOAD": {
