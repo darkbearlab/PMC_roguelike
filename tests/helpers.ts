@@ -4,6 +4,7 @@ import type { RawMap } from '../src/core/map';
 import { createInitialState } from '../src/core/setup';
 import type { Command } from '../src/core/commands';
 import { applyCommand } from '../src/core/commands';
+import { isPlayerTurn } from '../src/core/scheduler';
 import type { CombatEvent } from '../src/core/events';
 
 /**
@@ -13,6 +14,28 @@ import type { CombatEvent } from '../src/core/events';
  */
 export function run(s: GameState, cmd: Command): GameState {
   return applyCommand(s, cmd).state;
+}
+
+/**
+ * 推進排程器直到再次輪到玩家（或任務結束／等待補人）。
+ * v0.7 沒有「敵人回合」了 —— 這只是「一直讓非玩家單位行動」。
+ */
+export function advanceToPlayer(s0: GameState, limit = 500): GameState {
+  let s = s0;
+  let guard = 0;
+  while (guard++ < limit) {
+    if (s.result !== 'ONGOING' || s.pendingReinforcement) break;
+    if (isPlayerTurn(s)) break;
+    const next = applyCommand(s, { type: 'ADVANCE' }).state;
+    if (next === s) break;
+    s = next;
+  }
+  return s;
+}
+
+/** 推進排程器一格（讓目前輪到的非玩家單位做一件事）。 */
+export function advanceOnce(s: GameState): GameState {
+  return applyCommand(s, { type: 'ADVANCE' }).state;
 }
 
 /** 套用指令並只取事件清單。 */

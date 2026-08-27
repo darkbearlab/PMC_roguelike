@@ -6,14 +6,17 @@ import type { Command } from '../src/core/commands';
 /** applyCommand 現在回傳 { state, events }（§8.6）；這支探針只看狀態。 */
 const run = (s: GameState, c: Command): GameState => applyCommand(s, c).state;
 import { findPath } from '../src/core/pathfind';
+import { isPlayerTurn } from '../src/core/scheduler';
 import { activePlayerUnit, unitAt } from '../src/core/state';
 import { canAttack } from '../src/core/combat';
 import { facingFromDelta, manhattan } from '../src/core/grid';
 import type { Facing, GameState, Vec2 } from '../src/core/state';
 
-function botTurn(s: GameState, goal: Vec2): GameState {
+function botAction(s: GameState, goal: Vec2): GameState {
   const u = activePlayerUnit(s);
   if (!u) return s;
+  // 承諾中的序列：笨機器人一律走完，不中止
+  if (u.pendingSequence) return run(s, { type: 'SEQUENCE_STEP' });
   if (manhattan(u.pos, goal) <= 1) {
     const acted = run(s, { type: 'INTERACT', pos: goal });
     if (acted !== s) return acted;
@@ -45,13 +48,13 @@ for (const seed of [1, 42, 999, 20260826, 7777]) {
   let guard = 0;
   while (s.result === 'ONGOING' && guard++ < 20000) {
     if (s.pendingReinforcement) { s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] }); continue; }
-    if (s.phase === 'ENEMY') { s = run(s, { type: 'ENEMY_STEP' }); continue; }
-    s = botTurn(s, s.objectives.main.done ? s.map.startDropPoint : s.objectives.main.pos);
+    if (!isPlayerTurn(s)) { s = run(s, { type: 'ADVANCE' }); continue; }
+    s = botAction(s, s.objectives.main.done ? s.map.startDropPoint : s.objectives.main.pos);
   }
   const foes = s.units.filter((u) => u.faction === 'ENEMY').length;
   console.log(
     `seed ${String(seed).padStart(9)} → ${s.result.padEnd(8)}`,
-    `回合 ${String(s.turn).padStart(3)}`,
+    `時刻 ${String(s.clock).padStart(5)}`,
     `投入 ${s.deployed}`, `陣亡 ${s.casualties}`,
     `主目標 ${s.objectives.main.done ? '✓' : '✗'}`,
     `殘敵 ${foes}/10`,

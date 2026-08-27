@@ -11,8 +11,10 @@ import type { Facing, GameState, Vec2 } from '../core/state';
 import { activePlayerUnit, corpseAt, findUnit, unitAt } from '../core/state';
 import type { Command, WeaponSlot } from '../core/commands';
 import {
-  applyCommand, checkLegal, interactKindAt, interactTarget, movePath, swapCost,
+  applyCommand, checkLegal, commandTime, interactKindAt, interactTarget, movePath, swapTime,
 } from '../core/commands';
+import { activeUnit, isMissionOver, isPlayerTurn } from '../core/scheduler';
+import { describe as describeSequence } from '../core/sequence';
 import { createInitialState } from '../core/setup';
 import { RULES } from '../core/content';
 import { armorRange, damageRange, hitBreakdown } from '../core/combat';
@@ -88,6 +90,7 @@ export class Game {
   /** 測試用入口。正式流程一律走 canvas 的 pointer 事件與 rAF 迴圈。 */
   readonly test = {
     tap: (p: Vec2): void => this.tapTile(p),
+    isPlayerTurn: (): boolean => isPlayerTurn(this.state),
     selection: (): string | null => {
       const s = this.sel;
       if (!s) return null;
@@ -121,7 +124,7 @@ export class Game {
     if (state === this.state) return false;
     this.state = state;
     this.effects.push(events, performance.now());
-    if (this.state.phase === 'PLAYER') this.skipEnemyTurn = false;
+    if (isPlayerTurn(this.state)) this.skipEnemyTurn = false;
     this.pan = { x: 0, y: 0 };
     this.refresh();
     return true;
@@ -144,7 +147,6 @@ export class Game {
   // ---------------------------------------------------------------- 更新
 
   private refresh(): void {
-    this.measureSafeArea();
     this.syncVision();
     this.updateGhosts();
     const me = activePlayerUnit(this.state);
@@ -152,6 +154,9 @@ export class Game {
     this.validateSelection();
 
     renderHud(this.state);
+    // HUD 的 chip 會換行，高度是畫完才知道的 —— 量在 renderHud 之後，
+    // 橫幅與相機才不會壓到目標列（v0.7 的序列橫幅在兩行 HUD 下踩過這個雷）
+    this.measureSafeArea();
     this.updateControls();
     this.updateCard();
     this.updateLog();
@@ -200,7 +205,7 @@ export class Game {
 
   /** 現在打得到的敵人（決定「靜態細框」畫在誰身上）。IDLE 與否不影響。 */
   private legalTargetIds(): string[] {
-    if (this.state.phase !== 'PLAYER') return [];
+    if (!isPlayerTurn(this.state)) return [];
     return this.state.units
       .filter((u) => u.faction === 'ENEMY')
       .filter((u) => isVisible(this.vision, this.state.map, u.pos))
@@ -252,7 +257,8 @@ export class Game {
     if (this.modal !== 'NONE') return;
     // 敵人回合中點畫面任意處 = 跳過演出，直接結算到底。
     // 結果與完整播放完全相同 —— 規則解算本來就與演出無關。
-    if (this.state.phase === 'ENEMY') {
+    if (!isPlayerTurn(this.state) && !this.state.pendingReinforcement && !isMissionOver(this.state)) {
+      // 敵方行動演出中，點畫面任意處 = 跳過，直接結算到再次輪到玩家
       this.skipEnemyTurn = true;
       this.updateControls();
       return;
@@ -388,8 +394,8 @@ export class Game {
     const a = this.auto;
     if (!a) return;
     const u = activePlayerUnit(this.state);
-    if (!u || this.state.phase !== 'PLAYER' || a.path.length === 0) { this.auto = null; return; }
-    if (u.ap <= 0 || u.hp < a.hp) { this.auto = null; return; }
+    if (!u || !isPlayerTurn(this.state) || a.path.length === 0) { this.auto = null; return; }
+    if (u.hp < a.hp) { this.auto = null; return; }
     for (const id of this.visibleFoeIds()) {
       if (!a.foes.has(id)) { this.auto = null; this.updateControls(); return; }
     }
@@ -407,7 +413,7 @@ export class Game {
   private updateControls(): void {
     const s = this.state;
     const u = activePlayerUnit(s);
-    const busy = this.modal !== 'NONE' || s.phase !== 'PLAYER' || !!s.pendingReinforcement;
+    const busy = this.modal !== 'NONE' || !isPlayerTurn(s);
 
     // 不可用的按鈕一律灰掉，不隱藏 —— 按鈕消失會造成位移與誤觸。
     for (const btn of $$<HTMLButtonElement>('#dpad button[data-dir]')) {
@@ -419,14 +425,21 @@ export class Game {
     };
     en('button[data-act="WAIT"]', checkLegal(s, { type: 'WAIT' }).ok);
     en('button[data-act="STANCE"]', checkLegal(s, { type: 'TOGGLE_STANCE' }).ok);
-    en('button[data-act="RELOAD"]', checkLegal(s, { type: 'RELOAD' }).ok);
+    const inSeq = !!u && !!u.pendingSequence;
+    en('button[data-act="RELOAD"]',
+      inSeq ? checkLegal(s, { type: 'SEQUENCE_STEP' }).ok : checkLegal(s, { type: 'RELOAD' }).ok);
     en('button[data-act="SWAP"]', checkLegal(s, { type: 'SWAP_WEAPON' }).ok);
     en('button[data-act="SKILL"]', true);
 
     $('#lbl-stance').textContent = u && u.stance === 'STAND' ? '蹲' : '站';
-    $('#lbl-reload').textContent = u && u.equipped ? String(u.equipped.reloadCost) : '—';
-    const sc = u ? swapCost(u) : Infinity;
-    $('#lbl-swap').textContent = Number.isFinite(sc) ? String(sc) : '—';
+    // 按鈕上顯示的是**時間花費**，不再是 AP（§7.2）
+    $('#lbl-reload').textContent = inSeq
+      ? String(commandTime(s, { type: 'SEQUENCE_STEP' }) ?? 0)
+      : (u && u.equipped ? String(u.equipped.reloadTime) : '—');
+    $<HTMLButtonElement>('button[data-act="RELOAD"]').querySelector('b')!.textContent =
+      inSeq ? '續' : '彈';
+    const sw = u ? swapTime(u) : Infinity;
+    $('#lbl-swap').textContent = Number.isFinite(sw) ? String(sw) : '—';
 
     $<HTMLButtonElement>('button[data-act="SKILL"]').classList.toggle('on', this.skillOpen);
     $<HTMLButtonElement>('#btn-log').classList.toggle('on', this.logOpen);
@@ -440,17 +453,24 @@ export class Game {
   private updateBanner(): void {
     const s = this.state;
     const banner = $('#turn-banner');
-    // HUD 的高度會隨 chip 換行而變，橫幅位置跟著算，避免壓到戰況損益那一行
-    banner.style.top = Math.round($('#hud').getBoundingClientRect().bottom + 8) + 'px';
+    banner.style.top = Math.round(this.safe.top) + 'px';
     const busy = this.logOpen || this.modal !== 'NONE';
-    if (s.result !== 'ONGOING') { show(banner, false); return; }
-    if (s.phase === 'ENEMY') {
-      banner.textContent = this.skipEnemyTurn ? '敵人回合（結算中）' : '敵人回合　點畫面跳過';
+    if (isMissionOver(s)) { show(banner, false); return; }
+
+    // 承諾中：讓玩家看得出自己正在蓄勢，以及還剩幾步（§5.5）
+    const me = activePlayerUnit(s);
+    if (me && me.pendingSequence) {
+      banner.textContent = describeSequence(me.pendingSequence);
       show(banner, !busy);
       return;
     }
-    banner.textContent = '第 ' + s.turn + ' 回合';
-    show(banner, !busy && !this.auto);
+    if (!isPlayerTurn(s) && !s.pendingReinforcement) {
+      banner.textContent = this.skipEnemyTurn ? '敵方行動中（結算）' : '敵方行動中　點畫面跳過';
+      show(banner, !busy);
+      return;
+    }
+    // 玩家可以行動時不顯示橫幅 —— 沒有「回合」這個東西可以報
+    show(banner, false);
   }
 
   // ---------------------------------------------------------------- 卡片與紀錄
@@ -479,6 +499,7 @@ export class Game {
         this.clearSel();
       },
       interact: (pos) => { this.dispatch({ type: 'INTERACT', pos }); this.clearSel(); },
+      abortSequence: () => { this.dispatch({ type: 'ABORT_SEQUENCE' }); this.clearSel(); },
       close: () => this.clearSel(),
     });
   }
@@ -494,7 +515,7 @@ export class Game {
     const host = $('#log-panel');
     if (!this.logOpen) { show(host, false); this.updateBanner(); return; }
     const items = this.state.log.slice(-40).reverse()
-      .map((l) => '<li class="kind-' + l.kind + '">[T' + l.turn + '] ' + esc(l.text) + '</li>')
+      .map((l) => '<li class="kind-' + l.kind + '">[' + l.at + '] ' + esc(l.text) + '</li>')
       .join('');
     host.innerHTML = '<h3>戰鬥紀錄<button class="close" data-close="1">關閉</button></h3>'
       + '<p class="note">build ' + esc(BUILD_ID) + '　seed ' + this.state.rngSeed + '</p>'
@@ -556,7 +577,12 @@ export class Game {
     const act: Record<string, () => void> = {
       WAIT: () => { this.auto = null; this.clearSel(); this.dispatch({ type: 'WAIT' }); },
       STANCE: () => this.dispatch({ type: 'TOGGLE_STANCE' }),
-      RELOAD: () => this.dispatch({ type: 'RELOAD' }),
+      // 承諾中時，「彈」鍵變成「繼續下一步」；長按以外的中止入口在自己的狀態卡片上
+      RELOAD: () => {
+        const me = activePlayerUnit(this.state);
+        if (me && me.pendingSequence) this.dispatch({ type: 'SEQUENCE_STEP' });
+        else this.dispatch({ type: 'RELOAD' });
+      },
       SWAP: () => this.dispatch({ type: 'SWAP_WEAPON' }),
       SKILL: () => { this.skillOpen = !this.skillOpen; this.updateControls(); },
     };
@@ -656,9 +682,9 @@ export class Game {
 
   private step(now: number): void {
     const s = this.state;
-    if (s.result !== 'ONGOING' || s.pendingReinforcement) return;
+    if (isMissionOver(s) || s.pendingReinforcement) return;
 
-    if (s.phase === 'ENEMY') {
+    if (!isPlayerTurn(s)) {
       if (this.skipEnemyTurn || now - this.lastStep >= RULES.presentation.enemyStepMs) {
         this.lastStep = now;
         this.runEnemySteps();
@@ -680,31 +706,25 @@ export class Game {
     // 「整個敵人回合都沒有可見動作」時必須完全沒有停頓（§12.12）。
     let budget = 600;
     while (budget-- > 0) {
-      const id = this.state.enemyQueue[0];
-      const actor = id ? findUnit(this.state, id) : null;
+      const actor = activeUnit(this.state);
+      const id = actor ? actor.id : null;
       const wasVisible = !!actor && isVisible(this.vision, this.state.map, actor.pos);
       const hpBefore = activePlayerUnit(this.state)?.hp ?? 0;
-      const phaseBefore = this.state.phase;
 
-      const { state, events } = applyCommand(this.state, { type: 'ENEMY_STEP' });
+      const { state, events } = applyCommand(this.state, { type: 'ADVANCE' });
       if (state === this.state) break;
       this.state = state;
       this.effects.push(events, performance.now());
-      if (this.state.phase === 'PLAYER') this.skipEnemyTurn = false;
+      if (isPlayerTurn(this.state)) this.skipEnemyTurn = false;
       this.syncVision();
 
       const after = id ? findUnit(this.state, id) : null;
       const nowVisible = !!after && isVisible(this.vision, this.state.map, after.pos);
       const hpAfter = activePlayerUnit(this.state)?.hp ?? 0;
 
+      if (isPlayerTurn(this.state) || this.state.pendingReinforcement || isMissionOver(this.state)) break;
       if (this.skipEnemyTurn) continue;   // 跳過：只結算，不停下來演
-      if (
-        wasVisible || nowVisible ||
-        hpAfter !== hpBefore ||
-        this.state.phase !== phaseBefore ||
-        this.state.pendingReinforcement ||
-        this.state.result !== 'ONGOING'
-      ) break;
+      if (wasVisible || nowVisible || hpAfter !== hpBefore) break;
     }
     this.refresh();
   }
@@ -725,6 +745,7 @@ export class Game {
       reason: legal.reason,
       damage: damageRange(me.equipped, foe),
       armor: armorRange(foe),
+      time: me.equipped.fireTime,
       // 只給一個變小的數字沒有用：要說出等級與幅度，玩家才知道該繞側翼（§12.10）
       coverNote: bd.coverLevel === 'NONE'
         ? ''
@@ -739,7 +760,8 @@ export class Game {
     const me = activePlayerUnit(this.state);
     const path = movePath(this.state, s.pos);
     if (!me || !path || path.length === 0) return null;
-    return { path, ap: path.length, affordable: path.length <= me.ap };
+    // 尋路預覽顯示的是**總時間花費**，不是 AP（§7.2）
+    return { path, time: path.length * me.moveTime, affordable: true };
   }
 
   private buildInteractPreview(): InteractPreview | null {
@@ -747,7 +769,11 @@ export class Game {
     if (!s || s.kind !== 'INTERACT') return null;
     const kind = interactKindAt(this.state, s.pos);
     if (!kind) return null;
-    return { pos: { ...s.pos }, label: INTERACT_LABEL[kind] ?? '互動', ap: 1 };
+    return {
+      pos: { ...s.pos },
+      label: INTERACT_LABEL[kind] ?? '互動',
+      time: commandTime(this.state, { type: 'INTERACT', pos: s.pos }) ?? RULES.time.interact,
+    };
   }
 
   private render(now: number): void {

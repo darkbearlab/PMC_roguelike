@@ -3,6 +3,7 @@
  * 目的不是驗證「打得贏」，而是驗證地圖可玩、流程一定會收斂、不會卡死。
  */
 import { describe, it, expect } from 'vitest';
+import { isPlayerTurn } from '../src/core/scheduler';
 import { createInitialState } from '../src/core/setup';
 import { applyCommand } from '../src/core/commands';
 import type { Command } from '../src/core/commands';
@@ -113,9 +114,9 @@ describe('整場任務一定會收斂（不卡死）', () => {
         s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
         continue;
       }
-      if (s.phase === 'ENEMY') {
+      if (!isPlayerTurn(s)) {
         const before = s;
-        s = run(s, { type: 'ENEMY_STEP' });
+        s = run(s, { type: 'ADVANCE' });
         expect(s, '敵人回合卡住了').not.toBe(before);
         continue;
       }
@@ -127,7 +128,7 @@ describe('整場任務一定會收斂（不卡死）', () => {
     }
 
     expect(steps).toBeLessThan(LIMIT);
-    expect(s.phase).toBe('MISSION_END');
+    expect(s.result).not.toBe('ONGOING');
     expect(['SUCCESS', 'WIPED', 'ABORTED']).toContain(s.result);
     expect(s.deployed).toBeLessThanOrEqual(4);
     expect(s.casualties).toBeLessThanOrEqual(4);
@@ -142,13 +143,13 @@ describe('整場任務一定會收斂（不卡死）', () => {
       while (s.result === 'ONGOING' && steps++ < 20000) {
         if (s.pendingReinforcement) {
           s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
-        } else if (s.phase === 'ENEMY') {
-          s = run(s, { type: 'ENEMY_STEP' });
+        } else if (!isPlayerTurn(s)) {
+          s = run(s, { type: 'ADVANCE' });
         } else {
           s = botTurn(s, s.objectives.main.done ? s.map.startDropPoint : s.objectives.main.pos);
         }
       }
-      return JSON.stringify({ r: s.result, t: s.turn, c: s.casualties, log: s.log.length });
+      return JSON.stringify({ r: s.result, t: s.clock, c: s.casualties, log: s.log.length });
     };
     expect(playOnce()).toBe(playOnce());
   });

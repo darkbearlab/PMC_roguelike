@@ -6,18 +6,35 @@
     "idPrefix": "K-44"
   },
 
-  "ap": {
-    "moveCost": 1,
-    "pickupCost": 1,
-    "dropCost": 0,
-    "interactCost": 1,
-    "stanceCost": 0,
-    "facingCost": 0,
-    "swapCost": { "LIGHT": 1, "HEAVY": 2 }
+  "time": {
+    "_comment": "v0.7 排程器：所有動作的時間成本。基準是「移動一格 = 10」，程式碼中不得寫死任何時間值。",
+    "_wait": "等待固定為 10（等同移動一格）是刻意的：若等待很便宜，玩家就能不斷『等一下下再看看』，永遠讓敵人先出手，等於白拿一個後手優勢。",
+    "_deploy": "增援落地後的第一次行動延遲。這是 v0.6「落地當回合 AP 為 0」的時間換算。",
+    "_zeroCost": "姿勢與面向為 0：執行後不讓出行動權。AI 不得選擇 0 成本動作，否則會無限迴圈。",
+    "move": 10,
+    "wait": 10,
+    "pickup": 10,
+    "interact": 10,
+    "stance": 0,
+    "facing": 0,
+    "deploy": 10,
+    "swap": { "LIGHT": 10, "HEAVY": 20 }
+  },
+
+  "sequences": {
+    "_comment": "系列動作：效果只在整套走完時發生。走到一半的單位是暴露的、可被打斷的。",
+    "RR4_RELOAD": {
+      "label": "裝填 RR-4",
+      "steps": [
+        { "id": "OPEN_BOLT", "label": "開栓退殼", "time": 10 },
+        { "id": "LOAD", "label": "裝入彈藥", "time": 10 }
+      ]
+    }
   },
 
   "ai": {
-    "searchTimer": 3
+    "_searchTime": "搜索持續的時間量。v0.6 的 3 回合換算成 30（每回合約等於玩家兩個動作）。",
+    "searchTime": 30
   },
 
   "combat": {

@@ -12,16 +12,19 @@ import type { RawMap } from './map';
 
 export interface Rules {
   roster: { size: number; idPrefix: string };
-  ap: {
-    moveCost: number;
-    pickupCost: number;
-    dropCost: number;
-    interactCost: number;
-    stanceCost: number;
-    facingCost: number;
-    swapCost: Record<WeaponClass, number>;
+  /** v0.7 排程器的時間成本。程式碼中不得寫死任何時間值。 */
+  time: {
+    move: number;
+    wait: number;
+    pickup: number;
+    interact: number;
+    stance: number;
+    facing: number;
+    deploy: number;
+    swap: Record<WeaponClass, number>;
   };
-  ai: { searchTimer: number };
+  sequences: Record<string, unknown>;
+  ai: { searchTime: number };
   combat: {
     enableToHitRoll: boolean;
     hitFloor: number;
@@ -41,11 +44,10 @@ export interface ActorArchetype {
   hp: number;
   armor: number;
   armorSpread: number;
-  maxAp: number;
+  time: { move: number; transition: number };
   sightRange: number;
   aim: number;
   evasion: number;
-  attacksPerTurn: number;
   attack?: Weapon;
 }
 

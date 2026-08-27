@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { isPlayerTurn } from '../src/core/scheduler';
 import { checkLegal } from '../src/core/commands';
 import { abandonedWeapons, corpseAt } from '../src/core/state';
 import { run, testState, player, unit, freezeCombat, thawCombat } from './helpers';
@@ -15,8 +16,8 @@ const ROOM = [
 function runEnemyTurn(s0: ReturnType<typeof testState>) {
   let s = s0;
   let guard = 0;
-  while (s.phase === 'ENEMY' && !s.pendingReinforcement && guard++ < 500) {
-    s = run(s, { type: 'ENEMY_STEP' });
+  while (!isPlayerTurn(s) && !s.pendingReinforcement && guard++ < 500) {
+    s = run(s, { type: 'ADVANCE' });
   }
   return s;
 }
@@ -73,12 +74,12 @@ describe('§10 死亡、增援與屍體', () => {
     expect(player(s).pos).toEqual({ x: 6, y: 1 }); // 空投點就在屍體上
     const rrIndex = corpse.weapons.findIndex((w) => w.id === 'rr4');
 
-    const apBefore = player(s).ap;
+    const before = player(s).nextActAt;
     s = run(s, {
       type: 'PICKUP', corpseId: corpse.id, weaponIndex: rrIndex, slot: 'STOWED',
     });
     expect(player(s).stowed!.id).toBe('rr4');
-    expect(player(s).ap).toBe(apBefore - 1);
+    expect(player(s).nextActAt).toBeGreaterThan(before);   // 拾取花了時間
     expect(corpseAt(s, { x: 6, y: 1 })!.weapons.map((w) => w.id)).toEqual(['ar9']);
   });
 
@@ -116,16 +117,15 @@ describe('§10 死亡、增援與屍體', () => {
     for (let i = 0; i < 4; i++) {
       const p = player(s);
       p.hp = 3;
-      p.ap = 2;
-      s.phase = 'PLAYER';
-      s.enemyQueue = [];
+      
+      
       s = run(s, { type: 'FIRE', target: p.pos });
       if (s.result === 'WIPED') break;
       s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
       s = runEnemyTurn(s);
     }
     expect(s.result).toBe('WIPED');
-    expect(s.phase).toBe('MISSION_END');
+    expect(s.result).not.toBe('ONGOING');
     expect(s.casualties).toBe(4);
     expect(s.roster).toHaveLength(0);
   });
@@ -138,7 +138,7 @@ describe('§11 任務目標與結束', () => {
     expect(checkLegal(s, { type: 'INTERACT', pos: { x: 14, y: 1 } }).ok).toBe(true);
     const after = run(s, { type: 'INTERACT', pos: { x: 14, y: 1 } });
     expect(after.objectives.main.done).toBe(true);
-    expect(after.units[0].ap).toBe(1);
+    expect(after.units[0].nextActAt).toBeGreaterThan(0);
   });
 
   it('次要目標各自獨立', () => {
@@ -164,7 +164,7 @@ describe('§11 任務目標與結束', () => {
     player(s).pos = { x: 1, y: 1 };
     s = run(s, { type: 'INTERACT', pos: { x: 1, y: 1 } });
     expect(s.result).toBe('SUCCESS');
-    expect(s.phase).toBe('MISSION_END');
+    expect(s.result).not.toBe('ONGOING');
   });
 
   it('止損按鈕任何時候都可以按', () => {

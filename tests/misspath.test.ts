@@ -44,8 +44,7 @@ describe('未命中路徑', () => {
 
     expect(unit(s, 'E01').hp).toBe(hpBefore);
     expect(player(s).equipped!.ammo).toBe(ammoBefore - 1);
-    expect(player(s).ap).toBe(1);
-    expect(player(s).shotsThisTurn).toBe(1);
+    expect(player(s).nextActAt).toBe(10);   // 未命中照樣花掉開火的時間
   });
 
   it('命中率為 0 時：照樣產生噪音', () => {

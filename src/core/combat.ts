@@ -173,8 +173,6 @@ export function canAttack(
 ): Legality {
   if (!weapon) return no('沒有裝備武器');
   if (weapon.ammo <= 0) return no('彈藥耗盡');
-  if (attacker.ap < weapon.fireCost) return no('AP 不足（需要 ' + weapon.fireCost + '）');
-  if (attacker.shotsThisTurn >= attacker.attacksPerTurn) return no('本回合攻擊次數已達上限');
   if (manhattan(attacker.pos, targetPos) > weapon.range) return no('超出射程');
 
   const target = unitAt(state, targetPos);
@@ -205,7 +203,11 @@ export function emitNoise(state: GameState, origin: Vec2, radius: number, events
     });
     u.aiState = 'SEARCH';
     u.lastKnownTarget = { x: origin.x, y: origin.y };
-    u.searchTimer = RULES.ai.searchTimer;
+    u.searchTimer = RULES.ai.searchTime;
+    // IDLE → SEARCH 也是一次狀態轉換，一樣要付該原型的轉換時間（§9.2）。
+    // 表現形式是把它的下次行動時刻往後推 —— 聽到聲音到真的開始找，中間有反應遲滯。
+    u.nextActAt = Math.max(u.nextActAt, state.clock) + u.transitionTime;
+    u.transitioning = true;
     pushLog(state, 'NOISE', u.name + ' 聽見槍聲，前往 (' + origin.x + ',' + origin.y + ') 搜索');
   }
 }
@@ -328,7 +330,7 @@ export function resolveAttack(
 
 /**
  * 執行一次完整的開火動作：扣 AP、扣彈藥、記次數、轉向、解算。
- * 呼叫前必須先過 canAttack()。命中與否都會扣 AP 與彈藥（§8.1）。
+ * 呼叫前必須先過 canAttack()。命中與否都會扣時間與彈藥（§8.1）。
  */
 export function performAttack(
   state: GameState,
@@ -342,9 +344,8 @@ export function performAttack(
   }
   const weapon = attacker.equipped;
 
-  attacker.ap -= weapon.fireCost;
+  // 時間成本由排程器統一處理（commands.ts / ai.ts），這裡只管彈藥與朝向
   weapon.ammo -= 1;
-  attacker.shotsThisTurn += 1;
   const f = facingToward(attacker.pos, targetPos);
   if (f) attacker.facing = f;
   const result = resolveAttack(state, attackerId, targetPos, weapon, events);

@@ -51,7 +51,7 @@ describe('§11.1 相鄰格互動', () => {
     player(s).pos = { x: 11, y: 1 };
     const after = run(s, { type: 'INTERACT', pos: T });
     expect(after.objectives.main.done).toBe(true);
-    expect(after.units[0].ap).toBe(1);
+    expect(after.units[0].nextActAt).toBe(10);   // 互動花 10
     expect(after.units[0].facing).toBe('E');
   });
 

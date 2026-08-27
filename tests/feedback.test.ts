@@ -6,7 +6,7 @@ import { applyCommand } from '../src/core/commands';
 import { resetToHitPolicy, setToHitPolicy } from '../src/core/combat';
 import { weaponById } from '../src/core/content';
 import type { CombatEvent } from '../src/core/events';
-import { run, testState, player, unit, freezeCombat, thawCombat } from './helpers';
+import { advanceToPlayer, run, testState, player, unit, freezeCombat, thawCombat } from './helpers';
 
 afterEach(() => resetToHitPolicy());
 
@@ -93,7 +93,7 @@ describe('§2.2 其餘事件都看得到', () => {
     player(s).equipped!.ammo = 1;
     const { events } = applyCommand(s, { type: 'FIRE', target: { x: 4, y: 1 } });
     expect(pick(events, 'AMMO_OUT')).toHaveLength(1);
-    s = run(s, { type: 'FIRE', target: { x: 4, y: 1 } });
+    s = advanceToPlayer(run(s, { type: 'FIRE', target: { x: 4, y: 1 } }));
     expect(applyCommand(s, { type: 'RELOAD' }).events.map((e) => e.kind)).toContain('RELOAD');
   });
 
@@ -103,13 +103,13 @@ describe('§2.2 其餘事件都看得到', () => {
       [{ archetype: 'RUNNER', pos: { x: 5, y: 2 } }],
     );
     // 敵人回合的第一步就會偵測到玩家：IDLE -> ALERT
-    const enemyTurn = applyCommand(run(s, { type: 'WAIT' }), { type: 'ENEMY_STEP' });
+    const enemyTurn = applyCommand(run(s, { type: 'WAIT' }), { type: 'ADVANCE' });
     const st = pick(enemyTurn.events, 'AI_STATE');
     expect(st).toHaveLength(1);
     expect(st[0].from).toBe('IDLE');
     expect(st[0].to).toBe('ALERT');
     // 從 IDLE 轉入 → 這一回合不開火，回饋層據此給不同的表現
-    expect(enemyTurn.state.units.find((u) => u.id === 'E01')!.justSpotted).toBe(true);
+    expect(enemyTurn.state.units.find((u) => u.id === 'E01')!.transitioning).toBe(true);
   });
 
   it('完成目標與空投落地都有事件', () => {
@@ -134,9 +134,9 @@ describe('§2.5 回饋層不得污染規則層', () => {
       expect(json.toLowerCase(), banned).not.toContain('"' + banned);
     }
     expect(Object.keys(s).sort()).toEqual([
-      'activePlayerUnitId', 'casualties', 'corpses', 'deployed', 'enemyQueue', 'log', 'map',
-      'nextEntitySerial', 'objectives', 'pendingReinforcement', 'phase', 'result', 'rng',
-      'rngSeed', 'roster', 'turn', 'units',
+      'activePlayerUnitId', 'casualties', 'clock', 'corpses', 'deployed', 'log', 'map',
+      'nextEntitySerial', 'objectives', 'pendingReinforcement', 'result', 'rng',
+      'rngSeed', 'roster', 'units',
     ]);
   });
 
@@ -147,8 +147,8 @@ describe('§2.5 回饋層不得污染規則層', () => {
       for (const cmd of [
         { type: 'FIRE' as const, target: { x: 4, y: 1 } },
         { type: 'FIRE' as const, target: { x: 4, y: 1 } },
-        { type: 'ENEMY_STEP' as const },
-        { type: 'ENEMY_STEP' as const },
+        { type: 'ADVANCE' as const },
+        { type: 'ADVANCE' as const },
       ]) {
         const r = applyCommand(s, cmd);
         s = r.state;

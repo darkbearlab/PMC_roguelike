@@ -3,7 +3,7 @@ import type { GameState, LogKind } from './state';
 import { RULES } from './content';
 
 export function pushLog(state: GameState, kind: LogKind, text: string): void {
-  state.log.push({ turn: state.turn, kind, text });
+  state.log.push({ at: state.clock, kind, text });
   const max = RULES.log.maxEntries;
   if (state.log.length > max) state.log.splice(0, state.log.length - max);
 }

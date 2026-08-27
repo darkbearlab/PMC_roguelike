@@ -60,12 +60,6 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 .chip.warn { color: #2a0f0c; background: var(--danger); border-color: #ff8b7f; font-weight: 600; }
-.chip-ap { display: flex; align-items: center; gap: 4px; padding: 5px 8px; }
-.chip-ap i {
-  width: 10px; height: 10px; border-radius: 50%;
-  border: 2px solid var(--accent); display: inline-block;
-}
-.chip-ap i.full { background: var(--accent); }
 .hud-ledger {
   display: block; margin-top: 5px;
   font-size: 10.5px; color: var(--ink-dim); letter-spacing: .2px;
@@ -75,7 +69,7 @@ html, body {
 
 #turn-banner {
   position: absolute;
-  top: 70px;   /* 實際位置由 JS 依 HUD 高度覆寫 */
+  top: 70px;   /* 後備值；實際位置由 measureSafeArea() 依 HUD 實高覆寫 */
   left: 50%; transform: translateX(-50%);
   background: var(--glass); backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);

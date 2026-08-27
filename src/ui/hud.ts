@@ -12,10 +12,8 @@ export function shortName(name: string): string {
 export function renderHud(state: GameState): void {
   const u = activePlayerUnit(state);
 
-  const ap = $('#hud-ap');
-  const maxAp = u ? u.maxAp : 0;
-  ap.innerHTML = Array.from({ length: maxAp }, (_, i) =>
-    `<i class="${u && i < u.ap ? 'full' : ''}"></i>`).join('') || '<i></i>';
+  // v0.7：沒有 AP 了。這一格改成顯示世界時刻，讓玩家對「花了多少時間」有概念。
+  $('#hud-clock').textContent = 'T ' + state.clock;
 
   $('#hud-hp').textContent = u ? `HP ${Math.max(0, u.hp)}/${u.maxHp}` : 'HP —';
 

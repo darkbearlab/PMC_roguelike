@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { checkLegal, movePath } from '../src/core/commands';
-import { run, testState, player, placePlayer } from './helpers';
+import { isPlayerTurn } from '../src/core/scheduler';
+import { checkLegal, commandTime, movePath } from '../src/core/commands';
+import { activeUnit } from '../src/core/scheduler';
+import { RULES } from '../src/core/content';
+import { advanceToPlayer, run, testState, player, placePlayer } from './helpers';
 
 const OPEN = [
   '#########',
@@ -11,12 +14,13 @@ const OPEN = [
   '#########',
 ];
 
-describe('§5.2 AP 扣減', () => {
-  it('移動 1 格扣 1 AP', () => {
+describe('§5 排程器：時間成本', () => {
+  it('移動一格花 10（基準），並把下次行動時刻往後推', () => {
     let s = testState(OPEN);
-    expect(player(s).ap).toBe(2);
+    expect(s.clock).toBe(0);
+    expect(player(s).nextActAt).toBe(0);
     s = run(s, { type: 'MOVE', dir: 'E' });
-    expect(player(s).ap).toBe(1);
+    expect(player(s).nextActAt).toBe(10);
     expect(player(s).pos).toEqual({ x: 2, y: 1 });
   });
 
@@ -31,51 +35,74 @@ describe('§5.2 AP 扣減', () => {
     }
   });
 
-  it('AP 歸零時自動結束玩家回合，並進入敵人回合', () => {
-    let s = testState(OPEN);
+  it('沒有「回合」：動作花完時間就換 nextActAt 最小的單位行動', () => {
+    // 敵人在遠處、不會發現玩家，但仍然要照排程輪到它
+    let s = testState(OPEN, [{ archetype: 'HULK', pos: { x: 7, y: 4 } }]);
+    expect(isPlayerTurn(s)).toBe(true);          // 同時刻 0，玩家優先（§5.3）
+    s = run(s, { type: 'MOVE', dir: 'E' });      // 玩家推到 10，HULK 還在 0
+    expect(isPlayerTurn(s)).toBe(false);
+    s = advanceToPlayer(s);
+    expect(isPlayerTurn(s)).toBe(true);
+    // clock 是「上一個動作發生的時刻」。HULK 在時刻 0 行動，所以此刻仍是 0；
+    // 等玩家真的做下一件事，clock 才會前進到玩家的 nextActAt。
+    expect(s.clock).toBe(0);
+    expect(player(s).nextActAt).toBe(10);
     s = run(s, { type: 'MOVE', dir: 'E' });
-    expect(s.phase).toBe('PLAYER');
-    s = run(s, { type: 'MOVE', dir: 'E' });
-    expect(player(s).ap).toBe(0);
-    expect(s.phase).toBe('ENEMY');
+    expect(s.clock).toBe(10);
+    expect(player(s).nextActAt).toBe(20);
   });
 
-  it('敵人回合跑完後回到玩家回合，AP 補滿且回合數 +1', () => {
-    let s = testState(OPEN);
-    s = run(s, { type: 'MOVE', dir: 'E' });
-    s = run(s, { type: 'MOVE', dir: 'E' });
-    let guard = 0;
-    while (s.phase === 'ENEMY' && guard++ < 200) s = run(s, { type: 'ENEMY_STEP' });
-    expect(s.phase).toBe('PLAYER');
-    expect(s.turn).toBe(2);
-    expect(player(s).ap).toBe(2);
+  it('同時刻時玩家優先，其次依陣列索引；順序不含亂數', () => {
+    const s = testState(OPEN, [
+      { archetype: 'RUNNER', pos: { x: 5, y: 1 } },
+      { archetype: 'RUNNER', pos: { x: 6, y: 1 } },
+    ]);
+    // 全部都在時刻 0
+    expect(s.units.every((u) => u.nextActAt === 0)).toBe(true);
+    expect(activeUnit(s)!.faction).toBe('PLAYER');
+    // 把玩家推遠一點，剩下兩個敵人同時刻 → 取陣列索引小的
+    const t = structuredClone(s);
+    t.units[0].nextActAt = 99;
+    expect(activeUnit(t)!.id).toBe('E01');
   });
 
-  it('改變姿勢與面向免費（§5.2 刻意設計，不要加 AP 成本）', () => {
-    let s = testState(OPEN);
+  it('姿勢與面向 0 成本：執行後不讓出行動權', () => {
+    let s = testState(OPEN, [{ archetype: 'HULK', pos: { x: 7, y: 4 } }]);
     s = run(s, { type: 'TOGGLE_STANCE' });
     expect(player(s).stance).toBe('CROUCH');
-    expect(player(s).ap).toBe(2);
+    expect(player(s).nextActAt).toBe(0);
+    expect(isPlayerTurn(s)).toBe(true);          // 仍然輪到玩家
     s = run(s, { type: 'SET_FACING', facing: 'N' });
     expect(player(s).facing).toBe('N');
-    expect(player(s).ap).toBe(2);
+    expect(player(s).nextActAt).toBe(0);
+    expect(isPlayerTurn(s)).toBe(true);
   });
 
-  it('等待消耗全部剩餘 AP 並結束回合', () => {
+  it('等待花 10（等同移動一格），不是「用掉剩餘全部」', () => {
     let s = testState(OPEN);
     s = run(s, { type: 'WAIT' });
-    expect(s.phase).toBe('ENEMY');
+    expect(player(s).nextActAt).toBe(RULES.time.wait);
+    expect(RULES.time.wait).toBe(RULES.time.move);
   });
 
-  it('AP 不足時移動指令非法，且狀態物件不變', () => {
-    let s = testState(OPEN);
-    s = run(s, { type: 'MOVE', dir: 'E' });
-    const p = player(s);
-    p.ap = 0;
+  it('還沒輪到玩家時所有玩家指令都非法，且狀態物件不變', () => {
+    let s = testState(OPEN, [{ archetype: 'RUNNER', pos: { x: 7, y: 4 } }]);
+    s = run(s, { type: 'MOVE', dir: 'E' });      // 玩家推到 10，換敵人
+    expect(isPlayerTurn(s)).toBe(false);
     const before = s;
-    const after = run(s, { type: 'MOVE', dir: 'E' });
-    expect(after).toBe(before);
+    expect(run(s, { type: 'MOVE', dir: 'E' })).toBe(before);
     expect(checkLegal(s, { type: 'MOVE', dir: 'E' }).ok).toBe(false);
+    expect(checkLegal(s, { type: 'MOVE', dir: 'E' }).reason).toContain('還沒輪到');
+  });
+
+  it('所有時間成本都來自資料檔', () => {
+    const s = testState(OPEN);
+    expect(commandTime(s, { type: 'MOVE', dir: 'E' })).toBe(RULES.time.move);
+    expect(commandTime(s, { type: 'WAIT' })).toBe(RULES.time.wait);
+    expect(commandTime(s, { type: 'TOGGLE_STANCE' })).toBe(RULES.time.stance);
+    expect(commandTime(s, { type: 'INTERACT', pos: { x: 1, y: 1 } })).toBe(RULES.time.interact);
+    expect(RULES.time.stance).toBe(0);
+    expect(RULES.time.facing).toBe(0);
   });
 });
 
@@ -101,7 +128,7 @@ describe('§5.3 / §6 地形與切角', () => {
     expect(movePath(s, { x: 2, y: 1 })!.length).toBe(2);
   });
 
-  it('尋路成本 = 路徑長度 = 所需 AP（四方向）', () => {
+  it('尋路成本 = 路徑長度 × 移動時間（四方向）', () => {
     const s = testState(['#####', '#D.T#', '#.#.#', '#...#', '#####']);
     // (1,1) -> (2,1) -> (3,1)='T' 可通行 -> (3,2)
     expect(movePath(s, { x: 3, y: 2 })!.length).toBe(3);

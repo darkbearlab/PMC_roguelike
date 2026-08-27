@@ -9,14 +9,17 @@
 import type { GameState, Vec2 } from '../core/state';
 import { activePlayerUnit, corpseAt } from '../core/state';
 import type { WeaponSlot } from '../core/commands';
-import { checkLegal, interactTarget } from '../core/commands';
+import { checkLegal, commandTime, interactTarget } from '../core/commands';
 import { sameTile } from '../core/grid';
 import { effectiveSightRange } from '../core/stance';
+import { describe as describeSequence } from '../core/sequence';
+import { RULES } from '../core/content';
 import { esc } from './dom';
 
 export interface MenuHandlers {
   pickup(corpseId: string, weaponIndex: number, slot: WeaponSlot): void;
   interact(pos: Vec2): void;
+  abortSequence(): void;
   close(): void;
 }
 
@@ -44,16 +47,26 @@ export function selfPanelHtml(state: GameState): string {
   return head(u.name + '　詳細狀態')
     + '<div class="stat-grid">'
     + stat('HP', Math.max(0, u.hp) + '/' + u.maxHp)
-    + stat('AP', u.ap + '/' + u.maxAp, true)
+    + stat('時刻', String(state.clock), true)
     + stat('姿勢', u.stance === 'CROUCH' ? '蹲' : '站')
     + '</div>'
+    + (u.pendingSequence
+      ? '<p class="note">進行中：' + esc(describeSequence(u.pendingSequence))
+        + '　（可中止，已花費的時間不退還）</p>'
+      : '')
     + '<p class="note">手持：' + esc(w ? w.name + ' ' + w.ammo + '/' + w.magazine : '空手')
     + '　收納：' + esc(st ? st.name + ' ' + st.ammo + '/' + st.magazine : '無')
     + '<br>視野 ' + effectiveSightRange(u) + ' 格（曼哈頓，蹲姿縮短）・面向 ' + u.facing + '（面向不影響視野，僅美術用）</p>'
     + '<div class="menu-actions">'
+    + (u.pendingSequence
+      ? '<button class="danger" data-do="abort-seq">中止 ' + esc(describeSequence(u.pendingSequence))
+        + '<em>已花費的時間不退還</em></button>'
+      : '')
     + (label
       ? '<button data-do="interact" ' + (legal.ok ? 'class="primary"' : 'disabled') + '>'
-        + esc(label) + '<em>' + (legal.ok ? '1 AP' : esc(legal.reason)) + '</em></button>'
+        + esc(label) + '<em>'
+        + (legal.ok ? '費時 ' + commandTime(state, { type: 'INTERACT', pos: u.pos }) : esc(legal.reason))
+        + '</em></button>'
       : '')
     + '</div>';
 }
@@ -70,7 +83,9 @@ export function corpsePanelHtml(state: GameState, pos: Vec2): string {
     html += '<p class="note">身上已經沒有可回收的裝備了。</p>';
   } else {
     html += '<p class="note">遺留裝備 ' + corpse.weapons.length + ' 件'
-      + (standing ? '（拾取 1 AP，換下來的槍免費留在原地）' : '（必須先走到這一格）') + '</p>';
+      + (standing
+        ? '（拾取費時 ' + RULES.time.pickup + '，換下來的槍免費留在原地）'
+        : '（必須先走到這一格）') + '</p>';
   }
   html += '<div class="menu-actions">';
 
@@ -89,7 +104,7 @@ export function corpsePanelHtml(state: GameState, pos: Vec2): string {
       const cur = slot === 'EQUIPPED' ? u.equipped : u.stowed;
       const suffix = free ? '' : ' → ' + (slot === 'EQUIPPED' ? '手持' : '收納');
       const hint = legal.ok
-        ? '1 AP' + (cur ? '・替換 ' + esc(cur.name) : '')
+        ? '費時 ' + RULES.time.pickup + (cur ? '・替換 ' + esc(cur.name) : '')
         : esc(legal.reason);
       html += '<button data-do="pickup" data-corpse="' + esc(corpse.id) + '" data-idx="' + i
         + '" data-slot="' + slot + '"'
@@ -106,6 +121,7 @@ export function wireMenu(host: HTMLElement, at: Vec2, h: MenuHandlers): void {
     btn.addEventListener('click', () => {
       switch (btn.dataset.do) {
         case 'interact': h.interact(at); break;
+        case 'abort-seq': h.abortSequence(); break;
         case 'pickup':
           h.pickup(btn.dataset.corpse as string, Number(btn.dataset.idx), btn.dataset.slot as WeaponSlot);
           break;

@@ -2,6 +2,7 @@
  * §3.1 / §14 決定論驗收。
  */
 import { describe, it, expect } from 'vitest';
+import { isPlayerTurn } from '../src/core/scheduler';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Command } from '../src/core/commands';
@@ -22,7 +23,7 @@ const SCRIPT: Command[] = [
   { type: 'TOGGLE_STANCE' },
   { type: 'MOVE', dir: 'S' },
   { type: 'MOVE', dir: 'S' },
-  { type: 'ENEMY_STEP' },
+  { type: 'ADVANCE' },
   { type: 'MOVE', dir: 'SE' },
   { type: 'MOVE', dir: 'SE' },
   { type: 'MOVE', dir: 'S' },
@@ -46,8 +47,8 @@ function play(seed: number): string {
   let s = createInitialState(seed);
   for (const cmd of SCRIPT) {
     let guard = 0;
-    while (s.phase === 'ENEMY' && !s.pendingReinforcement && guard++ < 2000) {
-      s = run(s, { type: 'ENEMY_STEP' });
+    while (!isPlayerTurn(s) && !s.pendingReinforcement && guard++ < 2000) {
+      s = run(s, { type: 'ADVANCE' });
     }
     if (s.pendingReinforcement && s.roster.length) {
       s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
@@ -57,8 +58,8 @@ function play(seed: number): string {
     s = run(s, cmd);
   }
   let guard = 0;
-  while (s.phase === 'ENEMY' && !s.pendingReinforcement && guard++ < 2000) {
-    s = run(s, { type: 'ENEMY_STEP' });
+  while (!isPlayerTurn(s) && !s.pendingReinforcement && guard++ < 2000) {
+    s = run(s, { type: 'ADVANCE' });
   }
   return JSON.stringify(s);
 }
@@ -72,7 +73,7 @@ describe('決定論', () => {
     let s = createInitialState(999);
     for (let i = 0; i < 8; i++) {
       const cmd = SCRIPT[i];
-      while (s.phase === 'ENEMY') s = run(s, { type: 'ENEMY_STEP' });
+      while (!isPlayerTurn(s)) s = run(s, { type: 'ADVANCE' });
       s = run(s, cmd);
     }
     const snapshot = JSON.stringify(s);
@@ -95,7 +96,7 @@ describe('決定論', () => {
   it('非法指令回傳同一個 state 物件', () => {
     const s = createInitialState(7);
     expect(run(s, { type: 'MOVE', dir: 'N' })).toBe(s); // 撞牆
-    expect(run(s, { type: 'ENEMY_STEP' })).toBe(s);     // 不是敵人回合
+    expect(run(s, { type: 'ADVANCE' })).toBe(s);     // 不是敵人回合
   });
 
   it('rngSeed 可從外部指定，不同種子產生不同亂數序列', () => {

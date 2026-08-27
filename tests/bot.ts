@@ -10,6 +10,7 @@ import { createInitialState } from '../src/core/setup';
 import { findPath } from '../src/core/pathfind';
 import { activePlayerUnit, unitAt } from '../src/core/state';
 import { canAttack } from '../src/core/combat';
+import { isPlayerTurn } from '../src/core/scheduler';
 import { facingFromDelta, manhattan } from '../src/core/grid';
 import type { CombatEvent } from '../src/core/events';
 import type { Facing, GameState, Vec2 } from '../src/core/state';
@@ -17,7 +18,8 @@ import type { Facing, GameState, Vec2 } from '../src/core/state';
 export interface MissionTrace {
   events: CombatEvent[];
   result: string;
-  turn: number;
+  /** 總耗時（世界時刻）。v0.7 之後沒有回合數。 */
+  elapsed: number;
   casualties: number;
   deployed: number;
   /** 收場時每個存活單位的血量，用來確認數值規模 */
@@ -67,8 +69,8 @@ export function runMission(seed: number, limit = 20000): MissionTrace {
       take(applyCommand(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] } as Command));
       continue;
     }
-    if (s.phase === 'ENEMY') {
-      take(applyCommand(s, { type: 'ENEMY_STEP' }));
+    if (!isPlayerTurn(s)) {
+      take(applyCommand(s, { type: 'ADVANCE' }));
       continue;
     }
     take(botTurn(s, s.objectives.main.done ? s.map.startDropPoint : s.objectives.main.pos));
@@ -77,7 +79,7 @@ export function runMission(seed: number, limit = 20000): MissionTrace {
   return {
     events,
     result: s.result,
-    turn: s.turn,
+    elapsed: s.clock,
     casualties: s.casualties,
     deployed: s.deployed,
     hp: s.units.map((u) => ({ id: u.id, hp: u.hp, maxHp: u.maxHp, armor: u.armor })),

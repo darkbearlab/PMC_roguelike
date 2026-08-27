@@ -48,14 +48,17 @@ ok(/K-442/.test(modalText), '增援選單列出名冊');
 ok(/改為止損撤出/.test(modalText), '增援選單也能直接止損');
 
 await page.locator('#modal-root button[data-pick]').first().click();
-await page.waitForFunction(() => window.__game.state.phase === 'PLAYER', null, { timeout: 15000 });
+await page.waitForFunction(
+  () => window.__game.test.isPlayerTurn() || window.__game.state.result !== 'ONGOING',
+  null, { timeout: 15000 },
+);
 await page.waitForTimeout(300);
 
 const after = await page.evaluate(() => {
   const g = window.__game;
   const me = g.state.units.find((u) => u.faction === 'PLAYER');
   return {
-    id: me.id, pos: me.pos, ap: me.ap,
+    id: me.id, pos: me.pos, nextActAt: me.nextActAt, clock: g.state.clock,
     equipped: me.equipped && me.equipped.id, stowed: me.stowed && me.stowed.id,
     corpses: g.state.corpses.map((c) => ({ pos: c.pos, w: c.weapons.map((x) => x.id) })),
     casualties: g.state.casualties, deployed: g.state.deployed, roster: g.state.roster.length,
@@ -66,6 +69,8 @@ ok(after.pos.x === 2 && after.pos.y === 11, '從最近的空投點 D2 (2,11) 落
 ok(after.equipped === 'ar9' && after.stowed === null, '增援只帶 AR-9，重武器留在屍體上');
 ok(after.corpses.length === 1 && after.corpses[0].w.sort().join() === 'ar9,rr4', '屍體保有死者的全部武器');
 ok(after.casualties === 1 && after.deployed === 2 && after.roster === 2, '結算計數正確');
+ok(after.nextActAt > after.clock || after.nextActAt >= 10,
+  '增援落地後有一段延遲才能行動（§5.2 deploy）');
 
 // 走到屍體上，用情境選單撿回 RR-4
 await page.evaluate(() => {
@@ -80,16 +85,22 @@ await page.screenshot({ path: OUT + '/21-corpse-menu.png' });
 const menu = await page.locator('#tile-menu').textContent();
 ok(/的遺體/.test(menu) && /RR-4/.test(menu), '點屍體會列出可拾取的武器');
 
-const apBefore = await page.evaluate(() => window.__game.state.units.find(u => u.faction === 'PLAYER').ap);
+const beforePick = await page.evaluate(() => {
+  const u = window.__game.state.units.find(x => x.faction === 'PLAYER');
+  return { next: u.nextActAt };
+});
 await page.locator('#tile-menu button[data-do="pickup"]').last().click();
 await page.waitForTimeout(300);
 const picked = await page.evaluate(() => {
   const g = window.__game;
   const me = g.state.units.find((u) => u.faction === 'PLAYER');
-  return { ap: me.ap, equipped: me.equipped && me.equipped.id, stowed: me.stowed && me.stowed.id };
+  return {
+    next: me.nextActAt, clock: g.state.clock,
+    equipped: me.equipped && me.equipped.id, stowed: me.stowed && me.stowed.id,
+  };
 });
-ok(picked.equipped === 'rr4' || picked.stowed === 'rr4', '花 1 AP 撿回 RR-4');
-ok(picked.ap === apBefore - 1, 'AP 正確扣 1');
+ok(picked.equipped === 'rr4' || picked.stowed === 'rr4', '撿回 RR-4');
+ok(picked.next > beforePick.next, '拾取有推進自己的下次行動時刻（不是免費的）');
 await page.screenshot({ path: OUT + '/22-picked-up.png' });
 
 console.log(errors.length ? '❌ CONSOLE:\n  ' + errors.join('\n  ') : '✅ 沒有 console 錯誤');

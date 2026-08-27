@@ -27,8 +27,6 @@ function makeUnit(
     armorSpread: a.armorSpread,
     aim: a.aim,
     evasion: a.evasion,
-    maxAp: a.maxAp,
-    ap: a.maxAp,
     stance: 'STAND',
     facing: 'S',
     sightRange: a.sightRange,
@@ -37,9 +35,11 @@ function makeUnit(
     aiState: 'IDLE',
     lastKnownTarget: null,
     searchTimer: 0,
-    shotsThisTurn: 0,
-    justSpotted: false,
-    attacksPerTurn: a.attacksPerTurn,
+    nextActAt: 0,
+    moveTime: a.time.move,
+    transitionTime: a.time.transition,
+    transitioning: false,
+    pendingSequence: null,
   };
 }
 
@@ -57,8 +57,7 @@ export function makeReinforcementSoldier(id: string, pos: Vec2): Unit {
     equipped: weaponById('ar9'),
     stowed: null,
   });
-  u.ap = 0; // 落地當回合不能行動
-  return u;
+  return u;   // nextActAt 由 deployReinforcement 依 clock 設定
 }
 
 export function makeEnemy(archetypeId: string, index: number, pos: Vec2): Unit {
@@ -103,8 +102,7 @@ export function createInitialState(seed: number, rawMap: RawMap = MISSION_01): G
   });
 
   return {
-    turn: 1,
-    phase: 'PLAYER',
+    clock: 0,
     map,
     units,
     corpses: [],
@@ -116,14 +114,13 @@ export function createInitialState(seed: number, rawMap: RawMap = MISSION_01): G
     rngSeed: seed >>> 0,
     rng: createRng(seed >>> 0),
     result: 'ONGOING',
-    enemyQueue: [],
     pendingReinforcement: null,
     nextEntitySerial: 1,
     log: [
-      { turn: 1, kind: 'MISSION', text: '任務開始：' + map.name },
-      { turn: 1, kind: 'INFO', text: firstId + ' 已投入戰場。' },
+      { at: 0, kind: 'MISSION', text: '任務開始：' + map.name },
+      { at: 0, kind: 'INFO', text: firstId + ' 已投入戰場。' },
       {
-        turn: 1,
+        at: 0,
         kind: 'INFO',
         text: 'HUD 的防禦狀態採「最差情況」：在所有看得到你的敵人之中取掩蔽最低的那一個。',
       },

@@ -66,6 +66,8 @@ export interface Lock {
   damage: { min: number; max: number };
   /** 目標護甲區間。和傷害擺在一起，玩家一眼看得出「為什麼只有這麼點」。 */
   armor: { min: number; max: number };
+  /** 這一槍要花多少時間（§7.2，取代原本的「剩餘 AP」）。 */
+  time: number;
   /** 掩蔽說明，例如「良好掩蔽 −40%」；無掩蔽時為空字串。 */
   coverNote: string;
   /** 造成掩蔽的格子。標出來玩家才知道該繞哪邊（§12.10）。 */
@@ -74,14 +76,15 @@ export interface Lock {
 
 export interface MovePreview {
   path: Vec2[];
-  ap: number;
+  /** 走完整條路徑的總時間花費（§7.2，取代原本的 AP）。 */
+  time: number;
   affordable: boolean;
 }
 
 export interface InteractPreview {
   pos: Vec2;
   label: string;
-  ap: number;
+  time: number;
 }
 
 export interface Scene {
@@ -327,8 +330,8 @@ function drawUnit(ctx: CanvasRenderingContext2D, cam: Camera, u: Unit, isActive:
 
   // 敵人 AI 狀態
   if (u.faction === 'ENEMY') {
-    if (u.justSpotted) {
-      // 文字而不是符號：這個狀態的意思（本回合不會開火）值得講清楚
+    if (u.transitioning) {
+      // 文字而不是符號：這個狀態的意思（這次輪到它只會轉入狀態，不會開火）值得講清楚
       ctx.font = '700 11px ui-sans-serif, system-ui, "Noto Sans TC", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
@@ -376,7 +379,7 @@ function drawGhosts(ctx: CanvasRenderingContext2D, sc: Scene): void {
 
 /**
  * 目標框：兩種訊息，兩種表現，可以同時出現在同一個敵人身上。
- *   靜態細框 = 這個目標我現在打得到（視線、射程、彈藥、AP 皆成立）
+ *   靜態細框 = 這個目標我現在打得到（視線、射程、彈藥皆成立）
  *   點滅紅框 = 這個敵人不是 IDLE（ALERT 或 SEARCH）
  * 框只表達狀態，不決定可否點擊 —— IDLE 的敵人一樣選得到、打得到。
  */
@@ -397,10 +400,10 @@ function drawTargetFrames(ctx: CanvasRenderingContext2D, sc: Scene): void {
       ctx.strokeRect(s.x + 2.5, s.y + 2.5, t - 5, t - 5);
     }
     if (u.aiState !== 'IDLE') {
-      // 「剛從 IDLE 發現、這一回合不會開火」必須與一般警戒截然不同 ——
-      // 這一回合正是玩家用來蹲下、退回掩體或先開槍的反應窗口（§9.2）。
+      // 「剛完成狀態轉換、還沒輪到它做別的事」必須與一般警戒截然不同 ——
+      // 那一下正是玩家用來蹲下、退回掩體或先開槍的反應窗口（§9.2）。
       // 用琥珀色虛線框而不是紅色實線閃爍，並在頭上標「剛發現」。
-      const spotting = u.justSpotted;
+      const spotting = u.transitioning;
       ctx.save();
       ctx.globalAlpha = spotting ? 0.9 : 0.35 + 0.65 * blink;
       ctx.strokeStyle = spotting ? C.frameSpotting : C.frameAlert;
@@ -469,6 +472,7 @@ function drawLock(ctx: CanvasRenderingContext2D, sc: Scene): void {
   const sub = live
     ? '傷害 ' + lock.damage.min + '–' + lock.damage.max
       + '　裝甲 ' + lock.armor.min + '–' + lock.armor.max
+      + '　耗時 ' + lock.time
       + (lock.coverNote ? '　' + lock.coverNote : '')
     : '';
   // 標籤放在目標「下方」：浮動傷害數字一律往上飄，兩者才不會疊在一起。
@@ -497,9 +501,7 @@ function drawMovePreview(ctx: CanvasRenderingContext2D, sc: Scene): void {
   ctx.strokeRect(end.x - t / 2 + 2, end.y - t / 2 + 2, t - 4, t - 4);
   ctx.restore();
 
-  drawLabel(ctx, end.x, end.y - t * 0.62,
-    mp.ap + ' AP' + (mp.affordable ? '' : '（不足）'),
-    mp.affordable ? C.path : C.pathBad);
+  drawLabel(ctx, end.x, end.y - t * 0.62, '耗時 ' + mp.time, C.path);
 }
 
 function drawInteractPreview(ctx: CanvasRenderingContext2D, sc: Scene): void {
@@ -513,7 +515,7 @@ function drawInteractPreview(ctx: CanvasRenderingContext2D, sc: Scene): void {
   ctx.lineWidth = 2;
   ctx.strokeRect(c.x - t / 2 + 2, c.y - t / 2 + 2, t - 4, t - 4);
   ctx.restore();
-  drawLabel(ctx, c.x, c.y - t * 0.62, ip.label + '　' + ip.ap + ' AP', C.interact);
+  drawLabel(ctx, c.x, c.y - t * 0.62, ip.label + '　費時 ' + ip.time, C.interact);
 }
 
 /** 戰場上的行內小標籤：深底 + 彩色文字，確保任何地形上都讀得到。 */

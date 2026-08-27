@@ -1,14 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
-import { run, testState, player, unit, freezeCombat, thawCombat } from './helpers';
+import { RULES } from '../src/core/content';
+import { isPlayerTurn } from '../src/core/scheduler';
+import { advanceOnce, advanceToPlayer, run, testState, player, unit, freezeCombat, thawCombat } from './helpers';
 
+/** 推進到再次輪到玩家。v0.7 沒有「敵人回合」，這只是「讓非玩家單位一直行動」。 */
 function runEnemyTurn(s0: ReturnType<typeof testState>) {
-  let s = s0;
-  let guard = 0;
-  while (s.phase === 'ENEMY' && !s.pendingReinforcement && guard++ < 500) {
-    s = run(s, { type: 'ENEMY_STEP' });
-  }
-  return s;
+  return advanceToPlayer(s0);
 }
 
 const HALL = [
@@ -48,28 +46,31 @@ describe('§9.1 AI 狀態機', () => {
     let s = testState(HALL, [{ archetype: 'RUNNER', pos: { x: 10, y: 1 } }]);
     s = run(s, { type: 'WAIT' });
     s = runEnemyTurn(s);
-    expect(unit(s, 'E01').pos.x).toBe(7); // 10 → 7
-    // 玩家一回合最多退 2 格，敵人一回合逼近 3 格 → 距離必定縮短
-    expect(unit(s, 'E01').maxAp).toBeGreaterThan(player(s).maxAp);
+    expect(unit(s, 'E01').pos.x).toBeLessThan(10);
+    // v0.7：改用時間表達 —— RUNNER 移動一格花 7，玩家花 10，所以它追得上
+    expect(unit(s, 'E01').moveTime).toBeLessThan(player(s).moveTime);
   });
 
-  it('剛發現玩家的那一回合不攻擊，下一回合才連打 3 下（兩段式察覺）', () => {
+  it('轉換那一次不攻擊，之後每次輪到它就打一下（§9.2 階段轉換耗時）', () => {
     let s = testState(HALL, [{ archetype: 'RUNNER', pos: { x: 2, y: 1 } }]);
     player(s).maxHp = 300;
     player(s).hp = 300;
 
-    // 第一個敵人回合：從 IDLE 發現玩家 → 只能移動轉向，不得開火
+    // 第一次輪到它：從 IDLE 轉入 ALERT，這一下不做別的事
     s = run(s, { type: 'WAIT' });
-    s = runEnemyTurn(s);
+    s = advanceOnce(s);
     expect(unit(s, 'E01').aiState).toBe('ALERT');
-    expect(unit(s, 'E01').justSpotted).toBe(true);
+    expect(unit(s, 'E01').transitioning).toBe(true);
     expect(player(s).hp).toBe(300);
 
-    // 第二個敵人回合：反應窗口結束，3 AP 打 3 下
-    s = run(s, { type: 'WAIT' });
-    s = runEnemyTurn(s);
-    expect(unit(s, 'E01').justSpotted).toBe(false);
-    expect(player(s).hp).toBe(300 - 90);   // 30 傷害 × 3 次
+    // 下一次輪到它才開打
+    s = advanceOnce(s);
+    expect(unit(s, 'E01').transitioning).toBe(false);
+    expect(player(s).hp).toBe(300 - 30);
+
+    // 打完之後它推到 15，玩家在 10 —— 排程器把行動權交回玩家，
+    // 這正是「嚴格交錯」的樣子，不再是「敵人一口氣打三下」
+    expect(isPlayerTurn(s)).toBe(true);
   });
 
   it('已在 SEARCH 的敵人重新取得視線可以立刻開火 —— 堵住無限騷擾迴圈', () => {
@@ -79,13 +80,13 @@ describe('§9.1 AI 狀態機', () => {
     // 直接把敵人擺成「搜索中」，模擬玩家剛退出視線又回來
     const e = unit(s, 'E01');
     e.aiState = 'SEARCH';
-    e.searchTimer = 3;
+    e.searchTimer = RULES.ai.searchTime;
     e.lastKnownTarget = { ...player(s).pos };
 
     s = run(s, { type: 'WAIT' });
     s = runEnemyTurn(s);
     expect(unit(s, 'E01').aiState).toBe('ALERT');
-    expect(unit(s, 'E01').justSpotted).toBe(false);   // 沒有反應窗口
+    expect(unit(s, 'E01').transitioning).toBe(false);   // 沒有反應窗口
     expect(player(s).hp).toBeLessThan(300);           // 當場就開打
   });
 
@@ -109,7 +110,6 @@ describe('§9.1 AI 狀態機', () => {
     s = run(s, { type: 'WAIT' });
     s = runEnemyTurn(s);
     expect(player(s).hp).toBe(300 - 20);
-    expect(unit(s, 'E01').shotsThisTurn).toBe(1);
   });
 
   it('蹲在半身掩體後 → 敵人失去視線，轉入 SEARCH', () => {
@@ -181,8 +181,10 @@ describe('§9.1 AI 狀態機', () => {
     expect(unit(s, 'E02').aiState).toBe('SEARCH');
     expect(unit(s, 'E02').lastKnownTarget).toEqual({ x: 1, y: 1 });
 
-    s = run(s, { type: 'WAIT' });
-    s = runEnemyTurn(s);
+    // 推進一段時間：E02 先付轉換時間，再繞過門往開火點走
+    for (let i = 0; i < 40; i++) {
+      s = isPlayerTurn(s) ? run(s, { type: 'WAIT' }) : advanceOnce(s);
+    }
     const after = unit(s, 'E02').pos;
     expect(after).not.toEqual(before);
     // 距離開火點變近了
@@ -202,7 +204,7 @@ describe('§9.1 AI 狀態機', () => {
       for (let t = 0; t < 6; t++) {
         s = run(s, { type: 'WAIT' });
         s = runEnemyTurn(s);
-        if (s.phase === 'MISSION_END' || s.pendingReinforcement) break;
+        if (s.result !== 'ONGOING' || s.pendingReinforcement) break;
       }
       return JSON.stringify(s);
     };

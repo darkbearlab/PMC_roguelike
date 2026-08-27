@@ -32,9 +32,12 @@ export interface Weapon {
   range: number;          // 最大射程（格）
   magazine: number;       // 彈匣容量
   ammo: number;           // 目前彈藥
-  fireCost: number;       // 開火 AP 成本
-  reloadCost: number;     // 裝填 AP 成本
-  endsTurn: boolean;      // 開火後是否強制結束回合
+  /** 開火的時間花費（§5 排程器）。 */
+  fireTime: number;
+  /** 裝填的時間花費。若 reloadSequence 非 null，這個值等於序列各步的總和。 */
+  reloadTime: number;
+  /** 裝填要走的系列動作 id；null = 單一動作即可完成（§5.5）。 */
+  reloadSequence: string | null;
   noiseRadius: number;    // 開火噪音半徑（格）
   splash: number;         // 濺射半徑，0 = 無
   // --- 命中相關：MVP 不生效，但欄位與管線必須存在，見 §8.1 ---
@@ -58,8 +61,6 @@ export interface Unit {
   armorSpread: number;
   aim: number;             // 命中修正，MVP 一律 0，見 §8.1
   evasion: number;         // 迴避修正，MVP 一律 0，見 §8.1
-  maxAp: number;
-  ap: number;
   stance: Stance;
   facing: Facing;
   sightRange: number;
@@ -68,17 +69,33 @@ export interface Unit {
   aiState: AiState;
   lastKnownTarget: Vec2 | null;
   searchTimer: number;
-  /** 本回合已攻擊次數。SHOOTER 每回合上限 1 次（§9）。 */
-  shotsThisTurn: number;
   /**
-   * 兩段式察覺（§9.2）：從 IDLE 轉入 ALERT 的那個回合不得攻擊，
-   * 給玩家一個回合的反應窗口。**只適用於從 IDLE 轉入**——
-   * 已在 SEARCH 的敵人重新取得視線可以立刻開火，否則反覆進出視線
-   * 就變成無限安全的騷擾迴圈。
+   * 這個單位下次可以行動的時刻（§5 排程器）。取代了 ap / maxAp。
+   * 主迴圈永遠挑 nextActAt 最小的單位行動。
    */
-  justSpotted: boolean;
-  /** 每回合攻擊次數上限。 */
-  attacksPerTurn: number;
+  nextActAt: number;
+  /** 移動一格的時間花費。 */
+  moveTime: number;
+  /** 狀態轉換的時間花費（§9.2）。玩家為 0。 */
+  transitionTime: number;
+  /**
+   * 剛完成一次狀態轉換、還沒做過其他事。
+   * 這就是玩家的反應窗口：敵人已經發現你，但它這一下用掉了，還沒輪到它開火。
+   */
+  transitioning: boolean;
+  /** 進行中的系列動作（§5.5）。非 null 時，這個單位輪到時只能執行下一步。 */
+  pendingSequence: Sequence | null;
+}
+
+/**
+ * 系列動作（§5.5）。效果只在整套走完時發生 ——
+ * 走到一半的單位是暴露的、可被打斷的。
+ */
+export interface Sequence {
+  /** 對應 data/rules.json 的 sequences 鍵值，例如 'RR4_RELOAD'。 */
+  id: string;
+  /** 目前進行到第幾步（0 起算）。 */
+  index: number;
 }
 
 export interface Corpse {
@@ -109,7 +126,8 @@ export type LogKind =
   | 'DEATH' | 'NOISE' | 'AI' | 'OBJECTIVE' | 'MISSION';
 
 export interface LogEntry {
-  turn: number;
+  /** 事件發生的世界時刻（取代原本的回合數）。 */
+  at: number;
   kind: LogKind;
   text: string;
 }
@@ -121,8 +139,11 @@ export interface PendingReinforcement {
 }
 
 export interface GameState {
-  turn: number;
-  phase: 'PLAYER' | 'ENEMY' | 'MISSION_END';
+  /**
+   * 世界時刻。取代了 turn ——「回合」在 v0.7 之後不存在。
+   * 每次有單位行動時，clock 前進到該單位的 nextActAt。
+   */
+  clock: number;
   map: MapData;
   units: Unit[];
   corpses: Corpse[];
@@ -137,8 +158,6 @@ export interface GameState {
   rngSeed: number;
   rng: RngState;
   result: 'ONGOING' | 'SUCCESS' | 'ABORTED' | 'WIPED';
-  /** 敵人回合剩餘待行動的單位 id（字典序）。空 = 敵人回合結束。 */
-  enemyQueue: string[];
   pendingReinforcement: PendingReinforcement | null;
   /** 下一個要配發的實體流水號，讓 id 產生保持決定性（不用亂數）。 */
   nextEntitySerial: number;
@@ -169,7 +188,7 @@ export function enemies(state: GameState): Unit[] {
 }
 
 export function isMissionOver(state: GameState): boolean {
-  return state.phase === 'MISSION_END';
+  return state.result !== 'ONGOING';
 }
 
 /** 尚留在戰場上、未回收的武器（結算與 HUD 損益用）。 */

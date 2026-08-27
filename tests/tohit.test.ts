@@ -90,11 +90,10 @@ describe('§7.3 蹲姿的代價：視野縮短', () => {
     expect(crouch).toBeLessThan(stand);
   });
 
-  it('姿勢改變仍然不消耗 AP', () => {
+  it('姿勢改變仍然是 0 成本，不讓出行動權', () => {
     let s = testState(OPEN);
-    const ap = player(s).ap;
     s = run(s, { type: 'TOGGLE_STANCE' });
-    expect(player(s).ap).toBe(ap);
+    expect(player(s).nextActAt).toBe(0);
   });
 });
 
@@ -114,8 +113,8 @@ describe('§8.2 浮動傷害與護甲', () => {
     player(s).equipped!.ammo = 99;
     const amounts: number[] = [];
     for (let i = 0; i < 30; i++) {
-      player(s).ap = 2;
-      s.phase = 'PLAYER';
+      player(s).nextActAt = s.clock;
+      
       unit(s, 'E01').hp = 90;
       const r = applyCommand(s, { type: 'FIRE', target: { x: 4, y: 1 } });
       s = r.state;

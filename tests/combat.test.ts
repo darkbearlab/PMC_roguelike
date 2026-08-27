@@ -1,6 +1,8 @@
 import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
+import { isPlayerTurn } from '../src/core/scheduler';
 import { checkLegal } from '../src/core/commands';
 import { damageAfterArmor, resetToHitPolicy } from '../src/core/combat';
+import { commandTime } from '../src/core/commands';
 import { weaponById } from '../src/core/content';
 import { run, testState, player, unit, freezeCombat, thawCombat } from './helpers';
 
@@ -39,10 +41,11 @@ describe('§8.2 傷害與護甲', () => {
     let s = testState(ROOM, [{ archetype: 'HULK', pos: { x: 5, y: 1 } }]);
     s = run(s, { type: 'SWAP_WEAPON' });          // 換重武器 2 AP
     expect(player(s).equipped!.id).toBe('rr4');
-    expect(player(s).ap).toBe(0);
-    expect(s.phase).toBe('ENEMY');                          // 換完就沒 AP 開火了
+    // 換重武器花 20 —— 等於走兩格的時間，敵人會先動
+    expect(player(s).nextActAt).toBe(20);
+    expect(isPlayerTurn(s)).toBe(false);                          // 換完就沒 AP 開火了
     let guard = 0;
-    while (s.phase === 'ENEMY' && guard++ < 200) s = run(s, { type: 'ENEMY_STEP' });
+    while (!isPlayerTurn(s) && guard++ < 200) s = run(s, { type: 'ADVANCE' });
     s = run(s, { type: 'FIRE', target: unit(s, 'E01').pos });
     expect(s.units.filter((u) => u.faction === 'ENEMY')).toHaveLength(0);
   });
@@ -86,29 +89,30 @@ describe('§8.1 合法性檢查先於解算', () => {
     expect(checkLegal(s, { type: 'FIRE', target: { x: 5, y: 1 } }).ok).toBe(false);
     s = run(s, { type: 'RELOAD' });
     expect(player(s).equipped!.ammo).toBe(4);
-    expect(player(s).ap).toBe(1);
+    expect(player(s).nextActAt).toBe(10);
   });
 });
 
-describe('§5.2 武器節奏', () => {
-  it('輕武器一回合可以開兩槍', () => {
+describe('§5 武器節奏（時間表達）', () => {
+  it('輕武器開一槍花 10，等同走一格', () => {
     let s = testState(ROOM, [{ archetype: 'HULK', pos: { x: 5, y: 1 } }]);
     s = run(s, { type: 'FIRE', target: { x: 5, y: 1 } });
-    expect(s.phase).toBe('PLAYER');
-    expect(player(s).ap).toBe(1);
-    s = run(s, { type: 'FIRE', target: { x: 5, y: 1 } });
-    expect(unit(s, 'E01').hp).toBe(70);
-    expect(player(s).equipped!.ammo).toBe(2);
-    expect(s.phase).toBe('ENEMY');
+    expect(player(s).nextActAt).toBe(10);
+    expect(player(s).equipped!.ammo).toBe(3);
   });
 
-  it('重武器一回合只能開一槍（fireCost 2 = maxAp）', () => {
+  it('重武器開一槍花 20 —— 是輕武器的兩倍，這就是它的代價', () => {
     const s = testState(ROOM, [{ archetype: 'HULK', pos: { x: 5, y: 1 } }]);
     const p = player(s);
     p.equipped = weaponById('rr4');
     const after = run(s, { type: 'FIRE', target: { x: 5, y: 1 } });
-    expect(after.phase).toBe('ENEMY');
-    expect(checkLegal(after, { type: 'FIRE', target: { x: 5, y: 1 } }).ok).toBe(false);
+    expect(after.units[0].nextActAt).toBe(20);
+  });
+
+  it('開火的時間花費來自武器資料，不寫死', () => {
+    const s = testState(ROOM, [{ archetype: 'HULK', pos: { x: 5, y: 1 } }]);
+    expect(commandTime(s, { type: 'FIRE', target: { x: 5, y: 1 } }))
+      .toBe(player(s).equipped!.fireTime);
   });
 });
 

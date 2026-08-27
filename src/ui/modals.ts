@@ -110,7 +110,7 @@ export function showSummary(state: GameState, onRestart: () => void): void {
   const r = open(
     '<h2 class="' + cls + '">' + esc(title) + '</h2>'
     + '<div class="stat-grid">'
-    + '<div class="stat"><span>回合數</span><b>' + state.turn + '</b></div>'
+    + '<div class="stat"><span>總耗時</span><b>' + state.clock + '</b></div>'
     + '<div class="stat"><span>投入士兵</span><b>' + state.deployed + '</b></div>'
     + '<div class="stat"><span>陣亡</span><b>' + state.casualties + '</b></div>'
     + '</div>'

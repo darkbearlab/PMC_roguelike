@@ -4,6 +4,7 @@
  * 目標框（§5）與按鈕配置（§6）。
  */
 import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach, vi } from 'vitest';
+import { isPlayerTurn } from '../src/core/scheduler';
 import { readFileSync } from 'node:fs';
 import { resetToHitPolicy, setToHitPolicy } from '../src/core/combat';
 import { weaponById } from '../src/core/content';
@@ -166,8 +167,8 @@ describe('§2/§3 統一點擊文法與射擊', () => {
     expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(70);
 
     let guard = 0;
-    while (g.state.phase === 'ENEMY' && guard++ < 200) g.dispatch({ type: 'ENEMY_STEP' });
-    expect(g.state.phase).toBe('PLAYER');
+    while (!isPlayerTurn(g.state) && guard++ < 200) g.dispatch({ type: 'ADVANCE' });
+    expect(isPlayerTurn(g.state)).toBe(true);
     expect(g.test.selection()).toBe('TARGET:E01');   // 鎖定活過回合
 
     const foe = g.state.units.find((u) => u.id === 'E01')!;
@@ -227,14 +228,14 @@ describe('§2/§3 統一點擊文法與射擊', () => {
     const g = await scene([{ at: [8, 9], archetype: 'HULK' }]);
     g.test.tap({ x: 8, y: 9 });
     g.test.tap({ x: 8, y: 9 });                 // 開第一槍，回饋動畫開始播
-    expect(g.state.units[0].ap).toBe(1);
+    expect(g.state.units[0].nextActAt).toBe(10);
 
     // 動畫還在播的當下立刻再開一槍 —— 不應該被擋、也不應該被延後
     g.test.tap({ x: 8, y: 9 });
-    expect(g.state.units[0].ap).toBe(0);
+    expect(g.state.units[0].nextActAt).toBe(20);
     expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(70);
     // AP 歸零就該立刻進敵人回合，不會等動畫播完
-    expect(g.state.phase).toBe('ENEMY');
+    expect(isPlayerTurn(g.state)).toBe(false);
   });
 
   it('一般射擊不跳任何對話框', async () => {
@@ -267,10 +268,10 @@ describe('§12.12 敵人回合演出', () => {
       mount();
       const g: GameType = new Game(4242);
       g.dispatch({ type: 'WAIT' });                 // 進入敵人回合
-      expect(g.state.phase).toBe('ENEMY');
+      expect(isPlayerTurn(g.state)).toBe(false);
       if (skip) g.test.tap({ x: 5, y: 9 });         // 敵人回合中點畫面 = 跳過
       let guard = 0;
-      while (g.state.phase === 'ENEMY' && guard++ < 2000) g.test.enemySteps();
+      while (!isPlayerTurn(g.state) && guard++ < 2000) g.test.enemySteps();
       return JSON.stringify(g.state);
     };
     expect(await play(true)).toBe(await play(false));
@@ -318,7 +319,7 @@ describe('§4 尋路移動與 §2 其他目標', () => {
     g.state.units.find((u) => u.id === 'E01')!.pos = { x: 8, y: 9 };  // 突然出現在視線內
     g.test.autoStep();
     expect(g.test.autoActive()).toBe(false);
-    expect(g.state.units[0].ap).toBeGreaterThan(0);
+    expect(g.state.units[0].nextActAt).toBeLessThan(30);   // 沒把整條路走完
   });
 
   it('點不可通行或走不到的格子沒有反應', async () => {

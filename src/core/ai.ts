@@ -1,138 +1,133 @@
 /**
  * 敵人決策（§9.1）。
  *
- * 硬性要求：AI 必須是決定性的。平手一律以固定規則決勝
- * （鄰居展開順序 N, NE, E, SE, S, SW, W, NW，見 pathfind.ts），不得使用亂數。
+ * v0.7 起沒有「敵人回合」：排程器輪到某個敵人時，它**選一個動作**執行，
+ * 然後依該動作的時間花費往後推。決策邏輯本身沒有改動，改的只是
+ * 「這回合有幾點 AP 可用」變成「這次輪到我，選一個動作」。
  *
- * 一次 stepEnemy() 只做一個動作（移動一格 / 攻擊一次 / 一次狀態轉換），
- * 讓 UI 可以逐步播放敵人回合，玩家看得到發生了什麼。
+ * 硬性要求：
+ *  - AI 必須是決定性的。平手一律以固定規則決勝（N, E, S, W），不得使用亂數。
+ *  - **AI 不得選擇 0 成本動作**（姿勢、面向），否則排程器會無限迴圈（§5.4）。
  */
+import type { EventSink } from './events';
 import type { GameState, Unit, Vec2 } from './state';
 import { activePlayerUnit, findUnit } from './state';
-import { manhattan, facingToward, sameTile } from './grid';
+import { facingToward, manhattan, sameTile } from './grid';
 import { unitsSeeEachOther } from './los';
 import { effectiveSightRange } from './stance';
 import { canAttack, performAttack } from './combat';
 import { findPath, occupiedBy } from './pathfind';
+import { spend } from './scheduler';
 import { RULES } from './content';
 import { pushLog } from './log';
-import type { EventSink } from './events';
-
-/** CONTINUE = 這個敵人可能還能再動；DONE = 從行動佇列移除。 */
-export type StepOutcome = 'CONTINUE' | 'DONE';
-
-/** 敵人回合開始：補滿 AP、清空本回合攻擊次數、SEARCH 計時遞減、建立行動佇列。 */
-export function beginEnemyTurn(state: GameState): void {
-  const ids = state.units
-    .filter((u) => u.faction === 'ENEMY')
-    .map((u) => u.id)
-    .sort();
-  for (const id of ids) {
-    const e = findUnit(state, id);
-    if (!e) continue;
-    e.ap = e.maxAp;
-    e.shotsThisTurn = 0;
-    // 上一回合「剛發現」的反應窗口到此結束，這一回合起可以開火
-    e.justSpotted = false;
-    if (e.aiState === 'SEARCH' && e.searchTimer > 0) e.searchTimer -= 1;
-  }
-  state.enemyQueue = ids;
-}
 
 /**
- * 偵測（§7.4）：對玩家單位有視線且距離 <= sightRange 則進入 ALERT。
- * 面向不影響視野（360 度）。每一步都重新檢查，讓「移動途中取得視線」也能生效。
+ * 敵人偵測（§7.4）：對玩家有視線且在有效視野內。
+ * 回傳「應該轉換到哪個狀態」，或 null 代表不需要轉換。
  */
-function perceive(state: GameState, e: Unit, events?: EventSink): void {
+function desiredState(state: GameState, e: Unit): 'ALERT' | 'SEARCH' | null {
   const player = activePlayerUnit(state);
   const canSee =
     !!player &&
     manhattan(e.pos, player.pos) <= effectiveSightRange(e) &&
     unitsSeeEachOther(state.map, e, player);
 
-  if (canSee && player) {
-    if (e.aiState !== 'ALERT') {
-      // 從 IDLE 轉入才有反應窗口；從 SEARCH 轉入可以立刻開火（§9.2）
-      if (e.aiState === 'IDLE') e.justSpotted = true;
-      pushLog(state, 'AI', e.name + (e.justSpotted ? ' 發現目標（本回合尚未進入狀況）' : ' 重新鎖定目標'));
-      events?.push({
-        kind: 'AI_STATE', unitId: e.id, pos: { x: e.pos.x, y: e.pos.y }, from: e.aiState, to: 'ALERT',
-      });
-    }
-    e.aiState = 'ALERT';
-    e.lastKnownTarget = { x: player.pos.x, y: player.pos.y };
-    return;
-  }
-  if (e.aiState === 'ALERT') {
-    events?.push({
-      kind: 'AI_STATE', unitId: e.id, pos: { x: e.pos.x, y: e.pos.y }, from: 'ALERT', to: 'SEARCH',
-    });
-    e.aiState = 'SEARCH';
-    e.searchTimer = RULES.ai.searchTimer;
-    pushLog(state, 'AI', e.name + ' 失去目標，開始搜索');
-  }
+  if (canSee) return e.aiState === 'ALERT' ? null : 'ALERT';
+  if (e.aiState === 'ALERT') return 'SEARCH';
+  return null;
 }
 
 /**
- * 朝目標走一格。有移動（= 有消耗 AP）回傳 CONTINUE，走不動回傳 DONE。
+ * 執行一次狀態轉換，並回傳它花掉的時間（§9.2）。
  *
- * 目標格一律允許被佔據：搜索時的 lastKnownTarget 很可能就是玩家現在站的地方，
- * 若不允許就會整條路徑算不出來、敵人原地發呆。真正的「不能走進去」由下一步的
- * 佔據檢查擋下（走到相鄰就停）。
+ * 取代了 v0.6 的「兩段式察覺」特例規則：
+ *  - IDLE → ALERT 要花該原型的轉換時間，這一下就是玩家的反應窗口
+ *  - SEARCH → ALERT **花 0**，可以立刻接續攻擊 ——
+ *    這保留了 v0.6 §4.2 的漏洞修正（反覆進出視線無法製造無限安全的騷擾迴圈），
+ *    但現在它是時間成本的自然結果，不是特例。
+ *  - ALERT → SEARCH 花 0
  */
-function moveToward(state: GameState, e: Unit, goal: Vec2): StepOutcome {
-  if (e.ap < RULES.ap.moveCost) return 'DONE';
-  const path = findPath(state, e.pos, goal, { allowGoalOccupied: true, ignoreUnitIds: [e.id] });
-  if (!path || path.length === 0) return 'DONE';
-  const next = path[0];
-  // 下一步是目標本人所在的格 → 走不進去，維持原地。
-  if (occupiedBy(state, next, [e.id])) return 'DONE';
+function transitionCost(e: Unit, to: 'ALERT' | 'SEARCH'): number {
+  if (to === 'ALERT') return e.aiState === 'SEARCH' ? 0 : e.transitionTime;
+  return 0;
+}
 
+function applyTransition(
+  state: GameState, e: Unit, to: 'ALERT' | 'SEARCH', events?: EventSink,
+): number {
+  const from = e.aiState;
+  const cost = transitionCost(e, to);
+  events?.push({
+    kind: 'AI_STATE', unitId: e.id, pos: { x: e.pos.x, y: e.pos.y }, from, to,
+  });
+  const player = activePlayerUnit(state);
+  if (to === 'ALERT') {
+    e.aiState = 'ALERT';
+    if (player) e.lastKnownTarget = { x: player.pos.x, y: player.pos.y };
+    pushLog(state, 'AI', e.name + (cost > 0 ? ' 發現目標（尚未進入狀況）' : ' 重新鎖定目標'));
+  } else {
+    e.aiState = 'SEARCH';
+    e.searchTimer = RULES.ai.searchTime;
+    pushLog(state, 'AI', e.name + ' 失去目標，開始搜索');
+  }
+  return cost;
+}
+
+/** 朝目標走一格。走得動回傳花費的時間，走不動回傳 null。 */
+function moveToward(state: GameState, e: Unit, goal: Vec2): number | null {
+  const path = findPath(state, e.pos, goal, { allowGoalOccupied: true, ignoreUnitIds: [e.id] });
+  if (!path || path.length === 0) return null;
+  const next = path[0];
+  if (occupiedBy(state, next, [e.id])) return null;
   const f = facingToward(e.pos, next);
   if (f) e.facing = f;
   e.pos = { x: next.x, y: next.y };
-  e.ap -= RULES.ap.moveCost;
-  return 'CONTINUE';
+  return e.moveTime;
 }
 
 /**
- * 執行一個敵人的單一動作。
- * 保證：回傳 CONTINUE 時一定有消耗 AP，因此驅動迴圈不會空轉。
+ * 排程器輪到這個敵人：選一個動作執行，並回傳它花掉的時間。
+ *
+ * 保證回傳 > 0（或在完全無事可做時回傳等待時間），
+ * 否則排程器會卡在同一個單位上。
  */
-export function stepEnemy(state: GameState, enemyId: string, events?: EventSink): StepOutcome {
+export function takeEnemyAction(state: GameState, enemyId: string, events?: EventSink): number {
   const e = findUnit(state, enemyId);
-  if (!e || e.faction !== 'ENEMY') return 'DONE';
+  if (!e || e.faction !== 'ENEMY') return RULES.time.wait;
 
-  perceive(state, e, events);
-  if (e.ap <= 0) return 'DONE';
+  // 這一次行動一開始就先清掉「剛轉換完」；只有真的做了耗時的轉換才會再設回 true。
+  e.transitioning = false;
 
-  // ---- IDLE：原地不動（MVP 不做巡邏）----
-  if (e.aiState === 'IDLE') return 'DONE';
+  // 1. 需要換狀態的話，這一次的行動就是換狀態（可能花 0，那就接著做事）
+  const want = desiredState(state, e);
+  if (want) {
+    const cost = applyTransition(state, e, want, events);
+    if (cost > 0) {
+      e.transitioning = true;    // 玩家的反應窗口：已經發現你，但這一下用掉了
+      return cost;
+    }
+  }
 
-  // ---- ALERT ----
+  // 2. IDLE：原地不動（MVP 不做巡邏）。仍然要花時間，否則排程器會空轉。
+  if (e.aiState === 'IDLE') return RULES.time.wait;
+
+  // 3. ALERT：能打就打，不能打就靠近
   if (e.aiState === 'ALERT') {
     const player = activePlayerUnit(state);
     if (!player) {
-      // 目標已陣亡：退回搜索最後已知位置，本回合到此為止。
-      e.aiState = 'SEARCH';
-      e.searchTimer = RULES.ai.searchTimer;
-      return 'DONE';
+      applyTransition(state, e, 'SEARCH', events);
+      return RULES.time.wait;
     }
-    const weapon = e.equipped;
-    // 剛從 IDLE 發現玩家：這一回合只能轉向與移動，不得攻擊
-    if (e.justSpotted) return moveToward(state, e, player.pos);
-    if (canAttack(state, e, player.pos, weapon).ok) {
+    if (canAttack(state, e, player.pos, e.equipped).ok) {
+      const weapon = e.equipped;
       performAttack(state, e.id, player.pos, events);
-      return 'CONTINUE';
+      return weapon ? weapon.fireTime : RULES.time.wait;
     }
-    // 已達本回合攻擊上限且目標仍在射程內 → 原地待命，不做無意義的位移。
-    if (weapon && e.shotsThisTurn >= e.attacksPerTurn && manhattan(e.pos, player.pos) <= weapon.range) {
-      return 'DONE';
-    }
-    return moveToward(state, e, player.pos);
+    const moved = moveToward(state, e, player.pos);
+    return moved ?? RULES.time.wait;
   }
 
-  // ---- SEARCH ----
+  // 4. SEARCH：往最後已知位置走，時間耗盡就放棄
   if (
     e.searchTimer <= 0 ||
     !e.lastKnownTarget ||
@@ -144,7 +139,16 @@ export function stepEnemy(state: GameState, enemyId: string, events?: EventSink)
     e.aiState = 'IDLE';
     e.lastKnownTarget = null;
     pushLog(state, 'AI', e.name + ' 放棄搜索');
-    return 'DONE';
+    return RULES.time.wait;
   }
-  return moveToward(state, e, e.lastKnownTarget);
+  const moved = moveToward(state, e, e.lastKnownTarget);
+  const cost = moved ?? RULES.time.wait;
+  e.searchTimer -= cost;         // 搜索是時間量，不是回合數
+  return cost;
+}
+
+/** 排程器驅動用：讓這個敵人做一件事並付出時間代價。 */
+export function stepEnemy(state: GameState, enemyId: string, events?: EventSink): void {
+  const cost = takeEnemyAction(state, enemyId, events);
+  spend(state, enemyId, Math.max(1, cost));
 }

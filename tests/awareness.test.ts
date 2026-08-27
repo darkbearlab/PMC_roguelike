@@ -5,7 +5,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { applyCommand } from '../src/core/commands';
 import { damageAfterArmor } from '../src/core/combat';
 import { ACTORS, RULES, WEAPONS } from '../src/core/content';
-import { run, testState, player, unit, freezeCombat, thawCombat } from './helpers';
+import { advanceOnce, run, testState, player, unit, freezeCombat, thawCombat } from './helpers';
 
 const HALL = [
   '########################',
@@ -15,92 +15,108 @@ const HALL = [
   '########################',
 ];
 
-function runEnemyTurn(s0: ReturnType<typeof testState>) {
-  let s = s0;
-  let guard = 0;
-  while (s.phase === 'ENEMY' && !s.pendingReinforcement && guard++ < 500) {
-    s = run(s, { type: 'ENEMY_STEP' });
-  }
-  return s;
-}
-
-describe('§9.2 兩段式察覺', () => {
+describe('§9.2 階段轉換耗時（取代兩段式察覺）', () => {
   beforeAll(() => freezeCombat());
   afterAll(() => thawCombat());
 
-  it('從 IDLE 發現玩家的那一回合不得攻擊，但可以移動', () => {
-    let s = testState(HALL, [{ archetype: 'RUNNER', pos: { x: 10, y: 1 } }]);
-    const from = { ...unit(s, 'E01').pos };
-    s = run(s, { type: 'WAIT' });
-    s = runEnemyTurn(s);
-    expect(unit(s, 'E01').justSpotted).toBe(true);
-    expect(unit(s, 'E01').pos).not.toEqual(from);      // 有移動
-    expect(player(s).hp).toBe(ACTORS.SOLDIER.hp);      // 沒有掉血
-  });
-
-  it('反應窗口只有一回合，下一回合就會開火', () => {
-    let s = testState(HALL, [{ archetype: 'RUNNER', pos: { x: 2, y: 1 } }]);
-    player(s).maxHp = 500;
+  it('IDLE 敵人取得視線時，那一次行動是狀態轉換而非攻擊', () => {
+    let s = testState(HALL, [{ archetype: 'RUNNER', pos: { x: 2, y: 1 } }]);   // 一開始就相鄰
     player(s).hp = 500;
-    s = runEnemyTurn(run(s, { type: 'WAIT' }));
-    expect(player(s).hp).toBe(500);
-    s = runEnemyTurn(run(s, { type: 'WAIT' }));
-    expect(player(s).hp).toBeLessThan(500);
+    player(s).maxHp = 500;
+    s = run(s, { type: 'WAIT' });          // 玩家先動，推到 10
+    expect(unit(s, 'E01').aiState).toBe('IDLE');
+
+    s = advanceOnce(s);                    // 敵人的第一次行動：轉換
+    expect(unit(s, 'E01').aiState).toBe('ALERT');
+    expect(unit(s, 'E01').transitioning).toBe(true);
+    expect(player(s).hp).toBe(500);        // 轉換那一下不做別的事
+    // 轉換花掉了該原型的轉換時間
+    expect(unit(s, 'E01').nextActAt).toBe(ACTORS.RUNNER.time.transition);
   });
 
-  it('已在 SEARCH 的敵人重新取得視線可立即攻擊', () => {
+  it('轉換完成後的下一次行動才會攻擊', () => {
+    let s = testState(HALL, [{ archetype: 'RUNNER', pos: { x: 2, y: 1 } }]);
+    player(s).hp = 500;
+    player(s).maxHp = 500;
+    s = run(s, { type: 'WAIT' });
+    s = advanceOnce(s);                    // 轉換
+    expect(player(s).hp).toBe(500);
+    s = advanceOnce(s);                    // 下一次輪到它 → 開打
+    expect(player(s).hp).toBeLessThan(500);
+    expect(unit(s, 'E01').transitioning).toBe(false);
+  });
+
+  it('轉換時間越長，玩家的反應窗口越大 —— HULK 給的窗口比 RUNNER 大', () => {
+    const window = (arch: string): number => {
+      let s = testState(HALL, [{ archetype: arch, pos: { x: 2, y: 1 } }]);
+      player(s).hp = 500;
+      player(s).maxHp = 500;
+      s = run(s, { type: 'WAIT' });
+      s = advanceOnce(s);                  // 轉換
+      return unit(s, 'E01').nextActAt;     // 它下次能動的時刻
+    };
+    expect(window('HULK')).toBeGreaterThan(window('RUNNER'));
+    expect(window('SHOOTER')).toBeGreaterThan(window('RUNNER'));
+  });
+
+  it('SEARCH 敵人重新取得視線：轉換花 0，同一次行動就能開火', () => {
     let s = testState(HALL, [{ archetype: 'RUNNER', pos: { x: 2, y: 1 } }]);
     player(s).maxHp = 500;
     player(s).hp = 500;
     const e = unit(s, 'E01');
     e.aiState = 'SEARCH';
-    e.searchTimer = 3;
+    e.searchTimer = RULES.ai.searchTime;
     e.lastKnownTarget = { x: 1, y: 1 };
-    s = runEnemyTurn(run(s, { type: 'WAIT' }));
-    expect(unit(s, 'E01').justSpotted).toBe(false);
-    expect(player(s).hp).toBeLessThan(500);
+    s = run(s, { type: 'WAIT' });
+    s = advanceOnce(s);                    // 只推一格
+    expect(unit(s, 'E01').aiState).toBe('ALERT');
+    expect(unit(s, 'E01').transitioning).toBe(false);   // 沒有反應窗口
+    expect(player(s).hp).toBeLessThan(500);             // 當場就開打
   });
 
   it('反覆進出視線無法製造無限安全的騷擾迴圈', () => {
-    // §4.2 描述的漏洞是：開槍 → 警戒 → 退出視線 → 轉入搜索 → 再進入視線
-    // → 又「剛發現」而無法攻擊。關鍵在於**搜索中**重新取得視線不得給窗口。
-    let s = testState(HALL, [{ archetype: 'RUNNER', pos: { x: 6, y: 1 } }]);
-    player(s).maxHp = 500;
-    player(s).hp = 500;
+    // 漏洞的形狀是：開槍 → 警戒 → 退出視線 → 轉入搜索 → 再進入視線
+    // → 敵人又「剛發現」而無法攻擊。關鍵在於**搜索中**重新取得視線的轉換要花 0。
+    let s = testState(HALL, [{ archetype: 'RUNNER', pos: { x: 2, y: 1 } }]);
+    player(s).maxHp = 2000;
+    player(s).hp = 2000;
 
-    // 走完整個搜索計時（3 回合）都不給窗口
-    for (let t = RULES.ai.searchTimer; t > 0; t--) {
+    // 走完整個搜索期，每一次重新取得視線都不給窗口
+    for (let t = RULES.ai.searchTime; t > 0; t -= 10) {
       const e = unit(s, 'E01');
       e.aiState = 'SEARCH';
       e.searchTimer = t;
-      e.lastKnownTarget = { x: 20, y: 3 };     // 擺遠一點，免得這回合就走到而放棄
+      e.lastKnownTarget = { x: 20, y: 3 };
       e.pos = { x: 2, y: 1 };
+      e.nextActAt = s.clock;
+      player(s).nextActAt = s.clock + 1000;   // 讓排程器一定選到敵人
       const before = player(s).hp;
-      s = runEnemyTurn(run(s, { type: 'WAIT' }));
-      expect(unit(s, 'E01').justSpotted, '搜索計時 ' + t).toBe(false);
-      expect(player(s).hp, '搜索計時 ' + t).toBeLessThan(before);
+      s = advanceOnce(s);
+      expect(unit(s, 'E01').transitioning, '搜索剩餘 ' + t).toBe(false);
+      expect(player(s).hp, '搜索剩餘 ' + t).toBeLessThan(before);
     }
   });
 
-  it('只有等敵人完全放棄（回到 IDLE）才會再有反應窗口，而那要等滿搜索計時', () => {
+  it('只有等敵人完全放棄（回到 IDLE）才會再有反應窗口，而那要等滿搜索時間', () => {
     let s = testState(HALL, [{ archetype: 'RUNNER', pos: { x: 20, y: 3 } }]);
     const e = unit(s, 'E01');
     e.aiState = 'SEARCH';
     e.searchTimer = 1;
-    e.lastKnownTarget = { x: 20, y: 3 };       // 已經站在最後已知位置 → 這回合放棄
-    s = runEnemyTurn(run(s, { type: 'WAIT' }));
+    e.lastKnownTarget = { x: 20, y: 3 };     // 已經站在最後已知位置 → 這一次就放棄
+    player(s).nextActAt = s.clock + 1000;    // 讓排程器一定選到敵人
+    s = advanceOnce(s);
     expect(unit(s, 'E01').aiState).toBe('IDLE');
 
-    // 回到 IDLE 之後再被發現，才又有一回合窗口 —— 代價是玩家得先躲滿整個搜索期
-    unit(s, 'E01').pos = { x: 5, y: 1 };
-    s = runEnemyTurn(run(s, { type: 'WAIT' }));
-    expect(unit(s, 'E01').justSpotted).toBe(true);
+    // 回到 IDLE 之後再被發現，才又有窗口 —— 代價是玩家得先躲滿整個搜索期
+    const e2 = unit(s, 'E01');
+    e2.pos = { x: 3, y: 1 };
+    e2.nextActAt = s.clock;
+    player(s).nextActAt = s.clock + 1000;
+    s = advanceOnce(s);
+    expect(unit(s, 'E01').aiState).toBe('ALERT');
+    expect(unit(s, 'E01').transitioning).toBe(true);
   });
 
-  it('justSpotted 是可序列化的規則狀態，不是動畫狀態', () => {
-    const s = testState(HALL, [{ archetype: 'RUNNER', pos: { x: 3, y: 1 } }]);
-    expect(JSON.parse(JSON.stringify(s)).units[1].justSpotted).toBe(false);
-  });
 });
 
 describe('§2 v0.6 的致命度', () => {
@@ -150,15 +166,17 @@ describe('§2 v0.6 的致命度', () => {
 });
 
 describe('§3 彈匣節奏', () => {
-  it('AR-9 彈匣 4 發，兩回合打空', () => {
+  it('AR-9 彈匣 4 發，打空要花 40 時間（= 走四格）', () => {
     const ar9 = WEAPONS.find((w) => w.id === 'ar9')!;
     expect(ar9.magazine).toBe(4);
-    expect(ar9.magazine / (ACTORS.SOLDIER.maxAp / ar9.fireCost)).toBe(2);
+    expect(ar9.magazine * ar9.fireTime).toBe(40);
+    expect(ar9.fireTime).toBe(ACTORS.SOLDIER.time.move);   // 開一槍 = 走一格
   });
 
-  it('裝填成本未改變', () => {
-    expect(WEAPONS.find((w) => w.id === 'ar9')!.reloadCost).toBe(1);
-    expect(WEAPONS.find((w) => w.id === 'rr4')!.reloadCost).toBe(2);
+  it('裝填的相對成本未改變：AR-9 一個單位、RR-4 兩個單位', () => {
+    const move = ACTORS.SOLDIER.time.move;
+    expect(WEAPONS.find((w) => w.id === 'ar9')!.reloadTime).toBe(move);
+    expect(WEAPONS.find((w) => w.id === 'rr4')!.reloadTime).toBe(move * 2);
   });
 
   it('打空後開火非法，裝填後恢復', () => {

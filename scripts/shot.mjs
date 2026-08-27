@@ -60,7 +60,7 @@ await page.screenshot({ path: OUT + '/06-summary.png' });
 
 const state = await page.evaluate(() => {
   const g = window.__game;
-  return { turn: g.state.turn, result: g.state.result, pos: g.state.units[0] && g.state.units[0].pos };
+  return { clock: g.state.clock, result: g.state.result, pos: g.state.units[0] && g.state.units[0].pos };
 });
 console.log('state:', JSON.stringify(state));
 console.log(errors.length ? 'CONSOLE ERRORS:\n' + errors.join('\n') : 'no console errors');
