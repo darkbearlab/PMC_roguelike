@@ -26,6 +26,7 @@
           <div class="chip" id="hud-hp"></div>
           <div class="chip" id="hud-weapon"></div>
           <div class="chip" id="hud-stance"></div>
+          <div class="chip" id="hud-load" title="背包負重與移動時間（§3.2）"></div>
           <div class="chip" id="hud-roster"></div>
           <div class="chip" id="hud-foes"></div>
         </div>
@@ -63,6 +64,7 @@
         <!-- 右：動作區。開火鍵已刪除，射擊一律透過地圖點擊。 -->
         <div id="actions">
           <div id="skill-menu" class="hidden"></div>
+          <button type="button" data-act="MODE"><b id="lbl-mode">單</b><small id="lbl-mode-ammo">1</small></button>
           <button type="button" data-act="SKILL"><b>技能</b></button>
           <button type="button" data-act="RELOAD"><b>彈</b><small id="lbl-reload">1</small></button>
           <button type="button" data-act="SWAP"><b>換</b><small id="lbl-swap">—</small></button>

@@ -104,9 +104,15 @@ if (alive) {
   await page.evaluate(() => {
     const g = window.__game;
     const me = g.state.units.find(u => u.faction === 'PLAYER');
-    me.equipped = { id: 'rr4', name: 'RR-4 反器材步槍', kind: 'HEAVY', range: 14,
-      accuracy: 0.5, damage: 120, damageSpread: 20, penetration: 40,
-      magazine: 1, ammo: 0, fireTime: 20, reloadTime: 20, reloadSequence: 'RR4_RELOAD' };
+    // 直接用資料檔那把（v0.9 之後武器欄位多了 ammoType / modes / weight，
+    // 手捏一把會漏欄位），只把彈藥清空
+    me.equipped = { ...window.__weapons.find((w) => w.id === 'rr4'), ammo: 0 };
+    // v0.9：裝填要從背包扣彈藥。增援只配步槍彈，所以得先塞兩發火箭彈進去，
+    // 否則裝填鍵是灰的 —— 那本身就是規則生效的證據。
+    me.backpack.items.push({
+      id: 'TEST_ROCKET', kind: 'AMMO', defId: 'AMMO_ROCKET',
+      name: '火箭彈', weight: 3, qty: 2, ammoType: 'ROCKET',
+    });
     g.test.refresh();
   });
   await page.waitForTimeout(150);
@@ -142,6 +148,13 @@ if (alive) {
   console.log('序列走完:', JSON.stringify(after));
   await page.screenshot({ path: OUT + '/14-sequence-done.png' });
 }
+
+  // v0.9：射擊模式按鈕
+  const modeBtn = await page.evaluate(() => {
+    const b = document.querySelector('#controls button[data-act="MODE"]');
+    return { text: b.textContent.trim().replace(/\s+/g, ' '), disabled: b.disabled };
+  });
+  console.log('模式鍵（持 RR-4）:', JSON.stringify(modeBtn), '← 重武器沒有模式，應為灰');
 
 console.log(errors.length ? 'ERRORS:' + String.fromCharCode(10) + errors.join(String.fromCharCode(10)) : 'no console errors');
 await browser.close();

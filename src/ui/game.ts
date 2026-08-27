@@ -8,8 +8,8 @@
  * 因此不需要「取消」鍵，也不需要遮蔽戰場的彈出面板。
  */
 import type { Facing, GameState, Vec2 } from '../core/state';
-import { activePlayerUnit, corpseAt, findUnit, unitAt } from '../core/state';
-import type { Command, WeaponSlot } from '../core/commands';
+import { activePlayerUnit, lootAt, findUnit, unitAt } from '../core/state';
+import type { Command } from '../core/commands';
 import {
   applyCommand, checkLegal, commandTime, interactKindAt, interactTarget, movePath, movePhase,
   swapTime,
@@ -18,7 +18,7 @@ import { activeUnit, isMissionOver, isPlayerTurn } from '../core/scheduler';
 import { describe as describeSequence } from '../core/sequence';
 import { createInitialState } from '../core/setup';
 import { RULES } from '../core/content';
-import { armorRange, damageRange, hitBreakdown } from '../core/combat';
+import { armorRange, damageRange, effectiveMode, hitBreakdown } from '../core/combat';
 import { COVER_LABEL } from '../core/cover';
 import { facingFromDelta, manhattan, sameTile } from '../core/grid';
 import { inBounds } from '../core/map';
@@ -31,7 +31,7 @@ import type { Vision } from '../render/vision';
 import { computeVision, isVisible, visionKey } from '../render/vision';
 import { $, $$, esc, show } from './dom';
 import { renderHud } from './hud';
-import { corpsePanelHtml, selfPanelHtml, wireMenu } from './menus';
+import { lootPanelHtml, selfPanelHtml, wireMenu } from './menus';
 import {
   hideModal, showAbortConfirm, showReinforcement, showSplashConfirm, showSummary,
 } from './modals';
@@ -46,7 +46,7 @@ type ModalKind = 'NONE' | 'REINFORCE' | 'ABORT' | 'SUMMARY' | 'SPLASH';
 type Sel =
   | { kind: 'TARGET'; pos: Vec2; unitId: string }
   | { kind: 'MOVE'; pos: Vec2 }
-  | { kind: 'CORPSE'; pos: Vec2; corpseId: string }
+  | { kind: 'LOOT'; pos: Vec2; lootId: string }
   | { kind: 'INTERACT'; pos: Vec2 }
   | { kind: 'SELF' }
   | null;
@@ -260,8 +260,8 @@ export class Game {
       if (!path || path.length === 0) this.sel = null;
       return;
     }
-    if (s.kind === 'CORPSE') {
-      if (!corpseAt(this.state, s.pos)) this.sel = null;
+    if (s.kind === 'LOOT') {
+      if (!lootAt(this.state, s.pos)) this.sel = null;
       return;
     }
     if (s.kind === 'INTERACT') {
@@ -291,7 +291,7 @@ export class Game {
     if (!me || !inBounds(this.state.map, p)) { this.clearSel(); return; }
 
     // 自己 → 詳細狀態，單次點擊即可
-    if (sameTile(me.pos, p) && !corpseAt(this.state, p)) {
+    if (sameTile(me.pos, p) && !lootAt(this.state, p)) {
       this.sel = { kind: 'SELF' };
       this.afterSelect();
       return;
@@ -312,14 +312,16 @@ export class Game {
     }
 
     // 屍體 → 物品清單；再點一次拾取第一件
-    const corpse = corpseAt(this.state, p);
-    if (corpse) {
+    const pile = lootAt(this.state, p);
+    if (pile) {
       const s = this.sel;
-      if (s && s.kind === 'CORPSE' && sameTile(s.pos, p)) {
-        this.pickupFirst(corpse.id);
+      if (s && s.kind === 'LOOT' && sameTile(s.pos, p)) {
+        // 第二下 = 全部拿走（§4.3）。要挑就用面板上的個別按鈕。
+        this.dispatch({ type: 'TAKE_ALL', lootId: pile.id });
+        this.clearSel();
         return;
       }
-      this.sel = { kind: 'CORPSE', pos: { ...p }, corpseId: corpse.id };
+      this.sel = { kind: 'LOOT', pos: { ...p }, lootId: pile.id };
       this.afterSelect();
       return;
     }
@@ -383,14 +385,6 @@ export class Game {
       return;
     }
     this.dispatch({ type: 'FIRE', target });
-  }
-
-  private pickupFirst(corpseId: string): void {
-    const u = activePlayerUnit(this.state);
-    if (!u) return;
-    const slot: WeaponSlot = !u.equipped ? 'EQUIPPED' : !u.stowed ? 'STOWED' : 'STOWED';
-    if (!this.dispatch({ type: 'PICKUP', corpseId, weaponIndex: 0, slot })) return;
-    this.clearSel();
   }
 
   // ---------------------------------------------------------------- 自動移動
@@ -458,6 +452,19 @@ export class Game {
     en('button[data-act="RELOAD"]',
       inSeq ? checkLegal(s, { type: 'SEQUENCE_STEP' }).ok : checkLegal(s, { type: 'RELOAD' }).ok);
     en('button[data-act="SWAP"]', checkLegal(s, { type: 'SWAP_WEAPON' }).ok);
+    en('button[data-act="MODE"]', checkLegal(s, { type: 'CYCLE_FIRE_MODE' }).ok);
+
+    // 射擊模式（§2.5）：按鈕上顯示**實際會用的**模式與耗彈量。
+    // 彈藥不足時自動降級，但絕不無聲降級 —— 降級的模式要看得出來（§2.6）。
+    const w = u ? u.equipped : null;
+    const shown = w ? effectiveMode(w) : 'SINGLE';
+    const down = !!w && shown !== w.mode;
+    $('#lbl-mode').textContent = w ? RULES.fireModes[shown].label : '—';
+    $('#lbl-mode-ammo').textContent = w ? String(RULES.fireModes[shown].shots) : '—';
+    $<HTMLButtonElement>('button[data-act="MODE"]').classList.toggle('downgraded', down);
+    $<HTMLButtonElement>('button[data-act="MODE"]').title = w && down
+      ? '彈藥不足，實際會用' + RULES.fireModes[shown].label + '發'
+      : '射擊模式（不花時間）';
     en('button[data-act="SKILL"]', true);
 
     $('#lbl-stance').textContent = u && u.stance === 'STAND' ? '蹲' : '站';
@@ -510,7 +517,7 @@ export class Game {
   private updateCard(): void {
     const host = $('#tile-menu');
     const s = this.sel;
-    const needsCard = !!s && (s.kind === 'SELF' || s.kind === 'CORPSE');
+    const needsCard = !!s && (s.kind === 'SELF' || s.kind === 'LOOT');
     if (!needsCard || this.modal !== 'NONE') {
       show(host, false);
       host.innerHTML = '';
@@ -518,17 +525,19 @@ export class Game {
     }
     const me = activePlayerUnit(this.state);
     if (!me) { show(host, false); return; }
-    const at = s.kind === 'CORPSE' ? s.pos : me.pos;
+    const at = s.kind === 'LOOT' ? s.pos : me.pos;
     host.innerHTML = s.kind === 'SELF'
       ? selfPanelHtml(this.state)
-      : corpsePanelHtml(this.state, at);
+      : lootPanelHtml(this.state, at);
     this.placeSheet(host, at);
     show(host, true);
     wireMenu(host, at, {
-      pickup: (corpseId, weaponIndex, slot) => {
-        this.dispatch({ type: 'PICKUP', corpseId, weaponIndex, slot });
-        this.clearSel();
+      pickup: (lootId, itemIndex, slot) => {
+        this.dispatch({ type: 'PICKUP', lootId, itemIndex, slot });
+        // 面板留著：搜刮通常要連拿好幾樣，關掉會很煩
+        this.updateCard();
       },
+      takeAll: (lootId) => { this.dispatch({ type: 'TAKE_ALL', lootId }); this.updateCard(); },
       interact: (pos) => { this.dispatch({ type: 'INTERACT', pos }); this.clearSel(); },
       abortSequence: () => { this.dispatch({ type: 'ABORT_SEQUENCE' }); this.clearSel(); },
       close: () => this.clearSel(),
@@ -615,6 +624,7 @@ export class Game {
         else this.dispatch({ type: 'RELOAD' });
       },
       SWAP: () => this.dispatch({ type: 'SWAP_WEAPON' }),
+      MODE: () => this.dispatch({ type: 'CYCLE_FIRE_MODE' }),
       SKILL: () => { this.skillOpen = !this.skillOpen; this.updateControls(); },
     };
     for (const btn of $$<HTMLButtonElement>('#controls button[data-act]')) {
@@ -799,6 +809,13 @@ export class Game {
       damage: damageRange(me.equipped, foe),
       armor: armorRange(foe),
       time: me.equipped.fireTime,
+      // 預覽只顯示**當前模式**的數值，不列出其他模式（§2.6）。
+      // 降級時要寫出來，玩家才知道自己按的跟實際發生的不一樣。
+      modeNote: bd.shots > 1 || me.equipped.modes.length > 1
+        ? RULES.fireModes[bd.mode].label + '發 ' + bd.shots + ' 發'
+          + (bd.downgraded ? '（彈藥不足，已降級）' : '')
+        : '',
+      shots: bd.shots,
       // 只給一個變小的數字沒有用：要說出等級與幅度，玩家才知道該繞側翼（§12.10）
       // 背刺會把掩蔽歸零，此時要寫「掩蔽已失效」而不是把掩蔽藏起來 ——
       // 玩家要看得出「本來有掩蔽，是我繞到背後才沒用的」（§12.10）

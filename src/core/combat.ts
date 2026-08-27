@@ -5,7 +5,7 @@
  * 而是把完整的擲骰管線做出來，只讓機率函式固定回傳 1.0。
  * 未命中路徑是真的活著的程式碼，不是空分支。
  */
-import type { GameState, Unit, Vec2, Weapon } from './state';
+import type { FireMode, GameState, Unit, Vec2, Weapon } from './state';
 import { findUnit, unitAt } from './state';
 import { clamp, facingToward, manhattan } from './grid';
 import { hasLineOfSight } from './los';
@@ -39,6 +39,34 @@ export type ToHitFn = (
 // 這兩個實作以外的程式碼與 UI 一律不用動。
 // ============================================================================
 
+/**
+ * 這把槍**實際會用**的射擊模式（§2.6）。
+ *
+ * 槍內子彈不足以支撐所選模式時自動降級（連發→點放→單發），
+ * 不讓玩家在彈藥不足時無法開火，也不無聲降級 —— UI 顯示的一律是這個值。
+ */
+export function effectiveMode(w: Weapon): FireMode {
+  if (w.magazine >= 99) return w.mode;            // 敵人的攻擊不吃彈藥
+  const order = RULES.fireModes.order;
+  const idx = order.indexOf(w.mode);
+  for (let i = idx; i >= 0; i--) {
+    const m = order[i];
+    if (!w.modes.includes(m)) continue;
+    if (RULES.fireModes[m].shots <= w.ammo) return m;
+  }
+  return 'SINGLE';
+}
+
+/** 這次開火會打幾發（§2.1）。 */
+export function shotsFor(w: Weapon): number {
+  return RULES.fireModes[effectiveMode(w)].shots;
+}
+
+/** 模式的命中修正：單發 +0.10、點放 0、連發 −0.10（§2.1）。 */
+export function modeAccuracy(w: Weapon): number {
+  return RULES.fireModes[effectiveMode(w)].accuracy;
+}
+
 /** 對照用：一律必中。把 data/rules.json 的 combat.enableToHitRoll 設為 false 即啟用。 */
 export const alwaysHitChance: ToHitFn = () => RULES.combat.hitCeil;
 
@@ -62,6 +90,7 @@ export const rolledHitChance: ToHitFn = (attacker, target, weapon, state) => {
   const raw = weapon.accuracy
     + attacker.aim
     + shooterStanceBonus(attacker)
+    + modeAccuracy(weapon)
     + (back ? RULES.combat.backstab.bonus : 0)
     - (target ? target.evasion : 0)
     - targetStancePenalty(target)
@@ -83,6 +112,14 @@ export interface HitBreakdown {
   /** 背刺成立（§8.8）：目標對我沒有視線。此時 cover 已經被歸零。 */
   backstab: boolean;
   backstabBonus: number;
+  /** 實際會用的射擊模式（可能是自動降級後的，§2.6）。 */
+  mode: FireMode;
+  /** 這次開火打幾發、耗幾發子彈。 */
+  shots: number;
+  /** 模式的命中修正。 */
+  modeBonus: number;
+  /** 玩家選的模式與實際模式不同 = 因彈藥不足降級了。 */
+  downgraded: boolean;
 }
 
 export function hitBreakdown(
@@ -104,6 +141,10 @@ export function hitBreakdown(
     falloff: Math.max(0, dist - weapon.optimalRange) * weapon.falloffPerTile,
     backstab: back,
     backstabBonus: back ? RULES.combat.backstab.bonus : 0,
+    mode: effectiveMode(weapon),
+    shots: shotsFor(weapon),
+    modeBonus: modeAccuracy(weapon),
+    downgraded: effectiveMode(weapon) !== weapon.mode,
   };
 }
 
@@ -305,6 +346,9 @@ export function resolveAttack(
   for (const d of damageByUnit) {
     const u = findUnit(state, d.unitId);
     if (!u) continue;
+    // 連發的第二、三發可能打在已經倒下的目標上（判定照抽，§8）。
+    // 那些發不再算「擊殺」，否則畫面上會連跳三次「擊殺」。
+    const wasAlive = u.hp > 0;
     u.hp -= d.amount;
     events?.push({
       kind: 'IMPACT',
@@ -312,7 +356,7 @@ export function resolveAttack(
       pos: { x: u.pos.x, y: u.pos.y },
       amount: d.amount,
       blocked: blockedByUnit.get(u.id) ?? 0,
-      lethal: u.hp <= 0,
+      lethal: wasAlive && u.hp <= 0,
     });
   }
   if (!hit) {
@@ -342,29 +386,62 @@ export function resolveAttack(
 }
 
 /**
- * 執行一次完整的開火動作：扣 AP、扣彈藥、記次數、轉向、解算。
+ * 執行一次完整的開火動作：扣彈藥、轉向、依模式解算 1～3 發。
  * 呼叫前必須先過 canAttack()。命中與否都會扣時間與彈藥（§8.1）。
+ *
+ * **連發不是「一次判定但命中率較高」**（§2.2），而是 N 次各自獨立的完整判定：
+ * 各自擲命中、各自擲傷害、各自擲護甲。這讓連發同時具備傷害上限（全中即三倍）
+ * 與高變異，「我需要它現在就死」因而成為一個真正的選項。
+ *
+ * 亂數順序紀律（§8）：**即使前一發已擊殺目標，剩餘的判定仍照抽**（結果自然落空），
+ * 亂數序列的長度才與模式選擇無關。
+ *
+ * 回傳最後一發的解算結果；整體命中與否看 `hits`。
  */
 export function performAttack(
   state: GameState,
   attackerId: string,
   targetPos: Vec2,
   events?: EventSink,
-): AttackResult {
+): BurstResult {
   const attacker = findUnit(state, attackerId);
   if (!attacker || !attacker.equipped) {
     throw new Error('performAttack: 攻擊者狀態無效 ' + attackerId);
   }
   const weapon = attacker.equipped;
+  const mode = effectiveMode(weapon);
+  const shots = RULES.fireModes[mode].shots;
 
   // 時間成本由排程器統一處理（commands.ts / ai.ts），這裡只管彈藥與朝向
-  weapon.ammo -= 1;
+  if (weapon.magazine < 99) weapon.ammo -= shots;
   const f = facingToward(attacker.pos, targetPos);
   if (f) attacker.facing = f;
-  const result = resolveAttack(state, attackerId, targetPos, weapon, events);
+
+  const results: AttackResult[] = [];
+  for (let i = 0; i < shots; i++) {
+    results.push(resolveAttack(state, attackerId, targetPos, weapon, events));
+  }
+
   // 空倉提示排在彈道與傷害之後，順序才符合玩家看到的因果
   if (weapon.ammo <= 0 && weapon.magazine < 99) {
     events?.push({ kind: 'AMMO_OUT', unitId: attacker.id, pos: { x: attacker.pos.x, y: attacker.pos.y } });
   }
-  return result;
+  return {
+    mode,
+    shots,
+    results,
+    hits: results.filter((r) => r.hit).length,
+    totalDamage: results.reduce(
+      (a, r) => a + r.damageByUnit.reduce((b, d) => b + d.amount, 0), 0,
+    ),
+  };
+}
+
+/** 一次開火動作的完整結果（可能含多發，§2.2）。 */
+export interface BurstResult {
+  mode: FireMode;
+  shots: number;
+  results: AttackResult[];
+  hits: number;
+  totalDamage: number;
 }

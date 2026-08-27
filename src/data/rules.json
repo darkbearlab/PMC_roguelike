@@ -22,6 +22,42 @@
     "swap": { "LIGHT": 10, "HEAVY": 20 }
   },
 
+  "backpack": {
+    "_comment": "§3 背包與負重。重量單位見 items.json。",
+    "_why": "沒有負重代價的話，最優解就是把地圖搬空。有了它，『貪心』就被標了價 —— 背得越多走得越慢，走得越慢越容易死。",
+    "_tiers": "moveCost 是絕對值不是加成：有背包的單位，移動時間直接由這張表決定（複製兵原型的 time.move 是第一級的值）。",
+    "maxWeight": 50,
+    "weightTiers": [
+      { "maxWeight": 20, "moveCost": 10 },
+      { "maxWeight": 35, "moveCost": 12 },
+      { "maxWeight": 50, "moveCost": 14 }
+    ],
+    "startingItems": [
+      { "defId": "AMMO_RIFLE", "qty": 24 },
+      { "defId": "AMMO_ROCKET", "qty": 2 }
+    ],
+    "_reinforcement": "增援只配步槍彈，跟他只配 AR-9 是同一個道理（§10.1）。火箭彈在前一個人的屍體上。",
+    "reinforcementItems": [
+      { "defId": "AMMO_RIFLE", "qty": 24 }
+    ]
+  },
+
+  "fireModes": {
+    "_comment": "§2 射擊模式。三種**時間花費完全相同**，差別只在耗彈與命中。",
+    "_independent": "連發不是『一次判定但命中率較高』，而是三次各自獨立的完整判定（各自擲命中、傷害、護甲）。這讓連發同時具備傷害上限與高變異。",
+    "order": ["SINGLE", "BURST", "AUTO"],
+    "SINGLE": { "label": "單", "shots": 1, "accuracy": 0.10 },
+    "BURST": { "label": "點", "shots": 2, "accuracy": 0 },
+    "AUTO": { "label": "連", "shots": 3, "accuracy": -0.10 }
+  },
+
+  "loot": {
+    "_comment": "§4 搜刮。敵人屍體的掉落表寫在 actors.json 各原型的 loot 欄位；搜刮點的內容寫在地圖檔。",
+    "_dna": "己方屍體一定有一份 DNA（§4.4）。局外層還不存在，帶出去只會列在結算畫面上。",
+    "takeTime": 10,
+    "dnaDefId": "DNA"
+  },
+
   "sequences": {
     "_comment": "系列動作：效果只在整套走完時發生。走到一半的單位是暴露的、可被打斷的。",
     "RR4_RELOAD": {

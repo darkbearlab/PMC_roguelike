@@ -5,9 +5,10 @@
 import rulesJson from '../data/rules.json';
 import weaponsJson from '../data/weapons.json';
 import actorsJson from '../data/actors.json';
+import itemsJson from '../data/items.json';
 import mission01Json from '../data/maps/mission_01.json';
 
-import type { Weapon, WeaponClass } from './state';
+import type { FireMode, Weapon, WeaponClass } from './state';
 import type { RawMap } from './map';
 
 export interface Rules {
@@ -23,6 +24,18 @@ export interface Rules {
     deploy: number;
     swap: Record<WeaponClass, number>;
   };
+  /** §3 背包與負重。 */
+  backpack: {
+    maxWeight: number;
+    weightTiers: { maxWeight: number; moveCost: number }[];
+    startingItems: { defId: string; qty: number }[];
+    reinforcementItems: { defId: string; qty: number }[];
+  };
+  /** §2 射擊模式。三種時間花費相同，差別在耗彈與命中。 */
+  fireModes: Record<FireMode, { label: string; shots: number; accuracy: number }>
+    & { order: FireMode[] };
+  /** §4 搜刮。 */
+  loot: { takeTime: number; dnaDefId: string };
   sequences: Record<string, unknown>;
   ai: { searchTime: number };
   combat: {
@@ -50,12 +63,32 @@ export interface ActorArchetype {
   aim: number;
   evasion: number;
   attack?: Weapon;
+  /** 敵人屍體的掉落表（§4.2）。抽值順序固定：由上而下各抽一次。 */
+  loot?: { defId: string; qty: number; chance: number }[];
+}
+
+/** data/items.json 的一筆定義。 */
+export interface ItemDef {
+  name: string;
+  kind: string;
+  weight: number;
+  ammoType?: string;
+  value?: number;
 }
 
 export const RULES: Rules = rulesJson as unknown as Rules;
 export const WEAPONS: Weapon[] = weaponsJson as unknown as Weapon[];
 export const ACTORS: Record<string, ActorArchetype> = actorsJson as unknown as Record<string, ActorArchetype>;
 export const MISSION_01: RawMap = mission01Json as unknown as RawMap;
+export const ITEMS: Record<string, ItemDef> = Object.fromEntries(
+  Object.entries(itemsJson as Record<string, unknown>)
+    .filter(([k]) => !k.startsWith('_')),
+) as Record<string, ItemDef>;
+
+/** 射擊模式的循環順序（§2.5：點一下循環切換）。 */
+export function fireModeOrder(): FireMode[] {
+  return RULES.fireModes.order;
+}
 
 export function weaponById(id: string): Weapon {
   const w = WEAPONS.find((x) => x.id === id);

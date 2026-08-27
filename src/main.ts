@@ -2,6 +2,7 @@ import './style.css';
 import { Game } from './ui/game';
 import { BUILD_ID } from './ui/build';
 import { computeVision } from './render/vision';
+import { WEAPONS } from './core/content';
 
 /**
  * §14：rngSeed 可從網址參數覆寫（?seed=12345），方便重現 bug。
@@ -25,5 +26,6 @@ Object.assign(window as unknown as Record<string, unknown>, {
   __seed: seed,
   __build: BUILD_ID,
   __computeVision: computeVision,
+  __weapons: WEAPONS,
 });
 console.info('[PMC] build =', BUILD_ID, '/ seed =', seed, '（用 ?seed=' + seed + ' 可重現這一場）');

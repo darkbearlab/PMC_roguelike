@@ -13,10 +13,12 @@ export interface RawMap {
   startDropPoint: Vec2;
   /** facing 是**初始面向**（§13.2）。未指定時預設為南。 */
   enemies: { archetype: string; pos: Vec2; facing?: Facing }[];
+  /** 地圖搜刮點的內容（§13.3）。座標必須是 LOOT 地形。 */
+  caches?: { pos: Vec2; label?: string; items: { defId: string; qty: number }[] }[];
 }
 
 const VALID_TILES = new Set<TileType>([
-  'FLOOR', 'WALL', 'HALF_COVER', 'DROP_POINT', 'TERMINAL', 'SUPPLY',
+  'FLOOR', 'WALL', 'HALF_COVER', 'DROP_POINT', 'TERMINAL', 'SUPPLY', 'LOOT',
 ]);
 
 export function parseMap(raw: RawMap): MapData {

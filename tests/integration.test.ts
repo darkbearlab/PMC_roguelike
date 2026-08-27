@@ -132,8 +132,9 @@ describe('整場任務一定會收斂（不卡死）', () => {
     expect(['SUCCESS', 'WIPED', 'ABORTED']).toContain(s.result);
     expect(s.deployed).toBeLessThanOrEqual(4);
     expect(s.casualties).toBeLessThanOrEqual(4);
-    // 陣亡就一定留下屍體與裝備
-    expect(s.corpses.length).toBe(s.casualties);
+    // 陣亡就一定留下屍體與裝備。v0.9 起敵人也留殘骸、地圖也有搜刮點（§4），
+    // 所以只驗「己方遺體數 = 陣亡數」。
+    expect(s.loot.filter((c) => c.kind === 'PLAYER_BODY').length).toBe(s.casualties);
   });
 
   it('同一場跑兩次結果完全一致', () => {

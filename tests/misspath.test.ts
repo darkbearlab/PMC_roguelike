@@ -32,7 +32,8 @@ describe('未命中路徑', () => {
     const c = toHitChance(player(s), unit(s, 'E01'), player(s).equipped!, s);
     expect(c).toBeLessThan(1);
     expect(c).toBeGreaterThanOrEqual(RULES.combat.hitFloor);
-    expect(c).toBeCloseTo(0.55, 5);   // AR-9 基礎命中，近距離無掩蔽、雙方站姿
+    // v0.9：0.55 是武器基礎，再加上單發模式的 +0.10（§2.1）
+    expect(c).toBeCloseTo(0.55 + RULES.fireModes.SINGLE.accuracy, 5);   // 近距離無掩蔽、雙方站姿
   });
 
   it('命中率為 0 時：不扣血，但照扣 AP 與彈藥', () => {
@@ -80,8 +81,11 @@ describe('未命中路徑', () => {
 
   it('目標護甲為 0、甚至目標格沒有單位時，護甲擲值一樣照抽', () => {
     setToHitPolicy(() => 1);
-    // 護甲 0 的敵人
+    // 護甲 0 的敵人。刻意灌高血量讓它活下來 ——
+    // v0.9 起敵人死亡會留下可搜刮的屍體，掉落表也要抽亂數（§4.2），
+    // 那些是**另一組**擲值，不該混進「一次攻擊抽幾個」這條紀律裡。
     let a = testState(ROOM, [{ archetype: 'RUNNER', pos: { x: 4, y: 1 } }]);
+    unit(a, 'E01').hp = 500;
     a = run(a, { type: 'FIRE', target: { x: 4, y: 1 } });
     expect(a.rng.count).toBe(3);
 

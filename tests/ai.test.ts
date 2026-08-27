@@ -90,7 +90,7 @@ describe('§9.1 AI 狀態機', () => {
     expect(player(s).hp).toBeLessThan(300);           // 當場就開打
   });
 
-  it('裝甲型 1 AP：反應窗口過後一回合只能做一件事', () => {
+  it('裝甲型很慢：反應窗口過後，一次輪到它也只做得了一件事', () => {
     let s = testState(HALL, [{ archetype: 'HULK', pos: { x: 2, y: 1 } }]);
     player(s).maxHp = 300;
     player(s).hp = 300;

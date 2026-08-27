@@ -3,7 +3,7 @@ import type { GameState, Vec2 } from '../core/state';
 import { activePlayerUnit, unitAt } from '../core/state';
 import { damageAfterArmor } from '../core/combat';
 import { $, esc, show } from './dom';
-import { abandonedList, ledgerText } from './hud';
+import { abandonedList, extractedList, ledgerText } from './hud';
 
 function root(): HTMLElement {
   return $('#modal-root');
@@ -103,9 +103,23 @@ const RESULT_TITLE: Record<string, [string, string]> = {
   ONGOING: ['任務進行中', ''],
 };
 
+/**
+ * 結算標題（§5.2 / §5.3）。
+ *
+ * ABORTED 有兩種來路，玩家必須分得出來：
+ *   **撤離**（走出去，東西帶回來了）與 **止損**（不要了，全部損失）。
+ * 兩者的 result 相同，差別在有沒有東西被帶出去。
+ */
+function resultTitle(state: GameState): [string, string] {
+  if (state.result === 'ABORTED' && state.extracted.length > 0) {
+    return ['撤離完成 — 合約失敗', 'abort'];
+  }
+  return RESULT_TITLE[state.result] ?? RESULT_TITLE.ONGOING;
+}
+
 /** §11.4 結算畫面。 */
 export function showSummary(state: GameState, onRestart: () => void): void {
-  const [title, cls] = RESULT_TITLE[state.result] ?? RESULT_TITLE.ONGOING;
+  const [title, cls] = resultTitle(state);
   const sec = state.objectives.secondary;
   const r = open(
     '<h2 class="' + cls + '">' + esc(title) + '</h2>'
@@ -114,9 +128,14 @@ export function showSummary(state: GameState, onRestart: () => void): void {
     + '<div class="stat"><span>投入士兵</span><b>' + state.deployed + '</b></div>'
     + '<div class="stat"><span>陣亡</span><b>' + state.casualties + '</b></div>'
     + '</div>'
+    + (state.result === 'ABORTED' && state.extracted.length > 0
+      ? '<p class="note">主目標未完成，合約失敗 —— 但背包裡的東西都帶回來了。</p>'
+      : '')
     + '<p>主目標：<b>' + (state.objectives.main.done ? '已完成' : '未完成') + '</b>'
     + '　次要目標：<b>' + sec.filter((o) => o.done).length + '/' + sec.length + '</b></p>'
-    + '<p>尚留在戰場上的裝備（未回收的損失）：</p>'
+    + '<p><b>帶出去的東西</b>（§6，將來是局外層的輸入）：</p>'
+    + '<ul>' + extractedList(state) + '</ul>'
+    + '<p><b>遺留在戰場上</b>（未回收的損失）：</p>'
     + '<ul>' + abandonedList(state) + '</ul>'
     + '<div class="menu-actions"><button class="primary" data-restart="1">重新開始</button></div>',
   );

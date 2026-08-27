@@ -150,6 +150,12 @@ html, body {
 #controls button:active:not([disabled]) { background: rgba(44, 60, 76, 0.9); border-color: var(--accent); }
 #controls button[disabled] { opacity: .26; }
 #controls button.on { border-color: var(--accent); background: rgba(20, 62, 84, 0.85); }
+/* 射擊模式因彈藥不足自動降級：按鈕要醒目，不可以無聲降級（§2.6） */
+#controls button.downgraded {
+  border-color: var(--warn);
+  border-style: dashed;
+  color: var(--warn);
+}
 
 /* 右上工具列：置中回鏡頭 / 點地圖移動開關 / 日誌 */
 #top-right {

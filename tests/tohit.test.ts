@@ -22,10 +22,27 @@ const chanceOf = (s: ReturnType<typeof testState>, id = 'E01'): number => {
   return toHitChance(p, unit(s, id), p.equipped!, s);
 };
 
+/**
+ * v0.9：命中率含射擊模式修正（§2.1）。預設是單發 +0.10。
+ * 這裡的基準一律加上模式修正，測的仍是「其餘各項有沒有正確疊上去」。
+ */
+const modeBonus = (m: 'SINGLE' | 'BURST' | 'AUTO' = 'SINGLE') => RULES.fireModes[m].accuracy;
+
 describe('§8.1 命中率公式', () => {
-  it('無掩蔽、雙方站姿、射程內 → 就是武器的基礎命中', () => {
+  it('無掩蔽、雙方站姿、射程內 → 武器基礎命中 + 射擊模式修正', () => {
     const s = testState(OPEN, [{ archetype: 'RUNNER', pos: { x: 4, y: 1 } }]);
-    expect(chanceOf(s)).toBeCloseTo(WEAPONS.find((w) => w.id === 'ar9')!.accuracy, 5);
+    const ar9 = WEAPONS.find((w) => w.id === 'ar9')!;
+    expect(player(s).equipped!.mode).toBe('SINGLE');     // v0.9 預設單發
+    expect(chanceOf(s)).toBeCloseTo(ar9.accuracy + modeBonus('SINGLE'), 5);
+  });
+
+  it('射擊模式的命中修正：單發 +0.10、點放 0、連發 −0.10（§2.1）', () => {
+    const s = testState(OPEN, [{ archetype: 'RUNNER', pos: { x: 4, y: 1 } }]);
+    const base = chanceOf(s);
+    player(s).equipped!.mode = 'BURST';
+    expect(chanceOf(s)).toBeCloseTo(base - modeBonus('SINGLE') + modeBonus('BURST'), 5);
+    player(s).equipped!.mode = 'AUTO';
+    expect(chanceOf(s)).toBeCloseTo(base - modeBonus('SINGLE') + modeBonus('AUTO'), 5);
   });
 
   it('目標蹲下 → 命中率降低；射手蹲下 → 命中率提高', () => {
@@ -58,8 +75,9 @@ describe('§8.1 命中率公式', () => {
     const near = testState(OPEN, [{ archetype: 'RUNNER', pos: { x: 5, y: 1 } }]);  // 距離 4
     const far = testState(OPEN, [{ archetype: 'RUNNER', pos: { x: 8, y: 1 } }]);   // 距離 7
     const w = WEAPONS.find((x) => x.id === 'ar9')!;
-    expect(chanceOf(near)).toBeCloseTo(w.accuracy, 5);                              // 4 <= optimalRange 5
-    expect(chanceOf(far)).toBeCloseTo(w.accuracy - 2 * w.falloffPerTile, 5);        // 超出 2 格
+    const base = w.accuracy + modeBonus('SINGLE');
+    expect(chanceOf(near)).toBeCloseTo(base, 5);                              // 4 <= optimalRange 5
+    expect(chanceOf(far)).toBeCloseTo(base - 2 * w.falloffPerTile, 5);        // 超出 2 格
   });
 
   it('命中率不會低於下限 0.15，即使掩蔽加蹲姿加射程衰減全部疊上', () => {

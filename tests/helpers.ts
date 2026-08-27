@@ -153,3 +153,25 @@ export function thawCombat(): void {
   frozen = null;
   resetToHitPolicy();
 }
+
+// ---------------------------------------------------------------------------
+// v0.9：搜刮堆（LootPile）的小工具。武器現在是 Item，不再是 pile.weapons。
+// ---------------------------------------------------------------------------
+import type { LootPile } from '../src/core/state';
+
+/** 這一堆裡的武器 id（依序）。 */
+export function weaponIds(pile: LootPile | null | undefined): string[] {
+  if (!pile) return [];
+  return pile.items.filter((it) => it.kind === 'WEAPON').map((it) => it.weapon!.id);
+}
+
+/** 指定武器在這一堆裡的 index，找不到回傳 -1。 */
+export function weaponIndexIn(pile: LootPile, weaponId: string): number {
+  return pile.items.findIndex((it) => it.kind === 'WEAPON' && it.weapon!.id === weaponId);
+}
+
+/** 這一堆裡某種物品的總數（彈藥用）。 */
+export function itemQty(pile: LootPile | null | undefined, defId: string): number {
+  if (!pile) return 0;
+  return pile.items.filter((it) => it.defId === defId).reduce((a, it) => a + it.qty, 0);
+}

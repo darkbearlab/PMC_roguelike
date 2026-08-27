@@ -166,11 +166,12 @@ describe('§2 v0.6 的致命度', () => {
 });
 
 describe('§3 彈匣節奏', () => {
-  it('AR-9 彈匣 4 發，打空要花 40 時間（= 走四格）', () => {
+  it('AR-9 彈匣 8 發（v0.9 被射擊模式逼出來的調整），開一槍仍等同走一格', () => {
     const ar9 = WEAPONS.find((w) => w.id === 'ar9')!;
-    expect(ar9.magazine).toBe(4);
-    expect(ar9.magazine * ar9.fireTime).toBe(40);
+    expect(ar9.magazine).toBe(8);
     expect(ar9.fireTime).toBe(ACTORS.SOLDIER.time.move);   // 開一槍 = 走一格
+    // 連發一次吃 3 發：彈匣仍為 4 的話會有一半的行動花在裝填上
+    expect(ar9.magazine).toBeGreaterThanOrEqual(RULES.fireModes.AUTO.shots * 2);
   });
 
   it('裝填的相對成本未改變：AR-9 一個單位、RR-4 兩個單位', () => {
@@ -184,7 +185,7 @@ describe('§3 彈匣節奏', () => {
     player(s).equipped!.ammo = 0;
     expect(applyCommand(s, { type: 'FIRE', target: { x: 4, y: 1 } }).state).toBe(s);
     s = run(s, { type: 'RELOAD' });
-    expect(player(s).equipped!.ammo).toBe(4);
+    expect(player(s).equipped!.ammo).toBe(8);
   });
 });
 

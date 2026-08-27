@@ -60,14 +60,18 @@ const after = await page.evaluate(() => {
   return {
     id: me.id, pos: me.pos, nextActAt: me.nextActAt, clock: g.state.clock,
     equipped: me.equipped && me.equipped.id, stowed: me.stowed && me.stowed.id,
-    corpses: g.state.corpses.map((c) => ({ pos: c.pos, w: c.weapons.map((x) => x.id) })),
+    loot: g.state.loot.map((c) => ({
+      kind: c.kind, pos: c.pos,
+      w: c.items.filter((x) => x.kind === 'WEAPON').map((x) => x.weapon.id),
+    })),
     casualties: g.state.casualties, deployed: g.state.deployed, roster: g.state.roster.length,
   };
 });
 console.log('   →', JSON.stringify(after));
 ok(after.pos.x === 2 && after.pos.y === 11, '從最近的空投點 D2 (2,11) 落地');
 ok(after.equipped === 'ar9' && after.stowed === null, '增援只帶 AR-9，重武器留在屍體上');
-ok(after.corpses.length === 1 && after.corpses[0].w.sort().join() === 'ar9,rr4', '屍體保有死者的全部武器');
+const bodies = after.loot.filter((c) => c.kind === 'PLAYER_BODY');
+ok(bodies.length === 1 && bodies[0].w.sort().join() === 'ar9,rr4', '己方遺體保有死者的全部武器');
 ok(after.casualties === 1 && after.deployed === 2 && after.roster === 2, '結算計數正確');
 ok(after.nextActAt > after.clock || after.nextActAt >= 10,
   '增援落地後有一段延遲才能行動（§5.2 deploy）');
@@ -84,12 +88,15 @@ await page.waitForTimeout(250);
 await page.screenshot({ path: OUT + '/21-corpse-menu.png' });
 const menu = await page.locator('#tile-menu').textContent();
 ok(/的遺體/.test(menu) && /RR-4/.test(menu), '點屍體會列出可拾取的武器');
+ok(/DNA/.test(menu), '己方遺體含一份 DNA（§4.4）');
+ok(/全部拿走/.test(menu), '有「全部拿走」選項（§4.3）');
 
 const beforePick = await page.evaluate(() => {
   const u = window.__game.state.units.find(x => x.faction === 'PLAYER');
   return { next: u.nextActAt };
 });
-await page.locator('#tile-menu button[data-do="pickup"]').last().click();
+await page.locator('#tile-menu button[data-do="pickup"]')
+  .filter({ hasText: 'RR-4' }).filter({ hasText: '換為收納' }).first().click();
 await page.waitForTimeout(300);
 const picked = await page.evaluate(() => {
   const g = window.__game;

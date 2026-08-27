@@ -1,8 +1,8 @@
 /**
  * Canvas 2D 繪製。唯讀 GameState —— 這一層絕不改寫狀態。
  */
-import type { Corpse, GameState, Unit, Vec2 } from '../core/state';
-import { activePlayerUnit, corpseAt } from '../core/state';
+import type { LootPile, GameState, Unit, Vec2 } from '../core/state';
+import { activePlayerUnit, lootAt } from '../core/state';
 import { inBounds, tileAt } from '../core/map';
 import { sameTile } from '../core/grid';
 import type { Camera } from './camera';
@@ -22,6 +22,8 @@ const C = {
   dropInk: '#6fc0ff',
   terminal: '#4d4114',
   terminalInk: '#ffd35c',
+  loot: '#7c6a4d',
+  lootInk: '#1a140a',
   supply: '#14493f',
   supplyInk: '#5cf0cd',
   fog: 'rgba(5,8,12,0.62)',
@@ -74,6 +76,10 @@ export interface Lock {
   coverTiles: Vec2[];
   /** 背刺成立（§8.8）。空字串代表不成立。 */
   backstabNote: string;
+  /** 射擊模式說明，例如「連發 3 發」。預覽只顯示**當前模式**（§2.6）。 */
+  modeNote: string;
+  /** 這次會打幾發。連發是三次獨立判定，所以傷害區間要乘上去（§2.2）。 */
+  shots: number;
 }
 
 export interface MovePreview {
@@ -119,7 +125,7 @@ export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, sc: Sc
 
   drawTiles(ctx, sc, x0, y0, x1, y1);
   drawMapEdge(ctx, sc);
-  drawCorpses(ctx, sc, Math.max(0, x0), Math.max(0, y0), x1, y1);
+  drawLootPiles(ctx, sc, Math.max(0, x0), Math.max(0, y0), x1, y1);
   drawGhosts(ctx, sc);
   drawUnits(ctx, sc);
   drawMovePreview(ctx, sc);
@@ -179,6 +185,8 @@ function drawTiles(ctx: CanvasRenderingContext2D, sc: Scene, x0: number, y0: num
         marker(ctx, s, t, C.drop, C.dropInk, sameTile(p, state.map.startDropPoint) ? '⌂' : 'D');
       } else if (kind === 'TERMINAL') {
         marker(ctx, s, t, C.terminal, C.terminalInk, state.objectives.main.done ? '✓' : 'T');
+      } else if (kind === 'LOOT') {
+        marker(ctx, s, t, C.loot, C.lootInk, '?');
       } else if (kind === 'SUPPLY') {
         const o = state.objectives.secondary.find((q) => sameTile(q.pos, p));
         marker(ctx, s, t, C.supply, C.supplyInk, o && o.done ? '✓' : 'S');
@@ -240,32 +248,42 @@ function marker(
   ctx.fillText(glyph, s.x + t / 2, s.y + t / 2 + 1);
 }
 
-function drawCorpses(ctx: CanvasRenderingContext2D, sc: Scene, x0: number, y0: number, x1: number, y1: number): void {
+function drawLootPiles(ctx: CanvasRenderingContext2D, sc: Scene, x0: number, y0: number, x1: number, y1: number): void {
   const { state, cam } = sc;
   const seen = new Set<string>();
-  for (const c of state.corpses) {
+  for (const c of state.loot) {
     if (c.pos.x < x0 || c.pos.x > x1 || c.pos.y < y0 || c.pos.y > y1) continue;
     const k = c.pos.x + ',' + c.pos.y;
     if (seen.has(k)) continue;
     seen.add(k);
-    drawCorpse(ctx, cam, c);
+    drawLootPile(ctx, cam, c);
   }
 }
 
-function drawCorpse(ctx: CanvasRenderingContext2D, cam: Camera, c: Corpse): void {
+function drawLootPile(ctx: CanvasRenderingContext2D, cam: Camera, c: LootPile): void {
   const t = cam.tile;
   const p = tileCenter(cam, c.pos);
   ctx.strokeStyle = C.corpse;
   ctx.lineWidth = Math.max(2, t * 0.09);
   ctx.lineCap = 'round';
   const r = t * 0.26;
-  ctx.beginPath();
-  ctx.moveTo(p.x - r, p.y - r * 0.6);
-  ctx.lineTo(p.x + r, p.y + r * 0.6);
-  ctx.moveTo(p.x + r, p.y - r * 0.6);
-  ctx.lineTo(p.x - r, p.y + r * 0.6);
-  ctx.stroke();
-  if (c.weapons.length > 0) {
+  if (c.kind === 'CACHE') {
+    // 補給箱：方框，跟屍體的叉叉分得出來
+    ctx.strokeRect(p.x - r, p.y - r, r * 2, r * 2);
+    ctx.beginPath();
+    ctx.moveTo(p.x - r, p.y);
+    ctx.lineTo(p.x + r, p.y);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(p.x - r, p.y - r * 0.6);
+    ctx.lineTo(p.x + r, p.y + r * 0.6);
+    ctx.moveTo(p.x + r, p.y - r * 0.6);
+    ctx.lineTo(p.x - r, p.y + r * 0.6);
+    ctx.stroke();
+  }
+  // 還有東西可拿 → 亮點。空了就只剩灰記號，一眼看得出翻過了
+  if (c.items.length > 0) {
     ctx.fillStyle = C.terminalInk;
     ctx.beginPath();
     ctx.arc(p.x + t * 0.28, p.y - t * 0.28, Math.max(2.5, t * 0.09), 0, Math.PI * 2);
@@ -477,7 +495,8 @@ function drawLock(ctx: CanvasRenderingContext2D, sc: Scene): void {
   // 傷害與護甲並排：AR-9 打裝甲型會顯示「傷害 10–10　裝甲 20」，
   // 開槍之前就看得出這把槍對它沒用（§12.9 的教學要在開火前就成立）
   const sub = live
-    ? '傷害 ' + lock.damage.min + '–' + lock.damage.max
+    ? lock.modeNote
+      + '　傷害 ' + (lock.shots > 1 ? '每發 ' : '') + lock.damage.min + '–' + lock.damage.max
       + '　裝甲 ' + lock.armor.min + '–' + lock.armor.max
       + '　耗時 ' + lock.time
       + (lock.coverNote ? '　' + lock.coverNote : '')
@@ -566,6 +585,6 @@ function drawLabel(
 }
 
 /** 供 UI 判斷點到的是不是屍體。 */
-export function corpseAtTile(state: GameState, p: Vec2): Corpse | null {
-  return corpseAt(state, p);
+export function lootAtTile(state: GameState, p: Vec2): LootPile | null {
+  return lootAt(state, p);
 }

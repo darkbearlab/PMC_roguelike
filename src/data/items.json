@@ -1,0 +1,42 @@
+{
+  "_comment": "§4 物品定義。重量單位與 weightTiers（rules.json → backpack）同一套。武器不在這裡，武器的重量寫在 weapons.json。",
+  "_weight": "步槍彈刻意訂 0.5：初始 24 發 = 12 重，加上 2 發火箭彈 6 重共 18，剛好落在第一級（不減速）且沒剩多少餘裕。玩家一開始就站在門檻上，撿東西才會是決定。",
+
+  "AMMO_RIFLE": {
+    "name": "步槍彈",
+    "kind": "AMMO",
+    "ammoType": "RIFLE",
+    "weight": 0.5
+  },
+  "AMMO_ROCKET": {
+    "name": "火箭彈",
+    "kind": "AMMO",
+    "ammoType": "ROCKET",
+    "weight": 3
+  },
+
+  "DNA": {
+    "name": "DNA 樣本",
+    "kind": "DNA",
+    "weight": 1
+  },
+
+  "SCRAP": {
+    "name": "廢金屬",
+    "kind": "VALUABLE",
+    "weight": 4,
+    "value": 1
+  },
+  "OPTICS": {
+    "name": "光學組件",
+    "kind": "VALUABLE",
+    "weight": 2,
+    "value": 3
+  },
+  "CORE": {
+    "name": "動力核心",
+    "kind": "VALUABLE",
+    "weight": 6,
+    "value": 5
+  }
+}

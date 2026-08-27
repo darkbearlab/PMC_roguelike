@@ -23,6 +23,11 @@
     "sightRange": 10,
     "aim": 0,
     "evasion": 0,
+    "_loot": "敵人屍體可搜刮（§4.2）。chance 為 1 代表必掉。抽值順序固定：由上而下各抽一次。",
+    "loot": [
+      { "defId": "AMMO_RIFLE", "qty": 4, "chance": 1 },
+      { "defId": "SCRAP", "qty": 1, "chance": 0.35 }
+    ],
     "attack": {
       "id": "runner_claw",
       "name": "衝擊爪",
@@ -33,6 +38,10 @@
       "range": 1,
       "magazine": 99,
       "ammo": 99,
+      "ammoType": "RIFLE",
+      "weight": 0,
+      "modes": ["SINGLE"],
+      "mode": "SINGLE",
       "fireTime": 10,
       "reloadTime": 0,
       "reloadSequence": null,
@@ -54,6 +63,11 @@
     "sightRange": 8,
     "aim": 0,
     "evasion": 0,
+    "loot": [
+      { "defId": "AMMO_RIFLE", "qty": 6, "chance": 1 },
+      { "defId": "AMMO_ROCKET", "qty": 1, "chance": 0.4 },
+      { "defId": "CORE", "qty": 1, "chance": 0.5 }
+    ],
     "attack": {
       "id": "hulk_slam",
       "name": "重擊",
@@ -64,6 +78,10 @@
       "range": 1,
       "magazine": 99,
       "ammo": 99,
+      "ammoType": "RIFLE",
+      "weight": 0,
+      "modes": ["SINGLE"],
+      "mode": "SINGLE",
       "fireTime": 15,
       "reloadTime": 0,
       "reloadSequence": null,
@@ -85,6 +103,10 @@
     "sightRange": 12,
     "aim": 0,
     "evasion": 0,
+    "loot": [
+      { "defId": "AMMO_RIFLE", "qty": 6, "chance": 1 },
+      { "defId": "OPTICS", "qty": 1, "chance": 0.3 }
+    ],
     "attack": {
       "id": "shooter_smg",
       "name": "制壓槍",
@@ -95,6 +117,10 @@
       "range": 7,
       "magazine": 99,
       "ammo": 99,
+      "ammoType": "RIFLE",
+      "weight": 0,
+      "modes": ["SINGLE"],
+      "mode": "SINGLE",
       "fireTime": 12,
       "reloadTime": 0,
       "reloadSequence": null,

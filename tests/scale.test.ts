@@ -41,7 +41,7 @@ describe('§1.2 不該放大的東西一律沒動', () => {
     const rr4 = WEAPONS.find((w) => w.id === 'rr4')!;
     // 距離與次數不隨生命值縮放。開火／裝填在 v0.7 改為時間值（1 AP → 10）。
     expect([ar9.range, ar9.optimalRange, ar9.magazine, ar9.noiseRadius, ar9.splash])
-      .toEqual([8, 5, 4, 6, 0]);
+      .toEqual([8, 5, 8, 6, 0]);
     expect([rr4.range, rr4.optimalRange, rr4.magazine, rr4.noiseRadius, rr4.splash])
       .toEqual([12, 8, 1, 14, 1]);
     // 時間成本維持原本 AP 的相對關係：重武器是輕武器的兩倍

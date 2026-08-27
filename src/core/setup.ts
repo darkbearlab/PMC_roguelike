@@ -1,11 +1,12 @@
 /**
  * 初始狀態建立。所有數值來自 data/ 的 JSON，這裡不寫死任何平衡數字。
  */
-import type { Facing, GameState, Objective, Unit, Vec2, Weapon } from './state';
+import type { Backpack, Facing, GameState, Item, LootPile, Objective, Unit, Vec2, Weapon } from './state';
 import type { RawMap } from './map';
 import { parseMap, findTiles } from './map';
 import { createRng } from './rng';
 import { ACTORS, MISSION_01, RULES, archetype, cloneWeapon, weaponById } from './content';
+import { addItem, emptyBackpack, makeItem } from './inventory';
 
 function makeUnit(
   archetypeId: string,
@@ -14,6 +15,7 @@ function makeUnit(
   pos: Vec2,
   weapons: { equipped: Weapon | null; stowed: Weapon | null },
   facing: Facing = 'S',
+  backpack: Backpack | null = null,
 ): Unit {
   const a = archetype(archetypeId);
   return {
@@ -33,6 +35,7 @@ function makeUnit(
     sightRange: a.sightRange,
     equipped: weapons.equipped,
     stowed: weapons.stowed,
+    backpack,
     aiState: 'IDLE',
     lastKnownTarget: null,
     searchTimer: 0,
@@ -44,21 +47,41 @@ function makeUnit(
   };
 }
 
-/** 首發士兵：手持 AR-9（滿彈），收納 RR-4（滿彈）（§8.4）。 */
-export function makeStartingSoldier(id: string, pos: Vec2): Unit {
+/**
+ * 背包的初始內容（§1.2 / §3）。
+ * 需要 state 是因為物品 id 走的是狀態的流水號，不是亂數。
+ */
+function fillBackpack(
+  state: { nextEntitySerial: number },
+  spec: { defId: string; qty: number }[],
+): Backpack {
+  const bag = emptyBackpack();
+  for (const e of spec) addItem(bag, makeItem(state as never, e.defId, e.qty));
+  return bag;
+}
+
+/** 首發士兵：手持 AR-9（滿彈），收納 RR-4（滿彈），背包帶初始彈藥（§8.4 / §1.2）。 */
+export function makeStartingSoldier(
+  state: { nextEntitySerial: number }, id: string, pos: Vec2,
+): Unit {
   return makeUnit('SOLDIER', id, id, pos, {
     equipped: weaponById('ar9'),
     stowed: weaponById('rr4'),
-  });
+  }, 'S', fillBackpack(state, RULES.backpack.startingItems));
 }
 
-/** 增援士兵：只有預設配備，一把滿彈的 AR-9，沒有 RR-4（§10.1 第 6 點）。 */
-export function makeReinforcementSoldier(id: string, pos: Vec2): Unit {
-  const u = makeUnit('SOLDIER', id, id, pos, {
+/**
+ * 增援士兵：只有預設配備，一把滿彈的 AR-9，沒有 RR-4（§10.1 第 6 點）。
+ * 背包也只有步槍彈 —— 火箭彈在前一個人的屍體上。
+ */
+export function makeReinforcementSoldier(
+  state: { nextEntitySerial: number }, id: string, pos: Vec2,
+): Unit {
+  return makeUnit('SOLDIER', id, id, pos, {
     equipped: weaponById('ar9'),
     stowed: null,
-  });
-  return u;   // nextActAt 由 deployReinforcement 依 clock 設定
+  }, 'S', fillBackpack(state, RULES.backpack.reinforcementItems));
+  // nextActAt 由 deployReinforcement 依 clock 設定
 }
 
 /** @param facing 初始面向（§13.2）。未指定時預設為南。 */
@@ -97,17 +120,31 @@ export function createInitialState(seed: number, rawMap: RawMap = MISSION_01): G
   const firstId = roster.shift();
   if (!firstId) throw new Error('名冊人數必須 >= 1');
 
-  const units: Unit[] = [makeStartingSoldier(firstId, map.startDropPoint)];
+  // 物品與屍體的 id 走同一個流水號，所以先開一個計數器再交給 state
+  const serial = { nextEntitySerial: 1 };
+  const units: Unit[] = [makeStartingSoldier(serial, firstId, map.startDropPoint)];
   rawMap.enemies.forEach((e, i) => {
     if (!ACTORS[e.archetype]) throw new Error('地圖引用了未知的敵人原型 ' + e.archetype);
     units.push(makeEnemy(e.archetype, i, e.pos, e.facing));
+  });
+
+  // 地圖搜刮點（§4.1）。地形是 LOOT，內容寫在地圖檔的 caches。
+  const loot: LootPile[] = (rawMap.caches ?? []).map((c) => {
+    const items: Item[] = c.items.map((e) => makeItem(serial as never, e.defId, e.qty));
+    return {
+      id: 'L' + serial.nextEntitySerial++,
+      kind: 'CACHE' as const,
+      pos: { x: c.pos.x, y: c.pos.y },
+      label: c.label ?? '補給箱',
+      items,
+    };
   });
 
   return {
     clock: 0,
     map,
     units,
-    corpses: [],
+    loot,
     roster,
     activePlayerUnitId: firstId,
     objectives: { main, secondary },
@@ -117,7 +154,8 @@ export function createInitialState(seed: number, rawMap: RawMap = MISSION_01): G
     rng: createRng(seed >>> 0),
     result: 'ONGOING',
     pendingReinforcement: null,
-    nextEntitySerial: 1,
+    extracted: [],
+    nextEntitySerial: serial.nextEntitySerial,
     log: [
       { at: 0, kind: 'MISSION', text: '任務開始：' + map.name },
       { at: 0, kind: 'INFO', text: firstId + ' 已投入戰場。' },

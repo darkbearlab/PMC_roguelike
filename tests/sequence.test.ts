@@ -113,7 +113,9 @@ describe('RR-4 裝填是兩步序列', () => {
     expect(s.pendingReinforcement).not.toBeNull();          // 真的被打死了
     expect(s.units.some((u) => u.pendingSequence !== null)).toBe(false);
     // 裝填沒有完成，那把 RR-4 是空的躺在屍體上
-    expect(s.corpses[0].weapons.some((w) => w.id === 'rr4' && w.ammo === 0)).toBe(true);
+    expect(s.loot[0].items.some(
+      (it) => it.kind === 'WEAPON' && it.weapon!.id === 'rr4' && it.weapon!.ammo === 0,
+    )).toBe(true);
   });
 
   it('UI 描述帶得出進度，玩家看得出正在蓄勢', () => {
@@ -133,7 +135,7 @@ describe('RR-4 裝填是兩步序列', () => {
     player(s).equipped!.ammo = 0;
     s = run(s, { type: 'RELOAD' });
     expect(player(s).pendingSequence).toBeNull();
-    expect(player(s).equipped!.ammo).toBe(4);
+    expect(player(s).equipped!.ammo).toBe(8);
   });
 
   it('本版只有 RR-4 裝填用序列，沒有別的動作被改成序列', () => {

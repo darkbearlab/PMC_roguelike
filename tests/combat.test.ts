@@ -88,7 +88,7 @@ describe('§8.1 合法性檢查先於解算', () => {
     player(s).equipped!.ammo = 0;
     expect(checkLegal(s, { type: 'FIRE', target: { x: 5, y: 1 } }).ok).toBe(false);
     s = run(s, { type: 'RELOAD' });
-    expect(player(s).equipped!.ammo).toBe(4);
+    expect(player(s).equipped!.ammo).toBe(8);
     expect(player(s).nextActAt).toBe(10);
   });
 });
@@ -98,7 +98,7 @@ describe('§5 武器節奏（時間表達）', () => {
     let s = testState(ROOM, [{ archetype: 'HULK', pos: { x: 5, y: 1 } }]);
     s = run(s, { type: 'FIRE', target: { x: 5, y: 1 } });
     expect(player(s).nextActAt).toBe(10);
-    expect(player(s).equipped!.ammo).toBe(3);
+    expect(player(s).equipped!.ammo).toBe(7);   // 單發吃 1 發（§2.1）
   });
 
   it('重武器開一槍花 20 —— 是輕武器的兩倍，這就是它的代價', () => {

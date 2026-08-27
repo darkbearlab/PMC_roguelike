@@ -16,7 +16,45 @@ export type TileType =
   | 'HALF_COVER'  // 不可通行，視線規則見 §7
   | 'DROP_POINT'  // 可通行，增援落點
   | 'TERMINAL'    // 可通行，主目標互動點
-  | 'SUPPLY';     // 可通行，次要目標互動點
+  | 'SUPPLY'      // 可通行，次要目標互動點
+  | 'LOOT';       // 可通行，搜刮點（§4.1）
+
+/** 彈藥種類。背包裡追蹤的是**總發數**，不是彈匣個數（§1.1）。 */
+export type AmmoType = 'RIFLE' | 'ROCKET';
+
+/** 射擊模式（§2）。三種時間花費相同，差別只在耗彈與命中。 */
+export type FireMode = 'SINGLE' | 'BURST' | 'AUTO';
+
+export type ItemKind = 'AMMO' | 'VALUABLE' | 'DNA' | 'WEAPON';
+
+/**
+ * 背包裡的一個堆疊（§3.1）。
+ *
+ * 武器也是物品（kind 為 'WEAPON'，weapon 欄位帶完整武器狀態），
+ * 這樣搜刮面板只要處理一種東西。**放在背包裡的武器不能使用**，
+ * 要先換到手持或收納欄。
+ */
+export interface Item {
+  id: string;
+  kind: ItemKind;
+  /** 對應 data/items.json 的鍵。武器一律用 'WEAPON'。 */
+  defId: string;
+  name: string;
+  /** 每一個的重量。整堆的重量 = weight × qty。 */
+  weight: number;
+  qty: number;
+  /** kind 為 'AMMO' 時，這堆是哪一種彈藥。 */
+  ammoType?: AmmoType;
+  /** kind 為 'VALUABLE' 時的價值。局外層還不存在，本版只列在結算畫面上。 */
+  value?: number;
+  /** kind 為 'WEAPON' 時的完整武器狀態（含槍內剩餘子彈與射擊模式）。 */
+  weapon?: Weapon;
+}
+
+/** 背包（§3）。裝備中與收納中的武器**不佔背包**。 */
+export interface Backpack {
+  items: Item[];
+}
 
 export type WeaponClass = 'LIGHT' | 'HEAVY';
 
@@ -31,7 +69,15 @@ export interface Weapon {
   penetration: number;
   range: number;          // 最大射程（格）
   magazine: number;       // 彈匣容量
-  ammo: number;           // 目前彈藥
+  ammo: number;           // 槍內剩餘子彈（背包裡的總量另外算，§1.1）
+  /** 這把槍吃哪一種彈藥（§1.2）。 */
+  ammoType: AmmoType;
+  /** 放進背包時佔的重量（§3）。手持與收納中不佔背包。 */
+  weight: number;
+  /** 可用的射擊模式（§2）。重武器只有 SINGLE。 */
+  modes: FireMode[];
+  /** 目前選定的模式。**記在武器上**，換槍再換回來時維持（§2.5）。 */
+  mode: FireMode;
   /** 開火的時間花費（§5 排程器）。 */
   fireTime: number;
   /** 裝填的時間花費。若 reloadSequence 非 null，這個值等於序列各步的總和。 */
@@ -66,6 +112,8 @@ export interface Unit {
   sightRange: number;
   equipped: Weapon | null;   // 手上的武器
   stowed: Weapon | null;     // 收起來的武器
+  /** 背包（§3）。敵人沒有背包，一律 null。 */
+  backpack: Backpack | null;
   aiState: AiState;
   lastKnownTarget: Vec2 | null;
   searchTimer: number;
@@ -98,11 +146,21 @@ export interface Sequence {
   index: number;
 }
 
-export interface Corpse {
+/**
+ * 可搜刮的一堆東西（§4.1）。三種來源共用同一個型別、同一套兩段式點擊文法：
+ * 己方屍體、敵人屍體、地圖搜刮點。
+ *
+ * 分成三個型別的話，搜刮面板要寫三份、拾取指令要開三條路 —— 沒有理由。
+ */
+export type LootKind = 'PLAYER_BODY' | 'ENEMY_BODY' | 'CACHE';
+
+export interface LootPile {
   id: string;
+  kind: LootKind;
   pos: Vec2;
-  unitId: string;            // 原本的士兵編號，用於 UI 顯示
-  weapons: Weapon[];         // 死亡時攜帶的所有武器
+  /** UI 標題，例如「K-441 的遺體」「補給箱」。 */
+  label: string;
+  items: Item[];
 }
 
 export interface MapData {
@@ -146,7 +204,8 @@ export interface GameState {
   clock: number;
   map: MapData;
   units: Unit[];
-  corpses: Corpse[];
+  /** 戰場上所有可搜刮的東西（§4）。屍體與搜刮點共用這一份。 */
+  loot: LootPile[];
   roster: string[];          // 尚未投入的士兵 id
   activePlayerUnitId: string | null;
   objectives: {
@@ -159,6 +218,11 @@ export interface GameState {
   rng: RngState;
   result: 'ONGOING' | 'SUCCESS' | 'ABORTED' | 'WIPED';
   pendingReinforcement: PendingReinforcement | null;
+  /**
+   * 撤離時帶出去的東西（§5.1）。只有真的走出撤離點才會有內容；
+   * 止損與全滅一律是空的 —— 那兩種情況戰場上的一切都損失（§5.3 / §5.4）。
+   */
+  extracted: Item[];
   /** 下一個要配發的實體流水號，讓 id 產生保持決定性（不用亂數）。 */
   nextEntitySerial: number;
   log: LogEntry[];
@@ -179,8 +243,8 @@ export function unitAt(state: GameState, pos: Vec2): Unit | null {
   return state.units.find((u) => u.pos.x === pos.x && u.pos.y === pos.y) ?? null;
 }
 
-export function corpseAt(state: GameState, pos: Vec2): Corpse | null {
-  return state.corpses.find((c) => c.pos.x === pos.x && c.pos.y === pos.y) ?? null;
+export function lootAt(state: GameState, pos: Vec2): LootPile | null {
+  return state.loot.find((c) => c.pos.x === pos.x && c.pos.y === pos.y) ?? null;
 }
 
 export function enemies(state: GameState): Unit[] {
@@ -191,7 +255,7 @@ export function isMissionOver(state: GameState): boolean {
   return state.result !== 'ONGOING';
 }
 
-/** 尚留在戰場上、未回收的武器（結算與 HUD 損益用）。 */
-export function abandonedWeapons(state: GameState): Weapon[] {
-  return state.corpses.flatMap((c) => c.weapons);
+/** 尚留在戰場上、未回收的東西（結算與 HUD 損益用）。 */
+export function abandonedItems(state: GameState): Item[] {
+  return state.loot.flatMap((c) => c.items);
 }

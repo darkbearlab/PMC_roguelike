@@ -1,6 +1,6 @@
 /** 跑幾場笨機器人，看看難度落點大概在哪（僅供調參參考，不是測試）。 */
 import { createInitialState } from '../src/core/setup';
-import { applyCommand } from '../src/core/commands';
+import { applyCommand, checkLegal } from '../src/core/commands';
 import type { Command } from '../src/core/commands';
 
 /** applyCommand 現在回傳 { state, events }（§8.6）；這支探針只看狀態。 */
@@ -17,6 +17,11 @@ function botAction(s: GameState, goal: Vec2): GameState {
   if (!u) return s;
   // 承諾中的序列：笨機器人一律走完，不中止
   if (u.pendingSequence) return run(s, { type: 'SEQUENCE_STEP' });
+  // 腳邊有東西就拿（笨機器人不挑，全拿）
+  const pile = s.loot.find(
+    (c) => manhattan(c.pos, u.pos) <= 1 && checkLegal(s, { type: 'TAKE_ALL', lootId: c.id }).ok,
+  );
+  if (pile) return run(s, { type: 'TAKE_ALL', lootId: pile.id });
   if (manhattan(u.pos, goal) <= 1) {
     const acted = run(s, { type: 'INTERACT', pos: goal });
     if (acted !== s) return acted;
@@ -58,6 +63,7 @@ for (const seed of [1, 42, 999, 20260826, 7777]) {
     `投入 ${s.deployed}`, `陣亡 ${s.casualties}`,
     `主目標 ${s.objectives.main.done ? '✓' : '✗'}`,
     `殘敵 ${foes}/10`,
-    `遺留裝備 ${s.corpses.reduce((n, c) => n + c.weapons.length, 0)}`,
+    `帶出 ${s.extracted.length}`,
+    `遺留 ${s.loot.reduce((n, c) => n + c.items.length, 0)}`,
   );
 }

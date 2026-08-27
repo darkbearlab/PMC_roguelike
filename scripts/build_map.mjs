@@ -64,6 +64,21 @@ set(29, 21, 'T');  // 主目標：距離起點最遠的一端
 set(29, 2, 'S');   // 次要目標 1：東北側翼
 set(2, 21, 'S');   // 次要目標 2：西南側翼
 
+// ---- v0.9：搜刮點（§4.1）。地形字元 'L'，內容寫在下面的 caches ----
+// 擺法的原則：**沿路線但要繞一下**。放在主路線上等於白送，放在死角則沒人會去。
+// 東北角那個刻意跟次要目標 1 擺在一起 —— 繞那一趟要值得。
+set(9, 4, 'L');    // B 北側走廊旁的側室
+set(27, 4, 'L');   // E 次要目標 1 附近，同一趟可以一起拿
+set(20, 17, 'L');  // G 南側翼，離主路線兩三步
+set(30, 19, 'L');  // H 終端室外，守衛的背後
+
+const caches = [
+  { pos: { x: 9, y: 4 },   label: '彈藥箱', items: [{ defId: 'AMMO_RIFLE', qty: 12 }] },
+  { pos: { x: 27, y: 4 },  label: '器材櫃', items: [{ defId: 'OPTICS', qty: 2 }, { defId: 'AMMO_RIFLE', qty: 8 }] },
+  { pos: { x: 20, y: 17 }, label: '廢料堆', items: [{ defId: 'SCRAP', qty: 3 }] },
+  { pos: { x: 30, y: 19 }, label: '軍械箱', items: [{ defId: 'AMMO_ROCKET', qty: 2 }, { defId: 'CORE', qty: 1 }] },
+];
+
 // v0.8：facing 是初始面向（§13.2）。敵人一律只看得見面向的前方半平面，
 // 所以這一欄等於在畫「每個守衛在看哪邊」——沒有面向的守衛不是守衛，是靶。
 // 刻意留了幾個背對主要進路的：那是背刺（§8.8）該被學會的地方。
@@ -118,7 +133,7 @@ rows.forEach((r, y) => { if (r.length !== W) errors.push(`row ${y} 寬度 ${r.le
 const start = { x: 1, y: 1 };
 const seen = reachable(start);
 const need = [];
-rows.forEach((r, y) => [...r].forEach((c, x) => { if ('DTS'.includes(c)) need.push({ c, x, y }); }));
+rows.forEach((r, y) => [...r].forEach((c, x) => { if ('DTSL'.includes(c)) need.push({ c, x, y }); }));
 for (const n of need) if (!seen.has(`${n.x},${n.y}`)) errors.push(`${n.c} @ (${n.x},${n.y}) 從起點不可達`);
 for (const e of enemies) {
   const c = at(e.pos.x, e.pos.y);
@@ -134,6 +149,12 @@ for (const r of rows) for (const c of r) counts[c] = (counts[c] || 0) + 1;
 if ((counts['D'] || 0) < 3) errors.push('DROP_POINT 少於 3 個');
 if ((counts['S'] || 0) !== 2) errors.push('SUPPLY 必須剛好 2 個');
 if ((counts['T'] || 0) !== 1) errors.push('TERMINAL 必須剛好 1 個');
+if ((counts['L'] || 0) !== caches.length) {
+  errors.push(`LOOT 地形 ${counts['L'] || 0} 個，但 caches 有 ${caches.length} 筆`);
+}
+for (const c of caches) {
+  if (at(c.pos.x, c.pos.y) !== 'L') errors.push(`cache @ (${c.pos.x},${c.pos.y}) 不在 LOOT 地形上`);
+}
 
 console.log('   ' + [...Array(W).keys()].map((i) => i % 10).join(''));
 rows.forEach((r, y) => console.log(String(y).padStart(2, ' ') + ' ' + r));
@@ -149,10 +170,14 @@ const json = {
   name: '廢棄水處理廠',
   width: W,
   height: H,
-  legend: { '.': 'FLOOR', '#': 'WALL', '+': 'HALF_COVER', D: 'DROP_POINT', T: 'TERMINAL', S: 'SUPPLY' },
+  legend: {
+    '.': 'FLOOR', '#': 'WALL', '+': 'HALF_COVER',
+    D: 'DROP_POINT', T: 'TERMINAL', S: 'SUPPLY', L: 'LOOT',
+  },
   tiles: rows,
   startDropPoint: { x: 1, y: 1 },
   enemies,
+  caches,
 };
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, JSON.stringify(json, null, 2) + '\n', 'utf8');

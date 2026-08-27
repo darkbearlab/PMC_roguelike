@@ -9,22 +9,28 @@
  * 非法指令回傳「原本那個 state 物件」（identity 不變），讓 UI 可以直接比對。
  */
 import type {
-  Corpse, Facing, GameState, Stance, Unit, Vec2, Weapon,
+  Facing, FireMode, GameState, Item, LootPile, Stance, Unit, Vec2, Weapon,
 } from './state';
-import { activePlayerUnit, corpseAt } from './state';
+import { activePlayerUnit, lootAt } from './state';
 import { DIR_VEC, facingToward, manhattan, sameTile } from './grid';
 import { findTiles, tileAt } from './map';
 import { canStep, findPath, nearestFreeTileOfType, occupiedBy, terrainPassable } from './pathfind';
 import { canAttack, performAttack, type Legality } from './combat';
 import { stepEnemy } from './ai';
-import { RULES } from './content';
+import { RULES, archetype, fireModeOrder } from './content';
+import { nextFloat } from './rng';
+import {
+  addItem, affordableQty, canCarry, countAmmo, effectiveMoveTime, makeItem,
+  maxWeight, takeAmmo, totalWeight, weaponItem,
+} from './inventory';
 import { makeReinforcementSoldier } from './setup';
 import { activeUnit, isMissionOver, isPlayerTurn, spend, syncClock } from './scheduler';
 import * as seq from './sequence';
 import { pushLog } from './log';
 import type { CombatEvent, EventSink } from './events';
 
-export type WeaponSlot = 'EQUIPPED' | 'STOWED';
+/** 拾取到哪裡。BACKPACK 的武器不能使用，要先換到手持或收納欄（§3.1）。 */
+export type WeaponSlot = 'EQUIPPED' | 'STOWED' | 'BACKPACK';
 
 export type Command =
   | { type: 'MOVE'; dir: Facing }
@@ -34,7 +40,9 @@ export type Command =
   | { type: 'FIRE'; target: Vec2 }
   | { type: 'RELOAD' }
   | { type: 'SWAP_WEAPON' }
-  | { type: 'PICKUP'; corpseId: string; weaponIndex: number; slot: WeaponSlot }
+  | { type: 'PICKUP'; lootId: string; itemIndex: number; slot?: WeaponSlot }
+  | { type: 'TAKE_ALL'; lootId: string }
+  | { type: 'CYCLE_FIRE_MODE' }
   | { type: 'INTERACT'; pos: Vec2 }
   | { type: 'WAIT' }
   | { type: 'SEQUENCE_STEP' }
@@ -74,7 +82,8 @@ export function commandTime(state: GameState, cmd: Command): number | null {
   switch (cmd.type) {
     case 'MOVE':
       if (!u) return RULES.time.move;
-      return movePhase(u, cmd.dir) === 'TURN' ? RULES.time.facing : u.moveTime;
+      // 移動時間受負重影響（§3.2）。轉向不算移動，所以不受負重影響。
+      return movePhase(u, cmd.dir) === 'TURN' ? RULES.time.facing : effectiveMoveTime(u);
     case 'SET_STANCE':
     case 'TOGGLE_STANCE': return RULES.time.stance;
     case 'SET_FACING': return RULES.time.facing;
@@ -86,7 +95,9 @@ export function commandTime(state: GameState, cmd: Command): number | null {
     case 'SEQUENCE_STEP': return u && u.pendingSequence ? seq.stepTime(u.pendingSequence) : null;
     case 'ABORT_SEQUENCE': return 0;
     case 'SWAP_WEAPON': return u ? swapTime(u) : null;
-    case 'PICKUP': return RULES.time.pickup;
+    case 'PICKUP':
+    case 'TAKE_ALL': return RULES.loot.takeTime;
+    case 'CYCLE_FIRE_MODE': return 0;   // 切換模式不花時間（§2.5）
     case 'INTERACT': return RULES.time.interact;
     case 'WAIT': return RULES.time.wait;
     default: return null;
@@ -99,8 +110,8 @@ export function commandTime(state: GameState, cmd: Command): number | null {
 
 const PLAYER_COMMANDS = new Set<Command['type']>([
   'MOVE', 'SET_STANCE', 'TOGGLE_STANCE', 'SET_FACING', 'FIRE',
-  'RELOAD', 'SWAP_WEAPON', 'PICKUP', 'INTERACT', 'WAIT',
-  'SEQUENCE_STEP', 'ABORT_SEQUENCE',
+  'RELOAD', 'SWAP_WEAPON', 'PICKUP', 'TAKE_ALL', 'INTERACT', 'WAIT',
+  'SEQUENCE_STEP', 'ABORT_SEQUENCE', 'CYCLE_FIRE_MODE',
 ]);
 
 /** 系列動作進行中時，這個單位輪到時只能執行下一步或中止（§5.5）。 */
@@ -163,9 +174,17 @@ function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
     case 'FIRE':
       return canAttack(state, u, cmd.target, u.equipped);
     case 'RELOAD': {
-      if (!u.equipped) return no('沒有裝備武器');
-      if (u.equipped.ammo >= u.equipped.magazine) return no('彈匣已滿');
+      const w = u.equipped;
+      if (!w) return no('沒有裝備武器');
+      if (w.ammo >= w.magazine) return no('彈匣已滿');
+      // v0.9：彈藥是背包裡的資源（§1.1）。背包空了就裝不了。
+      if (w.magazine < 99 && countAmmo(u.backpack, w.ammoType) <= 0) return no('沒有備用彈藥');
       return OK;
+    }
+    case 'CYCLE_FIRE_MODE': {
+      const w = u.equipped;
+      if (!w) return no('沒有裝備武器');
+      return w.modes.length > 1 ? OK : no('這把武器只有單發');
     }
     case 'SEQUENCE_STEP':
       return u.pendingSequence ? OK : no('沒有進行中的動作');
@@ -174,11 +193,24 @@ function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
     case 'SWAP_WEAPON':
       return u.stowed ? OK : no('沒有收納的武器');
     case 'PICKUP': {
-      const corpse = state.corpses.find((c) => c.id === cmd.corpseId);
-      if (!corpse) return no('找不到這具屍體');
-      if (!sameTile(corpse.pos, u.pos)) return no('必須站在屍體所在格');
-      if (cmd.weaponIndex < 0 || cmd.weaponIndex >= corpse.weapons.length) return no('沒有這件裝備');
-      return OK;
+      const pile = state.loot.find((c) => c.id === cmd.lootId);
+      if (!pile) return no('找不到這一堆東西');
+      if (manhattan(pile.pos, u.pos) > INTERACT_REACH) return no('距離太遠，要站到相鄰格');
+      const item = pile.items[cmd.itemIndex];
+      if (!item) return no('沒有這件東西');
+      if (item.kind === 'WEAPON' && cmd.slot !== 'BACKPACK') return OK;   // 換裝不佔背包
+      return canCarry(u.backpack, item) ? OK : no('背包裝不下');
+    }
+    case 'TAKE_ALL': {
+      const pile = state.loot.find((c) => c.id === cmd.lootId);
+      if (!pile) return no('找不到這一堆東西');
+      if (manhattan(pile.pos, u.pos) > INTERACT_REACH) return no('距離太遠，要站到相鄰格');
+      if (pile.items.length === 0) return no('這裡已經空了');
+      // 一件都拿不動時要擋下來。否則按下去只是白花 10 時間，
+      // 而且會讓「一直按」變成一個無限迴圈（笨機器人實測抓到的）。
+      const room = maxWeight() - totalWeight(u.backpack);
+      const anything = pile.items.some((it) => it.weight <= 0 || it.weight <= room);
+      return anything ? OK : no('背包一件都裝不下');
     }
     case 'INTERACT':
       return interactTargetLegality(state, u, cmd.pos);
@@ -209,9 +241,10 @@ export function interactKindAt(state: GameState, pos: Vec2): InteractKind | null
     const o = state.objectives.secondary.find((x) => sameTile(x.pos, pos));
     return o && !o.done ? 'SUPPLY' : null;
   }
-  if (t === 'DROP_POINT' && sameTile(pos, state.map.startDropPoint)) {
-    return state.objectives.main.done ? 'EXTRACT' : null;
-  }
+  // v0.9：撤離不再需要先完成主目標（§5.1）。任務不是打開了就必須打完的副本，
+  // 而是一個可以走人的工地 —— 系統不禁止，只標價：主目標沒完成就是合約失敗，
+  // 但背包裡的東西照樣帶出去。
+  if (t === 'DROP_POINT' && sameTile(pos, state.map.startDropPoint)) return 'EXTRACT';
   return null;
 }
 
@@ -225,9 +258,6 @@ function interactTargetLegality(state: GameState, u: Unit, pos: Vec2): Legality 
   if (manhattan(u.pos, pos) > INTERACT_REACH) return no('距離太遠，要站到相鄰格');
   if (interactKindAt(state, pos)) return OK;
   const t = tileAt(state.map, pos);
-  if (t === 'DROP_POINT' && sameTile(pos, state.map.startDropPoint)) {
-    return no('主目標尚未完成，無法撤離');
-  }
   if (t === 'TERMINAL' || t === 'SUPPLY') return no('這個目標已經完成');
   return no('這一格沒有可互動的東西');
 }
@@ -322,9 +352,9 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
         cost = 0;                       // 開始序列本身不花時間，第一步才花
         pushLog(s, 'INFO', u.name + ' 開始' + seq.describe(u.pendingSequence!));
       } else {
-        w.ammo = w.magazine;
+        const got = refillFromBackpack(u, w);
         events.push({ kind: 'RELOAD', unitId: u.id, pos: { x: u.pos.x, y: u.pos.y }, weaponName: w.name });
-        pushLog(s, 'INFO', u.name + ' 裝填 ' + w.name);
+        pushLog(s, 'INFO', u.name + ' 裝填 ' + w.name + '（+' + got + '，' + w.ammo + '/' + w.magazine + '）');
       }
       break;
     }
@@ -358,13 +388,32 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
       break;
     }
     case 'PICKUP': {
-      const corpse = s.corpses.find((c) => c.id === cmd.corpseId) as Corpse;
-      const taken = corpse.weapons.splice(cmd.weaponIndex, 1)[0];
-      const displaced = cmd.slot === 'EQUIPPED' ? u.equipped : u.stowed;
-      if (displaced) corpse.weapons.push(displaced);
-      if (cmd.slot === 'EQUIPPED') u.equipped = taken;
-      else u.stowed = taken;
-      pushLog(s, 'INFO', u.name + ' 從 ' + corpse.unitId + ' 的遺體取回 ' + taken.name);
+      const pile = s.loot.find((c) => c.id === cmd.lootId) as LootPile;
+      const item = pile.items[cmd.itemIndex];
+      takeOne(s, u, pile, cmd.itemIndex, cmd.slot);
+      pushLog(s, 'INFO', u.name + ' 從' + pile.label + '取走 ' + itemLabel(item));
+      break;
+    }
+    case 'TAKE_ALL': {
+      const pile = s.loot.find((c) => c.id === cmd.lootId) as LootPile;
+      // 由後往前拿，索引才不會在刪除時位移。超重就盡可能拿（§4.3）。
+      let taken = 0;
+      let left = 0;
+      for (let i = pile.items.length - 1; i >= 0; i--) {
+        const got = takeOne(s, u, pile, i, 'BACKPACK');
+        if (got) taken += 1; else left += 1;
+      }
+      pushLog(
+        s, 'INFO',
+        u.name + ' 搜刮' + pile.label + '：取得 ' + taken + ' 項'
+          + (left > 0 ? '，' + left + ' 項因背包塞不下留在原地' : ''),
+      );
+      break;
+    }
+    case 'CYCLE_FIRE_MODE': {
+      const w = u.equipped as Weapon;
+      w.mode = nextFireMode(w);
+      pushLog(s, 'INFO', u.name + ' 切換為' + RULES.fireModes[w.mode].label + '發');
       break;
     }
     case 'INTERACT': {
@@ -382,8 +431,7 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
         events.push({ kind: 'OBJECTIVE', pos: { ...cmd.pos }, text: '次要目標 ' + n + '/' + s.objectives.secondary.length });
         pushLog(s, 'OBJECTIVE', '次要目標完成（' + n + '/' + s.objectives.secondary.length + '）');
       } else if (kind === 'EXTRACT') {
-        s.result = 'SUCCESS';
-        pushLog(s, 'MISSION', '撤離成功。');
+        extract(s, u);
         return;
       }
       break;
@@ -394,6 +442,90 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
   }
 
   spend(s, u.id, cost);
+}
+
+
+// ============================================================================
+// 彈藥、拾取、射擊模式、撤離（§1 / §2 / §4 / §5）
+// ============================================================================
+
+/** 從背包補滿槍。回傳實際補進去的發數 —— 背包不足時就補多少算多少（§1.1）。 */
+export function refillFromBackpack(u: Unit, w: Weapon): number {
+  if (w.magazine >= 99) { w.ammo = w.magazine; return 0; }   // 敵人的攻擊不吃彈藥
+  const need = w.magazine - w.ammo;
+  const got = takeAmmo(u.backpack, w.ammoType, need);
+  w.ammo += got;
+  return got;
+}
+
+/** UI 與紀錄用的物品標籤。 */
+export function itemLabel(it: Item): string {
+  return it.qty > 1 ? it.name + ' ×' + it.qty : it.name;
+}
+
+/**
+ * 從一堆東西裡取走第 index 項。回傳有沒有真的拿到。
+ *
+ * 武器可以直接換到手持／收納欄（不佔背包，§3.1），其餘一律進背包。
+ * 換下來的槍留在原地那一堆裡 —— 跟 v0.1 起的「丟棄免費」是同一條規則。
+ */
+function takeOne(
+  s: GameState, u: Unit, pile: LootPile, index: number, slot?: WeaponSlot,
+): boolean {
+  const item = pile.items[index];
+  if (!item) return false;
+
+  if (item.kind === 'WEAPON' && item.weapon && slot && slot !== 'BACKPACK') {
+    pile.items.splice(index, 1);
+    const displaced = slot === 'EQUIPPED' ? u.equipped : u.stowed;
+    if (displaced) pile.items.push(weaponItem(s, displaced));
+    if (slot === 'EQUIPPED') u.equipped = item.weapon;
+    else u.stowed = item.weapon;
+    return true;
+  }
+
+  if (!u.backpack) return false;
+  // 塞不下整堆時，可堆疊的東西就拿得下的部分（§4.3「盡可能拿」）
+  const n = item.kind === 'AMMO' || item.kind === 'VALUABLE'
+    ? affordableQty(u.backpack, item)
+    : (canCarry(u.backpack, item) ? item.qty : 0);
+  if (n <= 0) return false;
+
+  if (n >= item.qty) {
+    pile.items.splice(index, 1);
+    addItem(u.backpack, item);
+  } else {
+    item.qty -= n;
+    addItem(u.backpack, { ...item, id: 'I' + s.nextEntitySerial++, qty: n });
+  }
+  return true;
+}
+
+/** 下一個射擊模式（§2.5：點一下循環切換），只在這把槍支援的模式之間輪。 */
+export function nextFireMode(w: Weapon): FireMode {
+  const order = fireModeOrder().filter((m) => w.modes.includes(m));
+  if (order.length === 0) return w.mode;
+  const i = order.indexOf(w.mode);
+  return order[(i + 1) % order.length];
+}
+
+/**
+ * 撤離（§5.1）。背包內的一切帶出，兩把槍也帶出。
+ * 主目標完成 → SUCCESS；未完成 → ABORTED（合約失敗），但戰利品照樣帶出。
+ */
+function extract(s: GameState, u: Unit): void {
+  const out: Item[] = [];
+  if (u.backpack) out.push(...u.backpack.items);
+  if (u.equipped) out.push(weaponItem(s, u.equipped));
+  if (u.stowed) out.push(weaponItem(s, u.stowed));
+  s.extracted = out;
+  s.result = s.objectives.main.done ? 'SUCCESS' : 'ABORTED';
+  pushLog(
+    s, 'MISSION',
+    s.objectives.main.done
+      ? '撤離成功。帶出 ' + out.length + ' 項物資。'
+      : '主目標未完成即撤離：合約失敗，但帶出 ' + out.length + ' 項物資。',
+  );
 }
 
 // ============================================================================
@@ -410,24 +542,47 @@ export function processDeaths(s: GameState, events?: EventSink): void {
     });
 
     if (u.faction === 'ENEMY') {
-      // 敵人死亡：直接移除，不留屍體、不掉落物品（§10.3）
-      pushLog(s, 'DEATH', u.name + ' 被擊倒');
+      // v0.9：敵人死亡也留下可搜刮的屍體（§4.2）。掉落表在 actors.json，
+      // **每一項依序各抽一次亂數**，抽值順序固定，與掉不掉得到無關。
+      const drops: Item[] = [];
+      for (const d of archetype(u.archetype).loot ?? []) {
+        const roll = nextFloat(s.rng);
+        if (roll < d.chance) drops.push(makeItem(s, d.defId, d.qty));
+      }
+      s.loot.push({
+        id: 'L' + s.nextEntitySerial++,
+        kind: 'ENEMY_BODY',
+        pos: { x: u.pos.x, y: u.pos.y },
+        label: u.name + ' 的殘骸',
+        items: drops,
+      });
+      pushLog(s, 'DEATH', u.name + ' 被擊倒'
+        + (drops.length ? '，殘骸可搜刮' : '，身上沒有可用的東西'));
       continue;
     }
 
-    // 玩家單位死亡（§10.1）：屍體與身上所有武器留在原地
-    const weapons: Weapon[] = [];
-    if (u.equipped) weapons.push(u.equipped);
-    if (u.stowed) weapons.push(u.stowed);
-    s.corpses.push({
-      id: 'C' + s.nextEntitySerial++,
+    // 玩家單位死亡（§10.1 / §3.3）：兩把槍、**背包全部內容**與一份 DNA 留在原地。
+    // 這讓屍體回收從「回去撿那把砲」變成「回去撿我這一路搜刮的所有東西」——
+    // 玩家越貪，回去的動機越強，風險也越大。
+    const items: Item[] = [];
+    if (u.equipped) items.push(weaponItem(s, u.equipped));
+    if (u.stowed) items.push(weaponItem(s, u.stowed));
+    if (u.backpack) items.push(...u.backpack.items);
+    items.push(makeItem(s, RULES.loot.dnaDefId));
+    s.loot.push({
+      id: 'L' + s.nextEntitySerial++,
+      kind: 'PLAYER_BODY',
       pos: { x: u.pos.x, y: u.pos.y },
-      unitId: u.id,
-      weapons,
+      label: u.id + ' 的遺體',
+      items,
     });
     s.casualties += 1;
     if (s.activePlayerUnitId === u.id) s.activePlayerUnitId = null;
-    pushLog(s, 'DEATH', u.name + ' 陣亡於 (' + u.pos.x + ',' + u.pos.y + ')，裝備遺留原地');
+    pushLog(
+      s, 'DEATH',
+      u.name + ' 陣亡於 (' + u.pos.x + ',' + u.pos.y + ')，'
+        + '兩把槍、背包內容與一份 DNA 遺留原地',
+    );
 
     if (s.roster.length === 0) {
       s.result = 'WIPED';
@@ -475,7 +630,7 @@ function deployReinforcement(s: GameState, soldierId: string, events: EventSink)
   }
 
   s.roster = s.roster.filter((id) => id !== soldierId);
-  const unit = makeReinforcementSoldier(soldierId, spawn);
+  const unit = makeReinforcementSoldier(s, soldierId, spawn);
   const f = facingToward(spawn, pending.deathPos);
   if (f) unit.facing = f;
   s.units.push(unit);
@@ -503,7 +658,7 @@ export function movePath(state: GameState, to: Vec2): Vec2[] | null {
   return findPath(state, u.pos, to, { ignoreUnitIds: [u.id] });
 }
 
-export function corpseUnder(state: GameState): Corpse | null {
+export function lootUnder(state: GameState): LootPile | null {
   const u = activePlayerUnit(state);
-  return u ? corpseAt(state, u.pos) : null;
+  return u ? lootAt(state, u.pos) : null;
 }

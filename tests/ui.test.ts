@@ -106,7 +106,7 @@ describe('§6 按鈕配置', () => {
     expect(wait.parentElement!.id).toBe('move-cluster');
     const acts = Array.from(document.querySelectorAll('#actions button')).map(
       (b) => (b as HTMLElement).dataset.act);
-    expect(acts).toEqual(['SKILL', 'RELOAD', 'SWAP']);
+    expect(acts).toEqual(['MODE', 'SKILL', 'RELOAD', 'SWAP']);
   });
 
   it('技能鍵可展開收合，選單內容為空', async () => {
@@ -253,7 +253,7 @@ describe('§2/§3 統一點擊文法與射擊', () => {
     g.test.tap({ x: 8, y: 9 });
     g.test.tap({ x: 8, y: 9 });
     expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(hp);
-    expect(g.state.units[0].equipped!.ammo).toBe(3);
+    expect(g.state.units[0].equipped!.ammo).toBe(7);   // 彈匣 8，單發吃 1
     btn('#btn-log').click();
     expect(q('#log-panel')!.textContent).toContain('未命中');
   });

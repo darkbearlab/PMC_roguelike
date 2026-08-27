@@ -1,5 +1,6 @@
 [
   {
+    "_magazine": "v0.9：4 → 8。這是被射擊模式逼出來的必要調整，不是平衡調整 —— 連發一次吃 3 發，彈匣仍為 4 的話玩家會有一半的行動花在裝填上。8 發在混用模式下大約每三到四次行動裝填一次，這個數字待試玩驗證。",
     "id": "ar9",
     "name": "AR-9 制式步槍",
     "class": "LIGHT",
@@ -7,8 +8,12 @@
     "damageSpread": 5,
     "penetration": 0,
     "range": 8,
-    "magazine": 4,
-    "ammo": 4,
+    "magazine": 8,
+    "ammo": 8,
+    "ammoType": "RIFLE",
+    "weight": 6,
+    "modes": ["SINGLE", "BURST", "AUTO"],
+    "mode": "SINGLE",
     "fireTime": 10,
     "reloadTime": 10,
     "reloadSequence": null,
@@ -19,6 +24,7 @@
     "falloffPerTile": 0.08
   },
   {
+    "_modes": "重武器沒有模式（§2.4）。射擊模式是輕武器的專屬機制。",
     "id": "rr4",
     "name": "RR-4 無後座力砲",
     "class": "HEAVY",
@@ -28,6 +34,10 @@
     "range": 12,
     "magazine": 1,
     "ammo": 1,
+    "ammoType": "ROCKET",
+    "weight": 12,
+    "modes": ["SINGLE"],
+    "mode": "SINGLE",
     "fireTime": 20,
     "reloadTime": 20,
     "reloadSequence": "RR4_RELOAD",

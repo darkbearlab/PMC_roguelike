@@ -3,7 +3,7 @@
  * 射擊與移動的預覽已改為畫在戰場上，不再有面板，相關測試移到 ui.test.ts。
  */
 import { describe, it, expect } from 'vitest';
-import { corpsePanelHtml, selfPanelHtml } from '../src/ui/menus';
+import { lootPanelHtml, selfPanelHtml } from '../src/ui/menus';
 import { checkLegal, interactKindAt } from '../src/core/commands';
 import { run, testState, player } from './helpers';
 
@@ -68,7 +68,9 @@ describe('§11.1 相鄰格互動', () => {
     const s = testState(ROOM);
     expect(interactKindAt(s, T)).toBe('TERMINAL');
     expect(interactKindAt(s, { x: 1, y: 3 })).toBe('SUPPLY');
-    expect(interactKindAt(s, { x: 1, y: 1 })).toBeNull();   // 主目標未完成，不能撤離
+    // v0.9：撤離不再需要先完成主目標（§5.1）。系統不禁止，只標價 ——
+    // 主目標沒完成就是合約失敗，但戰利品照樣帶出去。
+    expect(interactKindAt(s, { x: 1, y: 1 })).toBe('EXTRACT');
     expect(interactKindAt(s, { x: 5, y: 2 })).toBeNull();
   });
 });
@@ -96,10 +98,12 @@ describe('僅存的兩張浮動小卡', () => {
     player(s).pos = { x: 5, y: 2 };
     s = run(s, { type: 'FIRE', target: { x: 5, y: 2 } });
     s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
-    const html = corpsePanelHtml(s, { x: 5, y: 2 });
+    const html = lootPanelHtml(s, { x: 5, y: 2 });
     expect(html).toContain('的遺體');
     expect(html).toContain('AR-9 制式步槍');
     expect(html).toContain('RR-4 無後座力砲');
-    expect(html).toContain('需站在該格');
+    expect(html).toContain('需走到附近');
+    expect(html).toContain('DNA 樣本');       // 己方屍體一定有一份 DNA（§4.4）
+    expect(html).toContain('步槍彈');         // 背包內容也留在屍體上（§3.3）
   });
 });
