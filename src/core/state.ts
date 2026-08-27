@@ -133,6 +133,46 @@ export interface Unit {
   transitioning: boolean;
   /** 進行中的系列動作（§5.5）。非 null 時，這個單位輪到時只能執行下一步。 */
   pendingSequence: Sequence | null;
+  /** 已宣告、下次輪到必定執行的動作（§9.4）。玩家單位一律 null。 */
+  declared: Declaration | null;
+  /** SEARCH 收尾還要巡視幾次（§9.3）。 */
+  patrolLeft: number;
+}
+
+/**
+ * 敵人宣告的下一個動作（§9.4）。
+ *
+ * **宣告具有拘束力**：下次輪到它時執行這個，不重新評估。
+ * 這是口令機制的回報所在 —— 玩家聽到「繞右邊，開火」之後移動破壞它的射線，
+ * 那一發就整個浪費掉。代價是 AI 依據稍舊的資訊行動，這是刻意的取捨：
+ * 可被預測、可被玩弄的敵人，比反應完美的敵人有趣得多。
+ *
+ * 它是規則狀態（會決定下一次真的做什麼），所以進 GameState；
+ * 顯示與動畫狀態不進（§12.18）。
+ */
+export type DeclKind =
+  | 'SPOT'          // 剛發現目標（轉入警戒的那一聲）
+  | 'ADVANCE'       // 因為要靠近而移動
+  | 'FLANK'         // 因為要繞掉目標的掩蔽而移動
+  | 'TAKE_COVER'    // 因為要替自己找掩蔽而移動
+  | 'FIRE'
+  | 'CROUCH'
+  | 'RELOAD'
+  | 'SEARCH_MOVE'
+  | 'PATROL'        // 警戒巡視：原地轉 90 度
+  | 'HOLD'          // 原地不動
+  | 'LOST';         // 宣告在執行時失效
+
+export interface Declaration {
+  kind: DeclKind;
+  /** 移動類：要走到哪一格。 */
+  to?: Vec2;
+  /** 射擊類：要打哪裡。 */
+  target?: Vec2;
+  /** 巡視類：要轉到哪個方向。 */
+  facing?: Facing;
+  /** FLANK 專用：繞畫面的左邊還是右邊（給口令用）。 */
+  side?: 'LEFT' | 'RIGHT';
 }
 
 /**

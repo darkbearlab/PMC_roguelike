@@ -10,6 +10,8 @@ import { isPlayerTurn } from '../src/core/scheduler';
 import { activePlayerUnit, unitAt } from '../src/core/state';
 import { canAttack } from '../src/core/combat';
 import { facingFromDelta, manhattan } from '../src/core/grid';
+import { RULES } from '../src/core/content';
+import { countAmmo } from '../src/core/inventory';
 import type { Facing, GameState, Vec2 } from '../src/core/state';
 
 function botAction(s: GameState, goal: Vec2): GameState {
@@ -48,7 +50,16 @@ function botAction(s: GameState, goal: Vec2): GameState {
   return run(s, { type: 'WAIT' });
 }
 
-for (const seed of [1, 42, 999, 20260826, 7777]) {
+/**
+ * v0.10 §8.3：戰術 AI 的效果只能靠對照判斷。
+ * 同一支笨機器人、同一組種子，開關關掉與打開各跑一次。
+ */
+const SEEDS = [1, 42, 999, 20260826, 7777];
+
+function runOne(seed: number): {
+  seed: number; result: string; clock: number; deployed: number; casualties: number;
+  main: boolean; foes: number; ammoUsed: number; carried: number;
+} {
   let s = createInitialState(seed);
   let guard = 0;
   while (s.result === 'ONGOING' && guard++ < 20000) {
@@ -57,13 +68,55 @@ for (const seed of [1, 42, 999, 20260826, 7777]) {
     s = botAction(s, s.objectives.main.done ? s.map.startDropPoint : s.objectives.main.pos);
   }
   const foes = s.units.filter((u) => u.faction === 'ENEMY').length;
+  // 耗彈量：投入的總攜行量減去還在身上的（背包 + 槍內）
+  const start = RULES.backpack.startingItems.find((i) => i.defId === 'AMMO_RIFLE');
+  const issued = (start ? start.qty : 0) * s.deployed;
+  const me = s.units.find((u) => u.faction === 'PLAYER');
+  const left = me
+    ? countAmmo(me.backpack, 'RIFLE') + (me.equipped && me.equipped.ammoType === 'RIFLE' ? me.equipped.ammo : 0)
+    : 0;
+  return {
+    seed,
+    result: s.result,
+    clock: s.clock,
+    deployed: s.deployed,
+    casualties: s.casualties,
+    main: s.objectives.main.done,
+    foes,
+    ammoUsed: issued - left,
+    carried: s.extracted.length,
+  };
+}
+
+function report(label: string): void {
+  console.log('');
+  console.log('=== ' + label + ' ===');
+  const rows = SEEDS.map(runOne);
+  for (const r of rows) {
+    console.log(
+      `seed ${String(r.seed).padStart(9)} → ${r.result.padEnd(8)}`,
+      `時刻 ${String(r.clock).padStart(5)}`,
+      `投入 ${r.deployed}`, `陣亡 ${r.casualties}`,
+      `主目標 ${r.main ? '✓' : '✗'}`,
+      `殘敵 ${String(r.foes).padStart(2)}/10`,
+      `耗彈 ${String(r.ammoUsed).padStart(3)}`,
+      `帶出 ${r.carried}`,
+    );
+  }
+  const n = rows.length;
+  const avg = (f: (r: typeof rows[number]) => number): string => (rows.reduce((a, r) => a + f(r), 0) / n).toFixed(1);
   console.log(
-    `seed ${String(seed).padStart(9)} → ${s.result.padEnd(8)}`,
-    `時刻 ${String(s.clock).padStart(5)}`,
-    `投入 ${s.deployed}`, `陣亡 ${s.casualties}`,
-    `主目標 ${s.objectives.main.done ? '✓' : '✗'}`,
-    `殘敵 ${foes}/10`,
-    `帶出 ${s.extracted.length}`,
-    `遺留 ${s.loot.reduce((n, c) => n + c.items.length, 0)}`,
+    `平均：時刻 ${avg((r) => r.clock)}`,
+    `投入 ${avg((r) => r.deployed)}`,
+    `陣亡 ${avg((r) => r.casualties)}`,
+    `殘敵 ${avg((r) => r.foes)}`,
+    `耗彈 ${avg((r) => r.ammoUsed)}`,
+    `｜成功 ${rows.filter((r) => r.result === 'SUCCESS').length}/${n}`,
+    `主目標 ${rows.filter((r) => r.main).length}/${n}`,
   );
 }
+
+RULES.ai.tacticalBehaviour = false;
+report('v0.9 行為（tacticalBehaviour 關）');
+RULES.ai.tacticalBehaviour = true;
+report('v0.10 戰術 AI（tacticalBehaviour 開）');

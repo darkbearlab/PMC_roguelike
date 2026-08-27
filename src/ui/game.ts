@@ -884,6 +884,14 @@ export class Game {
       time: now,
     });
     // 回饋層畫在最上層。它只是被畫出來，不會擋住輸入也不會延後回合推進。
-    this.effects.draw(this.ctx, this.cam, now);
+    // 口令要知道「這個敵人看不看得見」與「玩家在哪」：
+    // 看得見畫在頭上，只聽得到就只報方位（§12.18）。
+    this.effects.draw(this.ctx, this.cam, now, {
+      seesUnit: (id) => {
+        const u = findUnit(this.state, id);
+        return !!u && isVisible(this.vision, this.state.map, u.pos);
+      },
+      anchor: activePlayerUnit(this.state)?.pos ?? null,
+    });
   }
 }

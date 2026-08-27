@@ -32,7 +32,15 @@ export type CombatEvent =
   | { kind: 'AMMO_OUT'; unitId: string; pos: Vec2 }
   | { kind: 'RELOAD'; unitId: string; pos: Vec2; weaponName: string }
   | { kind: 'OBJECTIVE'; pos: Vec2; text: string }
-  | { kind: 'DEPLOY'; unitId: string; pos: Vec2 };
+  | { kind: 'DEPLOY'; unitId: string; pos: Vec2 }
+  /**
+   * 敵人口令（§9.5）。**只在玩家聽得到時才會發出** —— 可聽範圍的判定屬於規則層，
+   * 不能丟給渲染層決定，否則「聽不到」就變成畫面上的巧合而不是規則。
+   *
+   * `pos` 給渲染層用：看得見的敵人把口令畫在頭上，聽得見但看不見的
+   * 只換算成方向指示（§12.18）—— 聽覺不該洩漏精確座標。
+   */
+  | { kind: 'CALLOUT'; unitId: string; pos: Vec2; code: string; text: string };
 
 /** 事件收集器。傳進規則層的函式，由它們往裡面 push。 */
 export type EventSink = CombatEvent[];

@@ -102,9 +102,14 @@ describe('§9.2 階段轉換耗時（取代兩段式察覺）', () => {
     const e = unit(s, 'E01');
     e.aiState = 'SEARCH';
     e.searchTimer = 1;
-    e.lastKnownTarget = { x: 20, y: 3 };     // 已經站在最後已知位置 → 這一次就放棄
+    e.lastKnownTarget = { x: 20, y: 3 };     // 已經站在最後已知位置 → 開始收尾
     player(s).nextActAt = s.clock + 1000;    // 讓排程器一定選到敵人
-    s = advanceOnce(s);
+    // v0.10：抵達最後已知位置後會先站定、再巡視 searchWrapUpTurns 次才放棄（§9.3）
+    for (let i = 0; i <= RULES.ai.searchWrapUpTurns + 1; i++) {
+      s = advanceOnce(s);
+      unit(s, 'E01').nextActAt = s.clock;
+      player(s).nextActAt = s.clock + 1000;
+    }
     expect(unit(s, 'E01').aiState).toBe('IDLE');
 
     // 回到 IDLE 之後再被發現，才又有窗口 —— 代價是玩家得先躲滿整個搜索期

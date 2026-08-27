@@ -136,12 +136,36 @@ describe('§8.8 與 AI 的互動', () => {
     expect(unit(s, 'E01').aiState).toBe('SEARCH');
   });
 
-  it('從沒發現過你的敵人會一直背對著 —— IDLE 不轉向（§9.1）', () => {
+  it('v0.10：IDLE 敵人會警戒巡視，背刺不再是白拿的（§9.3）', () => {
     let s = testState(OPEN, [{ archetype: 'SHOOTER', pos: at(9, 3), facing: 'E' }]);
-    s.units[0].nextActAt = 1000;
-    for (let i = 0; i < 5; i++) { s = advanceOnce(s); s.units[0].nextActAt += 1000; }
-    expect(unit(s, 'E01').aiState).toBe('IDLE');
-    expect(unit(s, 'E01').facing).toBe('E');
+    // 一開始它背對玩家，背刺成立
     expect(isBackstab(s.map, player(s), unit(s, 'E01'))).toBe(true);
+
+    s.units[0].nextActAt = 1000;
+    const facings = new Set<string>([unit(s, 'E01').facing]);
+    let spotted = false;
+    for (let i = 0; i < 8 && !spotted; i++) {
+      s = advanceOnce(s);
+      s.units[0].nextActAt += 1000;
+      facings.add(unit(s, 'E01').facing);
+      spotted = unit(s, 'E01').aiState !== 'IDLE';
+    }
+    expect(facings.size).toBeGreaterThan(1);   // 盲區會轉
+    expect(spotted).toBe(true);                // 轉到某一刻就看到你了
+  });
+
+  it('關掉 tacticalBehaviour 就回到 v0.9：IDLE 完全不轉向', () => {
+    const before = RULES.ai.tacticalBehaviour;
+    try {
+      RULES.ai.tacticalBehaviour = false;
+      let s = testState(OPEN, [{ archetype: 'SHOOTER', pos: at(9, 3), facing: 'E' }]);
+      s.units[0].nextActAt = 1000;
+      for (let i = 0; i < 5; i++) { s = advanceOnce(s); s.units[0].nextActAt += 1000; }
+      expect(unit(s, 'E01').aiState).toBe('IDLE');
+      expect(unit(s, 'E01').facing).toBe('E');
+      expect(isBackstab(s.map, player(s), unit(s, 'E01'))).toBe(true);
+    } finally {
+      RULES.ai.tacticalBehaviour = before;
+    }
   });
 });

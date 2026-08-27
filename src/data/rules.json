@@ -71,7 +71,18 @@
 
   "ai": {
     "_searchTime": "搜索持續的時間量。v0.6 的 3 回合換算成 30（每回合約等於玩家兩個動作）。",
-    "searchTime": 30
+    "searchTime": 30,
+
+    "_tacticalBehaviour": "v0.10 的總開關。關掉就回到 v0.9 的行為（貪婪逼近、不蹲、IDLE 不轉向、不喊口令）。這一版的效果只能靠對照判斷得出來，所以沿用命中率擲骰開關的作法。",
+    "tacticalBehaviour": true,
+
+    "_patrolTurnTime": "警戒巡視（原地轉 90 度）的時間花費。轉向本身是 0 成本，而 AI 不得選 0 成本動作（§5.4），所以巡視必須是一個獨立的、有花費的動作。",
+    "patrolTurnTime": 10,
+    "_searchWrapUp": "抵達最後已知位置後，先巡視幾次再轉回 IDLE。讓噪音引誘更有價值。",
+    "searchWrapUpTurns": 2,
+
+    "_callout": "口令的可聽範圍（曼哈頓）。牆壁不阻擋，與噪音機制一致（§8.3 的刻意簡化）。",
+    "calloutRange": 12
   },
 
   "combat": {

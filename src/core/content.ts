@@ -6,6 +6,7 @@ import rulesJson from '../data/rules.json';
 import weaponsJson from '../data/weapons.json';
 import actorsJson from '../data/actors.json';
 import itemsJson from '../data/items.json';
+import calloutsJson from '../data/callouts.json';
 import mission01Json from '../data/maps/mission_01.json';
 
 import type { FireMode, Weapon, WeaponClass } from './state';
@@ -37,7 +38,14 @@ export interface Rules {
   /** §4 搜刮。 */
   loot: { takeTime: number; dnaDefId: string };
   sequences: Record<string, unknown>;
-  ai: { searchTime: number };
+  ai: {
+    searchTime: number;
+    /** v0.10 總開關。關掉就回到 v0.9 的敵人行為。 */
+    tacticalBehaviour: boolean;
+    patrolTurnTime: number;
+    searchWrapUpTurns: number;
+    calloutRange: number;
+  };
   combat: {
     enableToHitRoll: boolean;
     hitFloor: number;
@@ -65,6 +73,14 @@ export interface ActorArchetype {
   attack?: Weapon;
   /** 敵人屍體的掉落表（§4.2）。抽值順序固定：由上而下各抽一次。 */
   loot?: { defId: string; qty: number; chance: number }[];
+  /** 落點評分的權重（§9.2）。權重必須依原型不同，否則三種敵人會退化成同一種打法。 */
+  ai?: {
+    approach: number;
+    selfCover: number;
+    targetExposure: number;
+    canShoot: number;
+    crouchInCover: boolean;
+  };
 }
 
 /** data/items.json 的一筆定義。 */
@@ -84,6 +100,11 @@ export const ITEMS: Record<string, ItemDef> = Object.fromEntries(
   Object.entries(itemsJson as Record<string, unknown>)
     .filter(([k]) => !k.startsWith('_')),
 ) as Record<string, ItemDef>;
+
+/** 敵人口令的文字（§9.5）。理由碼 → 文字，全部在資料檔。 */
+export const CALLOUTS: Record<string, string> = Object.fromEntries(
+  Object.entries(calloutsJson as Record<string, string>).filter(([k]) => !k.startsWith('_')),
+);
 
 /** 射擊模式的循環順序（§2.5：點一下循環切換）。 */
 export function fireModeOrder(): FireMode[] {
