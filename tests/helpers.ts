@@ -1,10 +1,11 @@
-import type { GameState, Unit, Vec2 } from '../src/core/state';
+import type { Facing, GameState, Unit, Vec2 } from '../src/core/state';
 import { activePlayerUnit, findUnit } from '../src/core/state';
 import type { RawMap } from '../src/core/map';
 import { createInitialState } from '../src/core/setup';
 import type { Command } from '../src/core/commands';
 import { applyCommand } from '../src/core/commands';
 import { isPlayerTurn } from '../src/core/scheduler';
+import { facingToward } from '../src/core/grid';
 import type { CombatEvent } from '../src/core/events';
 
 /**
@@ -54,9 +55,16 @@ export const LEGEND = {
 };
 
 /** 由 ASCII 列建立測試用狀態。地圖必須含至少一個 D 與剛好一個 T。 */
+/**
+ * @param enemies 未指定 `facing` 時，測試用敵人**預設面向出生點**。
+ *
+ * v0.8 起敵人的視野是前方半平面（§7.5），預設面向南的話絕大多數既有測試裡的
+ * 敵人會突然看不見玩家 —— 那些測試想驗的是偵測、掩蔽、AI 狀態機，不是面向。
+ * 面向本身有自己的測試檔（sight.test.ts），要驗盲區就在那裡明寫 `facing`。
+ */
 export function testState(
   rows: string[],
-  enemies: { archetype: string; pos: Vec2 }[] = [],
+  enemies: { archetype: string; pos: Vec2; facing?: Facing }[] = [],
   seed = 1,
 ): GameState {
   let start: Vec2 | null = null;
@@ -74,7 +82,10 @@ export function testState(
     legend: LEGEND,
     tiles: rows,
     startDropPoint: start,
-    enemies,
+    enemies: enemies.map((e) => ({
+      ...e,
+      facing: e.facing ?? facingToward(e.pos, start as Vec2) ?? 'S',
+    })),
   };
   return createInitialState(seed, raw);
 }

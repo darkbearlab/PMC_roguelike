@@ -47,70 +47,80 @@
       "pos": {
         "x": 11,
         "y": 9
-      }
+      },
+      "facing": "W"
     },
     {
       "archetype": "HULK",
       "pos": {
         "x": 12,
         "y": 11
-      }
+      },
+      "facing": "W"
     },
     {
       "archetype": "RUNNER",
       "pos": {
         "x": 18,
         "y": 12
-      }
+      },
+      "facing": "W"
     },
     {
       "archetype": "SHOOTER",
       "pos": {
         "x": 19,
         "y": 9
-      }
+      },
+      "facing": "W"
     },
     {
       "archetype": "SHOOTER",
       "pos": {
         "x": 29,
         "y": 3
-      }
+      },
+      "facing": "S"
     },
     {
       "archetype": "SHOOTER",
       "pos": {
         "x": 26,
         "y": 10
-      }
+      },
+      "facing": "S"
     },
     {
       "archetype": "SHOOTER",
       "pos": {
         "x": 28,
         "y": 16
-      }
+      },
+      "facing": "N"
     },
     {
       "archetype": "RUNNER",
       "pos": {
         "x": 28,
         "y": 13
-      }
+      },
+      "facing": "W"
     },
     {
       "archetype": "RUNNER",
       "pos": {
         "x": 13,
         "y": 18
-      }
+      },
+      "facing": "E"
     },
     {
       "archetype": "HULK",
       "pos": {
         "x": 26,
         "y": 21
-      }
+      },
+      "facing": "N"
     }
   ]
 }

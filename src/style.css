@@ -44,7 +44,7 @@ html, body {
 #hud {
   position: absolute;
   top: env(safe-area-inset-top); left: 0; right: 0;
-  padding: 6px 62px 7px 8px;   /* 右側留給日誌鍵 */
+  padding: 6px 172px 7px 8px;  /* 右側留給右上工具列的三顆鍵 */
   background: linear-gradient(to bottom, var(--glass), rgba(11, 15, 20, 0.34));
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
@@ -78,6 +78,15 @@ html, body {
   font-size: 11px; letter-spacing: 2px;
   pointer-events: none;
 }
+
+/* 蹲姿時方向鍵分兩種意思：一種會走出去，另一種只是轉頭（§12.14）。
+   用外框而不是換色 —— 灰掉已經代表「不能按」，顏色再多一種會撞在一起。 */
+#dpad button[data-dir].will-turn {
+  border-style: dashed;
+  border-color: var(--warn);
+  color: var(--warn);
+}
+#dpad button[data-dir].will-step { border-color: var(--accent); }
 
 /* ---------------- 控制列（浮動，中間留空讓地圖可點） ---------------- */
 #controls {
@@ -142,12 +151,16 @@ html, body {
 #controls button[disabled] { opacity: .26; }
 #controls button.on { border-color: var(--accent); background: rgba(20, 62, 84, 0.85); }
 
-/* 日誌開合：畫面右上 */
-#btn-log {
+/* 右上工具列：置中回鏡頭 / 點地圖移動開關 / 日誌 */
+#top-right {
   position: absolute;
   top: calc(env(safe-area-inset-top) + 6px);
   right: 8px;
   z-index: 6;
+  display: flex;
+  gap: var(--btn-gap);
+}
+#top-right button {
   width: 48px; height: 48px;
   background: var(--glass);
   backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
@@ -155,7 +168,10 @@ html, body {
   color: var(--ink); font-size: 17px; font-weight: 600;
   text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
 }
-#btn-log.on { border-color: var(--accent); background: rgba(20, 62, 84, 0.85); }
+#top-right button.on { border-color: var(--accent); background: rgba(20, 62, 84, 0.85); }
+/* 關掉的點擊移動：灰字加刪除線，一眼看得出是「關著」而不是「不能按」 */
+#top-right button.off { color: var(--ink-dim); text-decoration: line-through; }
+#btn-recenter { border-color: var(--warn); color: var(--warn); }
 
 /* ---------------- 情境／紀錄面板：浮動小卡，不再是佔半個畫面的抽屜 ---------------- */
 .sheet {

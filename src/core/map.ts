@@ -1,7 +1,7 @@
 /**
  * 地圖解析與地形查詢（§13）。地圖是手工資料檔，不做程序化生成。
  */
-import type { MapData, TileType, Vec2 } from './state';
+import type { MapData, TileType, Vec2, Facing } from './state';
 
 export interface RawMap {
   id: string;
@@ -11,7 +11,8 @@ export interface RawMap {
   legend: Record<string, string>;
   tiles: string[];
   startDropPoint: Vec2;
-  enemies: { archetype: string; pos: Vec2 }[];
+  /** facing 是**初始面向**（§13.2）。未指定時預設為南。 */
+  enemies: { archetype: string; pos: Vec2; facing?: Facing }[];
 }
 
 const VALID_TILES = new Set<TileType>([

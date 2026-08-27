@@ -11,10 +11,13 @@ import { activePlayerUnit, corpseAt } from '../core/state';
 import type { WeaponSlot } from '../core/commands';
 import { checkLegal, commandTime, interactTarget } from '../core/commands';
 import { sameTile } from '../core/grid';
-import { effectiveSightRange } from '../core/stance';
 import { describe as describeSequence } from '../core/sequence';
 import { RULES } from '../core/content';
 import { esc } from './dom';
+
+const FACING_ZH: Record<string, string> = {
+  N: '北', NE: '東北', E: '東', SE: '東南', S: '南', SW: '西南', W: '西', NW: '西北',
+};
 
 export interface MenuHandlers {
   pickup(corpseId: string, weaponIndex: number, slot: WeaponSlot): void;
@@ -56,7 +59,11 @@ export function selfPanelHtml(state: GameState): string {
       : '')
     + '<p class="note">手持：' + esc(w ? w.name + ' ' + w.ammo + '/' + w.magazine : '空手')
     + '　收納：' + esc(st ? st.name + ' ' + st.ammo + '/' + st.magazine : '無')
-    + '<br>視野 ' + effectiveSightRange(u) + ' 格（曼哈頓，蹲姿縮短）・面向 ' + u.facing + '（面向不影響視野，僅美術用）</p>'
+    + '<br>視野 ' + u.sightRange + ' 格（曼哈頓）・面向 ' + FACING_ZH[u.facing]
+    + (u.stance === 'CROUCH'
+      ? '<br><b>蹲姿：只看得見面向的前方半平面</b>，後方三格是盲區。方向鍵可轉向（不花時間）。'
+      : '<br>站姿為全方位視野，面向不影響看得見什麼。')
+    + '</p>'
     + '<div class="menu-actions">'
     + (u.pendingSequence
       ? '<button class="danger" data-do="abort-seq">中止 ' + esc(describeSequence(u.pendingSequence))

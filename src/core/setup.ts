@@ -1,7 +1,7 @@
 /**
  * 初始狀態建立。所有數值來自 data/ 的 JSON，這裡不寫死任何平衡數字。
  */
-import type { GameState, Objective, Unit, Vec2, Weapon } from './state';
+import type { Facing, GameState, Objective, Unit, Vec2, Weapon } from './state';
 import type { RawMap } from './map';
 import { parseMap, findTiles } from './map';
 import { createRng } from './rng';
@@ -13,6 +13,7 @@ function makeUnit(
   name: string,
   pos: Vec2,
   weapons: { equipped: Weapon | null; stowed: Weapon | null },
+  facing: Facing = 'S',
 ): Unit {
   const a = archetype(archetypeId);
   return {
@@ -28,7 +29,7 @@ function makeUnit(
     aim: a.aim,
     evasion: a.evasion,
     stance: 'STAND',
-    facing: 'S',
+    facing,
     sightRange: a.sightRange,
     equipped: weapons.equipped,
     stowed: weapons.stowed,
@@ -60,7 +61,8 @@ export function makeReinforcementSoldier(id: string, pos: Vec2): Unit {
   return u;   // nextActAt 由 deployReinforcement 依 clock 設定
 }
 
-export function makeEnemy(archetypeId: string, index: number, pos: Vec2): Unit {
+/** @param facing 初始面向（§13.2）。未指定時預設為南。 */
+export function makeEnemy(archetypeId: string, index: number, pos: Vec2, facing: Facing = 'S'): Unit {
   const a = archetype(archetypeId);
   if (!a.attack) throw new Error('敵人原型 ' + archetypeId + ' 缺少 attack 資料');
   const id = 'E' + String(index + 1).padStart(2, '0');
@@ -68,7 +70,7 @@ export function makeEnemy(archetypeId: string, index: number, pos: Vec2): Unit {
   return makeUnit(archetypeId, id, name, pos, {
     equipped: cloneWeapon(a.attack),
     stowed: null,
-  });
+  }, facing);
 }
 
 export function rosterIds(): string[] {
@@ -98,7 +100,7 @@ export function createInitialState(seed: number, rawMap: RawMap = MISSION_01): G
   const units: Unit[] = [makeStartingSoldier(firstId, map.startDropPoint)];
   rawMap.enemies.forEach((e, i) => {
     if (!ACTORS[e.archetype]) throw new Error('地圖引用了未知的敵人原型 ' + e.archetype);
-    units.push(makeEnemy(e.archetype, i, e.pos));
+    units.push(makeEnemy(e.archetype, i, e.pos, e.facing));
   });
 
   return {

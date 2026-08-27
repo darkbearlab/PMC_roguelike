@@ -83,7 +83,9 @@ for (const [x, y] of spots) {
     const cam = window.__game.cam;
     const blockers = [
       document.querySelector('#hud').getBoundingClientRect(),
-      ...[...document.querySelectorAll('#controls button, #btn-log')].map((e) => e.getBoundingClientRect()),
+      ...[...document.querySelectorAll('#controls button, #top-right button')]
+        .filter((e) => !e.classList.contains('hidden'))
+        .map((e) => e.getBoundingClientRect()),
     ];
     const check = (tx, ty) => {
       const cx = cam.ox + (tx + 0.5) * cam.tile;

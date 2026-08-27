@@ -78,7 +78,7 @@ describe('§5.2 時間成本全部來自資料檔', () => {
     expect(commandTime(s, { type: 'MOVE', dir: 'E' })).toBe(10);
     expect(commandTime(s, { type: 'WAIT' })).toBe(10);
     expect(commandTime(s, { type: 'INTERACT', pos: { x: 1, y: 1 } })).toBe(10);
-    expect(commandTime(s, { type: 'TOGGLE_STANCE' })).toBe(0);
+    expect(commandTime(s, { type: 'TOGGLE_STANCE' })).toBe(3);   // v0.8
     expect(commandTime(s, { type: 'SET_FACING', facing: 'N' })).toBe(0);
     expect(commandTime(s, { type: 'SWAP_WEAPON' })).toBe(RULES.time.swap.HEAVY);
   });
@@ -97,12 +97,21 @@ describe('§5.2 時間成本全部來自資料檔', () => {
 });
 
 describe('§5.4 零成本動作不會卡住排程器', () => {
-  it('玩家連續切換姿勢不前進時間，也不失去行動權', () => {
+  it('玩家連續轉向不前進時間，也不失去行動權', () => {
     let s = testState(OPEN, [{ archetype: 'HULK', pos: { x: 11, y: 3 } }]);
-    for (let i = 0; i < 20; i++) s = run(s, { type: 'TOGGLE_STANCE' });
+    const dirs = ['N', 'E', 'S', 'W'] as const;
+    for (let i = 0; i < 20; i++) {
+      s = run(s, { type: 'SET_FACING', facing: dirs[i % 4] });
+    }
     expect(s.clock).toBe(0);
     expect(player(s).nextActAt).toBe(0);
     expect(isPlayerTurn(s)).toBe(true);
+  });
+
+  it('姿勢從 v0.8 起不是 0 成本了：連按會真的把時間花掉', () => {
+    let s = testState(OPEN, [{ archetype: 'HULK', pos: { x: 11, y: 3 } }]);
+    s = run(s, { type: 'TOGGLE_STANCE' });
+    expect(player(s).nextActAt).toBe(3);
   });
 
   it('AI 不會選 0 成本動作：讓敵人連續行動一千次不會無窮迴圈', () => {

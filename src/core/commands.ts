@@ -58,10 +58,23 @@ export function swapTime(u: Unit): number {
  * 這個指令要花多少時間（§5.2）。UI 用它在按鈕上顯示花費。
  * 所有數值都來自資料檔，程式碼中不寫死。
  */
+/**
+ * 蹲姿的「先轉向、再移動」（§12.14）。
+ *
+ * 蹲下時方向鍵若與當前面向不同，這一下**只轉向**（0 時間），要再按一次才走。
+ * 這是刻意的防呆：蹲姿的視野是面向決定的，玩家想調整視野時最不該發生的事
+ * 就是意外離開掩體。站立時面向不影響任何規則，所以直接走。
+ */
+export function movePhase(u: Unit, dir: Facing): 'TURN' | 'STEP' {
+  return u.stance === 'CROUCH' && u.facing !== dir ? 'TURN' : 'STEP';
+}
+
 export function commandTime(state: GameState, cmd: Command): number | null {
   const u = activePlayerUnit(state);
   switch (cmd.type) {
-    case 'MOVE': return u ? u.moveTime : RULES.time.move;
+    case 'MOVE':
+      if (!u) return RULES.time.move;
+      return movePhase(u, cmd.dir) === 'TURN' ? RULES.time.facing : u.moveTime;
     case 'SET_STANCE':
     case 'TOGGLE_STANCE': return RULES.time.stance;
     case 'SET_FACING': return RULES.time.facing;
@@ -134,6 +147,8 @@ export function checkLegal(state: GameState, cmd: Command): Legality {
 function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
   switch (cmd.type) {
     case 'MOVE': {
+      // 蹲姿的第一下是轉向，轉向永遠合法 —— 面向牆壁蹲著也是一種選擇
+      if (movePhase(u, cmd.dir) === 'TURN') return OK;
       const to = { x: u.pos.x + DIR_VEC[cmd.dir].x, y: u.pos.y + DIR_VEC[cmd.dir].y };
       if (!terrainPassable(state, to)) return no('地形不可通行');
       if (occupiedBy(state, to, [u.id])) return no('該格已被佔據');
@@ -278,9 +293,9 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
 
   switch (cmd.type) {
     case 'MOVE': {
-      const to = { x: u.pos.x + DIR_VEC[cmd.dir].x, y: u.pos.y + DIR_VEC[cmd.dir].y };
+      if (movePhase(u, cmd.dir) === 'TURN') { u.facing = cmd.dir; break; }
       u.facing = cmd.dir;
-      u.pos = to;
+      u.pos = { x: u.pos.x + DIR_VEC[cmd.dir].x, y: u.pos.y + DIR_VEC[cmd.dir].y };
       break;
     }
     case 'SET_STANCE':

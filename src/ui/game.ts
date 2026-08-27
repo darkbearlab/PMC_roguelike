@@ -11,7 +11,8 @@ import type { Facing, GameState, Vec2 } from '../core/state';
 import { activePlayerUnit, corpseAt, findUnit, unitAt } from '../core/state';
 import type { Command, WeaponSlot } from '../core/commands';
 import {
-  applyCommand, checkLegal, commandTime, interactKindAt, interactTarget, movePath, swapTime,
+  applyCommand, checkLegal, commandTime, interactKindAt, interactTarget, movePath, movePhase,
+  swapTime,
 } from '../core/commands';
 import { activeUnit, isMissionOver, isPlayerTurn } from '../core/scheduler';
 import { describe as describeSequence } from '../core/sequence';
@@ -36,7 +37,7 @@ import {
 } from './modals';
 import { BUILD_ID } from './build';
 
-const TAP_SLOP = 12;
+const TAP_SLOP = 10;   // §12.15：超過這個位移就是拖曳，不是點擊
 const TAP_MS = 700;
 
 type ModalKind = 'NONE' | 'REINFORCE' | 'ABORT' | 'SUMMARY' | 'SPLASH';
@@ -71,6 +72,16 @@ export class Game {
   private vision: Vision;
   private ghosts = new Map<string, Ghost>();
   private pan: Vec2 = { x: 0, y: 0 };
+  /** 點地圖尋路移動的開關（§12.16）。預設開啟。 */
+  private tapMove = true;
+  /**
+   * 演出期間的鏡頭強制目標（§12.15）。
+   *
+   * 玩家拖到別處看的時候，若不把鏡頭帶回正在行動的敵人，v0.6 花一整版
+   * 建立的逐一演出等於沒有播 —— 自由鏡頭不可以悄悄把回饋可讀性吃掉。
+   * 輪回玩家時清空。
+   */
+  private spotlight: Vec2 | null = null;
   private focus: Vec2;
   private sel: Sel = null;
   private auto: AutoMove | null = null;
@@ -125,7 +136,7 @@ export class Game {
     this.state = state;
     this.effects.push(events, performance.now());
     if (isPlayerTurn(this.state)) this.skipEnemyTurn = false;
-    this.pan = { x: 0, y: 0 };
+    this.recenter();               // 玩家做了事 → 鏡頭回到士兵（§12.15）
     this.refresh();
     return true;
   }
@@ -135,7 +146,7 @@ export class Game {
     this.ghosts.clear();
     this.auto = null;
     this.sel = null;
-    this.pan = { x: 0, y: 0 };
+    this.recenter();
     this.modal = 'NONE';
     this.skillOpen = false;
     this.skipEnemyTurn = false;
@@ -150,7 +161,8 @@ export class Game {
     this.syncVision();
     this.updateGhosts();
     const me = activePlayerUnit(this.state);
-    if (me) this.focus = { ...me.pos };
+    if (this.spotlight) this.focus = { ...this.spotlight };
+    else if (me) this.focus = { ...me.pos };
     this.validateSelection();
 
     renderHud(this.state);
@@ -175,6 +187,16 @@ export class Game {
       top: Math.max(0, hud.bottom + pad),
       bottom: Math.min(this.viewH, controls.top - pad),
     };
+  }
+
+  /** 鏡頭有沒有被玩家拖離士兵。 */
+  private panned(): boolean {
+    return this.pan.x !== 0 || this.pan.y !== 0;
+  }
+
+  /** 鏡頭回到士兵。任何玩家動作之後也會自動呼叫（§12.15）。 */
+  private recenter(): void {
+    this.pan = { x: 0, y: 0 };
   }
 
   private syncVision(): void {
@@ -314,7 +336,10 @@ export class Game {
       return;
     }
 
-    // 其餘可通行格 → 顯示路徑與 AP；再點一次沿路徑移動
+    // 其餘可通行格 → 顯示路徑與總時間；再點一次沿路徑移動。
+    // 這一段（也只有這一段）受「點地圖移動」開關控制 —— 鎖定、屍體、
+    // 互動、看自己都不受影響（§12.16）。
+    if (!this.tapMove) { this.clearSel(); return; }
     const path = movePath(this.state, p);
     if (!path || path.length === 0) { this.clearSel(); return; }   // 非法目標 → 無反應
     const s = this.sel;
@@ -419,6 +444,10 @@ export class Game {
     for (const btn of $$<HTMLButtonElement>('#dpad button[data-dir]')) {
       const dir = btn.dataset.dir as Facing;
       btn.disabled = busy || !checkLegal(s, { type: 'MOVE', dir }).ok;
+      // 蹲姿時同一顆鍵有兩種意思，玩家必須在按下去之前就分得出來（§12.14）
+      const phase = u && u.stance === 'CROUCH' ? movePhase(u, dir) : null;
+      btn.classList.toggle('will-turn', phase === 'TURN');
+      btn.classList.toggle('will-step', phase === 'STEP');
     }
     const en = (sel: string, ok: boolean): void => {
       $<HTMLButtonElement>(sel).disabled = busy || !ok;
@@ -443,6 +472,8 @@ export class Game {
 
     $<HTMLButtonElement>('button[data-act="SKILL"]').classList.toggle('on', this.skillOpen);
     $<HTMLButtonElement>('#btn-log').classList.toggle('on', this.logOpen);
+    $<HTMLButtonElement>('#btn-tapmove').classList.toggle('off', !this.tapMove);
+    show($('#btn-recenter'), this.panned());
     show($('#skill-menu'), this.skillOpen);
     if (this.skillOpen) {
       $('#skill-menu').innerHTML = '<p class="note">（尚無可用技能）</p>';
@@ -595,6 +626,16 @@ export class Game {
       this.updateLog();
       this.updateControls();
     });
+    $('#btn-tapmove').addEventListener('click', () => {
+      this.tapMove = !this.tapMove;
+      // 關掉時把還掛著的移動預覽收掉，免得留一條走不了的路徑在畫面上
+      if (!this.tapMove && this.sel && this.sel.kind === 'MOVE') this.clearSel();
+      this.updateControls();
+    });
+    $('#btn-recenter').addEventListener('click', () => {
+      this.recenter();
+      this.refresh();
+    });
 
     this.bindCanvas();
     this.bindKeyboard();
@@ -624,14 +665,18 @@ export class Game {
       const dx = p.x - start.x;
       const dy = p.y - start.y;
       if (!dragging && Math.hypot(dx, dy) > TAP_SLOP) dragging = true;
-      if (dragging) this.pan = { x: panStart.x + dx, y: panStart.y + dy };
+      // 拖曳只在玩家自己決策的期間有效：演出時鏡頭歸演出管（§12.15）
+      if (dragging && isPlayerTurn(this.state) && this.modal === 'NONE') {
+        this.pan = { x: panStart.x + dx, y: panStart.y + dy };
+      }
     });
     const end = (e: PointerEvent): void => {
       if (!downAt) return;
       const elapsed = performance.now() - downAt;
       const p = local(e);
       downAt = 0;
-      if (!dragging && elapsed < TAP_MS) this.tapTile(screenToTile(this.cam, p.x, p.y));
+      if (dragging) { this.updateControls(); return; }   // 讓置中鍵出現
+      if (elapsed < TAP_MS) this.tapTile(screenToTile(this.cam, p.x, p.y));
     };
     this.canvas.addEventListener('pointerup', end);
     this.canvas.addEventListener('pointercancel', () => { downAt = 0; });
@@ -724,7 +769,15 @@ export class Game {
 
       if (isPlayerTurn(this.state) || this.state.pendingReinforcement || isMissionOver(this.state)) break;
       if (this.skipEnemyTurn) continue;   // 跳過：只結算，不停下來演
-      if (wasVisible || nowVisible || hpAfter !== hpBefore) break;
+      if (wasVisible || nowVisible || hpAfter !== hpBefore) {
+        // 鏡頭強制帶到正在行動的那個單位，並取消玩家的手動平移（§12.15）
+        this.spotlight = { ...(after ? after.pos : (actor as { pos: Vec2 }).pos) };
+        this.recenter();
+        break;
+      }
+    }
+    if (isPlayerTurn(this.state) || this.state.pendingReinforcement || isMissionOver(this.state)) {
+      this.spotlight = null;
     }
     this.refresh();
   }
@@ -747,10 +800,18 @@ export class Game {
       armor: armorRange(foe),
       time: me.equipped.fireTime,
       // 只給一個變小的數字沒有用：要說出等級與幅度，玩家才知道該繞側翼（§12.10）
+      // 背刺會把掩蔽歸零，此時要寫「掩蔽已失效」而不是把掩蔽藏起來 ——
+      // 玩家要看得出「本來有掩蔽，是我繞到背後才沒用的」（§12.10）
       coverNote: bd.coverLevel === 'NONE'
         ? ''
-        : COVER_LABEL[bd.coverLevel] + ' −' + Math.round(bd.cover * 100) + '%',
+        : bd.backstab
+          ? COVER_LABEL[bd.coverLevel] + ' 已失效'
+          : COVER_LABEL[bd.coverLevel] + ' −' + Math.round(bd.cover * 100) + '%',
       coverTiles: bd.coverTiles,
+      backstabNote: bd.backstab
+        ? '背刺 +' + Math.round(bd.backstabBonus * 100) + '%'
+          + (RULES.combat.backstab.ignoreCover ? '・無視掩蔽' : '')
+        : '',
     };
   }
 

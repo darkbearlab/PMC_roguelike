@@ -3,7 +3,7 @@
  */
 import type { Vec2, Facing } from './state';
 
-/** 八向。`facing` 欄位仍然是八向（純美術朝向），移動不是。 */
+/** 八向。`facing` 是八向（v0.8 起會決定蹲姿與敵人的視野，見 core/sight.ts），移動不是。 */
 export const DIRECTIONS: Facing[] = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
 /**

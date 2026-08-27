@@ -9,6 +9,7 @@ import type { GameState, Unit, Vec2, Weapon } from './state';
 import { findUnit, unitAt } from './state';
 import { clamp, facingToward, manhattan } from './grid';
 import { hasLineOfSight } from './los';
+import { isBackstab } from './sight';
 import { nextFloat } from './rng';
 import { coverAgainst, type CoverLevel } from './cover';
 import { shooterStanceBonus, targetStancePenalty } from './stance';
@@ -54,10 +55,14 @@ export const alwaysHitChance: ToHitFn = () => RULES.combat.hitCeil;
 export const rolledHitChance: ToHitFn = (attacker, target, weapon, state) => {
   const dist = target ? manhattan(attacker.pos, target.pos) : 0;
   const falloff = Math.max(0, dist - weapon.optimalRange) * weapon.falloffPerTile;
-  const cover = target ? coverAgainst(state.map, target.pos, attacker.pos).penalty : 0;
+  const back = isBackstab(state.map, attacker, target);
+  const cover = back && RULES.combat.backstab.ignoreCover
+    ? 0
+    : target ? coverAgainst(state.map, target.pos, attacker.pos).penalty : 0;
   const raw = weapon.accuracy
     + attacker.aim
     + shooterStanceBonus(attacker)
+    + (back ? RULES.combat.backstab.bonus : 0)
     - (target ? target.evasion : 0)
     - targetStancePenalty(target)
     - cover
@@ -75,6 +80,9 @@ export interface HitBreakdown {
   coverLevel: CoverLevel;
   coverTiles: Vec2[];
   falloff: number;
+  /** 背刺成立（§8.8）：目標對我沒有視線。此時 cover 已經被歸零。 */
+  backstab: boolean;
+  backstabBonus: number;
 }
 
 export function hitBreakdown(
@@ -82,15 +90,20 @@ export function hitBreakdown(
 ): HitBreakdown {
   const info = coverAgainst(state.map, target.pos, attacker.pos);
   const dist = manhattan(attacker.pos, target.pos);
+  const back = isBackstab(state.map, attacker, target);
+  const ignored = back && RULES.combat.backstab.ignoreCover;
   return {
     chance: toHitChance(attacker, target, weapon, state),
     base: weapon.accuracy,
     shooterCrouch: shooterStanceBonus(attacker),
     targetCrouch: targetStancePenalty(target),
-    cover: info.penalty,
+    cover: ignored ? 0 : info.penalty,
+    // 掩蔽格照樣回報：玩家要看得出「本來有掩蔽，是背刺讓它失效」
     coverLevel: info.level,
     coverTiles: info.tiles,
     falloff: Math.max(0, dist - weapon.optimalRange) * weapon.falloffPerTile,
+    backstab: back,
+    backstabBonus: back ? RULES.combat.backstab.bonus : 0,
   };
 }
 

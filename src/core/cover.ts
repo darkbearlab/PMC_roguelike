@@ -16,9 +16,8 @@
 import type { GameState, MapData, Unit, Vec2 } from './state';
 import { activePlayerUnit } from './state';
 import { blocksMovement } from './map';
-import { unitsSeeEachOther } from './los';
+import { unitSees } from './sight';
 import { manhattan } from './grid';
-import { effectiveSightRange } from './stance';
 import { RULES } from './content';
 
 export type CoverLevel = 'NONE' | 'PARTIAL' | 'GOOD';
@@ -95,8 +94,8 @@ export function playerDefence(state: GameState): DefenceState {
   let threats = 0;
   for (const e of state.units) {
     if (e.faction !== 'ENEMY') continue;
-    if (manhattan(e.pos, me.pos) > effectiveSightRange(e)) continue;
-    if (!unitsSeeEachOther(state.map, e, me)) continue;
+    // 「看得到你的敵人」現在是有方向的：背對你的那個不算（§7.5）
+    if (!unitSees(state.map, e, me)) continue;
     threats++;
     const lvl = coverAgainst(state.map, me.pos, e.pos).level;
     if (worst === null || RANK[lvl] < RANK[worst]) worst = lvl;

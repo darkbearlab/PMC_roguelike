@@ -66,16 +66,19 @@ describe('§5 排程器：時間成本', () => {
     expect(activeUnit(t)!.id).toBe('E01');
   });
 
-  it('姿勢與面向 0 成本：執行後不讓出行動權', () => {
+  it('面向 0 成本：轉向後不讓出行動權', () => {
     let s = testState(OPEN, [{ archetype: 'HULK', pos: { x: 7, y: 4 } }]);
-    s = run(s, { type: 'TOGGLE_STANCE' });
-    expect(player(s).stance).toBe('CROUCH');
-    expect(player(s).nextActAt).toBe(0);
-    expect(isPlayerTurn(s)).toBe(true);          // 仍然輪到玩家
     s = run(s, { type: 'SET_FACING', facing: 'N' });
     expect(player(s).facing).toBe('N');
     expect(player(s).nextActAt).toBe(0);
-    expect(isPlayerTurn(s)).toBe(true);
+    expect(isPlayerTurn(s)).toBe(true);          // 仍然輪到玩家
+  });
+
+  it('v0.8：姿勢改成花 3，因為免費就等於免費掃視一圈', () => {
+    let s = testState(OPEN, [{ archetype: 'HULK', pos: { x: 7, y: 4 } }]);
+    s = run(s, { type: 'TOGGLE_STANCE' });
+    expect(player(s).stance).toBe('CROUCH');
+    expect(player(s).nextActAt).toBe(3);
   });
 
   it('等待花 10（等同移動一格），不是「用掉剩餘全部」', () => {
@@ -101,7 +104,7 @@ describe('§5 排程器：時間成本', () => {
     expect(commandTime(s, { type: 'WAIT' })).toBe(RULES.time.wait);
     expect(commandTime(s, { type: 'TOGGLE_STANCE' })).toBe(RULES.time.stance);
     expect(commandTime(s, { type: 'INTERACT', pos: { x: 1, y: 1 } })).toBe(RULES.time.interact);
-    expect(RULES.time.stance).toBe(0);
+    expect(RULES.time.stance).toBe(3);   // v0.8：姿勢不再免費
     expect(RULES.time.facing).toBe(0);
   });
 });

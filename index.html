@@ -34,7 +34,13 @@
 
       <div id="turn-banner" class="hidden"></div>
 
-      <button id="btn-log" type="button" title="戰鬥紀錄">誌</button>
+      <!-- 右上工具列：一橫排。刻意不往下堆 —— 往下堆會在地圖右緣蓋住格子，
+           而鏡頭的垂直夾制只保得住 HUD 底部以下、控制列頂部以上那一段（§12.8）。 -->
+      <div id="top-right">
+        <button id="btn-recenter" type="button" class="hidden" title="鏡頭回到士兵">◎</button>
+        <button id="btn-tapmove" type="button" title="點地圖尋路移動（開／關）">走</button>
+        <button id="btn-log" type="button" title="戰鬥紀錄">誌</button>
+      </div>
 
       <section id="tile-menu" class="sheet hidden" aria-live="polite"></section>
       <section id="log-panel" class="sheet hidden"></section>

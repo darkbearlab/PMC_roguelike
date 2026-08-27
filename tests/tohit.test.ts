@@ -6,10 +6,9 @@ import { applyCommand } from '../src/core/commands';
 import {
   armorRange, damageRange, hitBreakdown, resetToHitPolicy, toHitChance,
 } from '../src/core/combat';
-import { effectiveSightRange } from '../src/core/stance';
 import { RULES, WEAPONS, weaponById } from '../src/core/content';
 import { computeVision } from '../src/render/vision';
-import { run, testState, player, unit } from './helpers';
+import { advanceToPlayer, run, testState, player, unit } from './helpers';
 
 afterEach(() => resetToHitPolicy());
 
@@ -73,27 +72,38 @@ describe('§8.1 命中率公式', () => {
   });
 });
 
-describe('§7.3 蹲姿的代價：視野縮短', () => {
-  it('蹲下時有效視野為站姿的 0.6 倍', () => {
-    const s = testState(OPEN);
-    const u = player(s);
-    expect(effectiveSightRange(u)).toBe(u.sightRange);
-    u.stance = 'CROUCH';
-    expect(effectiveSightRange(u)).toBe(Math.floor(u.sightRange * 0.6));
+describe('§7.3 蹲姿的代價：面向盲區與姿勢時間', () => {
+  it('v0.8 移除了蹲姿視野 ×0.6 係數：看多遠不再受姿勢影響', () => {
+    expect('crouchSightFactor' in (RULES.combat.stance as object)).toBe(false);
   });
 
-  it('蹲下真的看得比較少', () => {
+  it('蹲下真的看得比較少 —— 但原因是半平面，不是半徑', () => {
     const s = testState(OPEN);
     const stand = computeVision(s).tiles.reduce((a, b) => a + b, 0);
     player(s).stance = 'CROUCH';
     const crouch = computeVision(s).tiles.reduce((a, b) => a + b, 0);
     expect(crouch).toBeLessThan(stand);
+    // 半平面（含垂直線）留下的是一半多一點，不是 0.6 半徑的那種縮法
+    expect(crouch).toBeGreaterThan(stand * 0.4);
   });
 
-  it('姿勢改變仍然是 0 成本，不讓出行動權', () => {
+  it('姿勢改變要花時間了（§5.2），轉向仍然是 0', () => {
     let s = testState(OPEN);
+    expect(RULES.time.stance).toBe(3);
+    expect(RULES.time.facing).toBe(0);
     s = run(s, { type: 'TOGGLE_STANCE' });
-    expect(player(s).nextActAt).toBe(0);
+    expect(player(s).nextActAt).toBe(3);
+  });
+
+  it('站起來看一圈再蹲回去要花 6 —— 免費掃視被關掉了', () => {
+    let s = testState(OPEN);
+    s = run(s, { type: 'TOGGLE_STANCE' });     // 蹲
+    s = advanceToPlayer(s);
+    const at = player(s).nextActAt;
+    s = run(s, { type: 'TOGGLE_STANCE' });     // 站起來
+    s = advanceToPlayer(s);
+    s = run(s, { type: 'TOGGLE_STANCE' });     // 再蹲回去
+    expect(player(s).nextActAt - at).toBe(6);
   });
 });
 

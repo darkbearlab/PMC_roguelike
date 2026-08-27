@@ -72,6 +72,8 @@ export interface Lock {
   coverNote: string;
   /** 造成掩蔽的格子。標出來玩家才知道該繞哪邊（§12.10）。 */
   coverTiles: Vec2[];
+  /** 背刺成立（§8.8）。空字串代表不成立。 */
+  backstabNote: string;
 }
 
 export interface MovePreview {
@@ -182,7 +184,11 @@ function drawTiles(ctx: CanvasRenderingContext2D, sc: Scene, x0: number, y0: num
         marker(ctx, s, t, C.supply, C.supplyInk, o && o.done ? '✓' : 'S');
       }
 
-      // 有視線的格子加一層暖光、其餘壓暗 —— 讓「我現在看得到哪裡」一眼可辨
+      // 有視線的格子加一層暖光、其餘壓暗 —— 讓「我現在看得到哪裡」一眼可辨。
+      //
+      // **地形一律照畫，不受視野限制**（§12.13）：v0.8 讓蹲姿只剩 180 度視野，
+      // 若地形跟著消失，玩家一蹲下就有半張地圖不見、完全失去空間感。
+      // 受當前視野限制的只有**單位**（見 drawUnits）。
       ctx.fillStyle = isVisible(vision, state.map, p) ? C.lit : C.fog;
       ctx.fillRect(s.x, s.y, t, t);
     }
@@ -466,6 +472,7 @@ function drawLock(ctx: CanvasRenderingContext2D, sc: Scene): void {
 
   const head = live
     ? lock.name + '　命中 ' + Math.round((lock.chance as number) * 100) + '%'
+      + (lock.backstabNote ? '　' + lock.backstabNote : '')
     : lock.name + '　' + lock.reason;
   // 傷害與護甲並排：AR-9 打裝甲型會顯示「傷害 10–10　裝甲 20」，
   // 開槍之前就看得出這把槍對它沒用（§12.9 的教學要在開火前就成立）
@@ -475,8 +482,10 @@ function drawLock(ctx: CanvasRenderingContext2D, sc: Scene): void {
       + '　耗時 ' + lock.time
       + (lock.coverNote ? '　' + lock.coverNote : '')
     : '';
+  // 背刺成立時整個標籤換成琥珀色：玩家必須知道自己做對了什麼（§12.10）
+  const ink = live ? (lock.backstabNote ? C.interact : C.laser) : C.inkDim;
   // 標籤放在目標「下方」：浮動傷害數字一律往上飄，兩者才不會疊在一起。
-  drawLabel(ctx, b.x, b.y + cam.tile * 0.62 + (sub ? 16 : 9), head, live ? C.laser : C.inkDim, sub);
+  drawLabel(ctx, b.x, b.y + cam.tile * 0.62 + (sub ? 16 : 9), head, ink, sub);
 }
 
 function drawMovePreview(ctx: CanvasRenderingContext2D, sc: Scene): void {

@@ -30,7 +30,8 @@ export interface Rules {
     hitFloor: number;
     hitCeil: number;
     minDamage: number;
-    stance: { shooterCrouchBonus: number; targetCrouchPenalty: number; crouchSightFactor: number };
+    stance: { shooterCrouchBonus: number; targetCrouchPenalty: number };
+    backstab: { bonus: number; ignoreCover: boolean };
     cover: { partial: number; good: number };
   };
   movement: { _comment: string };

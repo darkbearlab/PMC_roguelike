@@ -12,9 +12,8 @@
 import type { EventSink } from './events';
 import type { GameState, Unit, Vec2 } from './state';
 import { activePlayerUnit, findUnit } from './state';
-import { facingToward, manhattan, sameTile } from './grid';
-import { unitsSeeEachOther } from './los';
-import { effectiveSightRange } from './stance';
+import { facingToward, sameTile } from './grid';
+import { unitSees } from './sight';
 import { canAttack, performAttack } from './combat';
 import { findPath, occupiedBy } from './pathfind';
 import { spend } from './scheduler';
@@ -27,12 +26,12 @@ import { pushLog } from './log';
  */
 function desiredState(state: GameState, e: Unit): 'ALERT' | 'SEARCH' | null {
   const player = activePlayerUnit(state);
-  const canSee =
-    !!player &&
-    manhattan(e.pos, player.pos) <= effectiveSightRange(e) &&
-    unitsSeeEachOther(state.map, e, player);
+  // v0.8：這裡用的是**現在**的面向，不是「先轉頭再看」——
+  // 你只能轉向已經注意到的東西，不能先假設自己會轉對邊。
+  // 追擊中的敵人每次行動後都會朝向玩家（見下），所以繞到它背後要走好幾步。
+  const sees = !!player && unitSees(state.map, e, player);
 
-  if (canSee) return e.aiState === 'ALERT' ? null : 'ALERT';
+  if (sees) return e.aiState === 'ALERT' ? null : 'ALERT';
   if (e.aiState === 'ALERT') return 'SEARCH';
   return null;
 }
@@ -63,7 +62,10 @@ function applyTransition(
   const player = activePlayerUnit(state);
   if (to === 'ALERT') {
     e.aiState = 'ALERT';
-    if (player) e.lastKnownTarget = { x: player.pos.x, y: player.pos.y };
+    if (player) {
+      e.lastKnownTarget = { x: player.pos.x, y: player.pos.y };
+      faceToward(e, player.pos);          // ALERT 一律面向目標（§9.1）
+    }
     pushLog(state, 'AI', e.name + (cost > 0 ? ' 發現目標（尚未進入狀況）' : ' 重新鎖定目標'));
   } else {
     e.aiState = 'SEARCH';
@@ -71,6 +73,12 @@ function applyTransition(
     pushLog(state, 'AI', e.name + ' 失去目標，開始搜索');
   }
   return cost;
+}
+
+/** 轉向某個位置。轉向不花時間（§5.2），所以它永遠是別的動作的附帶效果。 */
+function faceToward(u: Unit, target: Vec2): void {
+  const f = facingToward(u.pos, target);
+  if (f) u.facing = f;
 }
 
 /** 朝目標走一格。走得動回傳花費的時間，走不動回傳 null。 */
@@ -118,6 +126,7 @@ export function takeEnemyAction(state: GameState, enemyId: string, events?: Even
       applyTransition(state, e, 'SEARCH', events);
       return RULES.time.wait;
     }
+    faceToward(e, player.pos);           // 警戒中：每次行動都盯著目標
     if (canAttack(state, e, player.pos, e.equipped).ok) {
       const weapon = e.equipped;
       performAttack(state, e.id, player.pos, events);

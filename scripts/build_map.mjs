@@ -64,17 +64,20 @@ set(29, 21, 'T');  // 主目標：距離起點最遠的一端
 set(29, 2, 'S');   // 次要目標 1：東北側翼
 set(2, 21, 'S');   // 次要目標 2：西南側翼
 
+// v0.8：facing 是初始面向（§13.2）。敵人一律只看得見面向的前方半平面，
+// 所以這一欄等於在畫「每個守衛在看哪邊」——沒有面向的守衛不是守衛，是靶。
+// 刻意留了幾個背對主要進路的：那是背刺（§8.8）該被學會的地方。
 const enemies = [
-  { archetype: 'RUNNER',  pos: { x: 11, y: 9 } },   // C 中央大廳 北側
-  { archetype: 'HULK',    pos: { x: 12, y: 11 } },  // C 中央大廳 正中路障
-  { archetype: 'RUNNER',  pos: { x: 18, y: 12 } },  // C 東側
-  { archetype: 'SHOOTER', pos: { x: 19, y: 9 } },   // C 覆蓋通往咽喉的通路
-  { archetype: 'SHOOTER', pos: { x: 29, y: 3 } },   // E 看守次要目標 1
-  { archetype: 'SHOOTER', pos: { x: 26, y: 10 } },  // F 開闊地 北
-  { archetype: 'SHOOTER', pos: { x: 28, y: 16 } },  // F 開闊地 南
-  { archetype: 'RUNNER',  pos: { x: 28, y: 13 } },  // F
-  { archetype: 'RUNNER',  pos: { x: 13, y: 18 } },  // G 南側翼
-  { archetype: 'HULK',    pos: { x: 26, y: 21 } },  // H 終端守衛：兩個入口都繞不過
+  { archetype: 'RUNNER',  pos: { x: 11, y: 9 },  facing: 'W' },  // C 中央大廳 北側，盯著西邊進路
+  { archetype: 'HULK',    pos: { x: 12, y: 11 }, facing: 'W' },  // C 正中路障，正面朝走廊
+  { archetype: 'RUNNER',  pos: { x: 18, y: 12 }, facing: 'W' },  // C 東側
+  { archetype: 'SHOOTER', pos: { x: 19, y: 9 },  facing: 'W' },  // C 覆蓋通往咽喉的通路
+  { archetype: 'SHOOTER', pos: { x: 29, y: 3 },  facing: 'S' },  // E 看守次要目標 1，背對通道
+  { archetype: 'SHOOTER', pos: { x: 26, y: 10 }, facing: 'S' },  // F 開闊地 北，盯著開闊地
+  { archetype: 'SHOOTER', pos: { x: 28, y: 16 }, facing: 'N' },  // F 開闊地 南
+  { archetype: 'RUNNER',  pos: { x: 28, y: 13 }, facing: 'W' },  // F
+  { archetype: 'RUNNER',  pos: { x: 13, y: 18 }, facing: 'E' },  // G 南側翼，背對西邊
+  { archetype: 'HULK',    pos: { x: 26, y: 21 }, facing: 'N' },  // H 終端守衛：守北入口，南入口可繞背
 ];
 // ================= 驗證 =================
 const rows = g.map((r) => r.join(''));
