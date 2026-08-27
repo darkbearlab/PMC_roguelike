@@ -48,14 +48,16 @@ const btn = (sel: string): HTMLButtonElement => {
  * 開一場，把士兵搬到中央大廳第 9 列（x=1..20 全是地板、視線通透），
  * 清掉原有敵人，改放測試需要的。
  */
-async function scene(foes: { at: [number, number]; archetype?: string }[] = []) {
+async function scene(foes: { at: [number, number]; archetype?: string; hp?: number }[] = []) {
   const { Game } = await import('../src/ui/game');
   const { makeEnemy } = await import('../src/core/setup');
   const g: GameType = new Game(1);
   g.state.units = g.state.units.filter((u) => u.faction === 'PLAYER');
   g.state.units[0].pos = { x: 5, y: 9 };
   foes.forEach((f, i) => {
-    g.state.units.push(makeEnemy(f.archetype ?? 'RUNNER', i, { x: f.at[0], y: f.at[1] }));
+    const e = makeEnemy(f.archetype ?? 'RUNNER', i, { x: f.at[0], y: f.at[1] });
+    if (f.hp !== undefined) { e.hp = f.hp; e.maxHp = f.hp; }   // 墊高血量，避免一發就死掩蓋掉要測的東西
+    g.state.units.push(e);
   });
   g.test.refresh();
   return g;
@@ -145,7 +147,7 @@ describe('§2/§3 統一點擊文法與射擊', () => {
   });
 
   it('再點同一個敵人即開火，且鎖定保留', async () => {
-    const g = await scene([{ at: [8, 9] }]);
+    const g = await scene([{ at: [8, 9], hp: 100 }]);
     g.test.tap({ x: 8, y: 9 });
     const hp = g.state.units.find((u) => u.id === 'E01')!.hp;
     const ammo = g.state.units[0].equipped!.ammo;
@@ -161,7 +163,7 @@ describe('§2/§3 統一點擊文法與射擊', () => {
     g.test.tap({ x: 8, y: 9 });
     g.test.tap({ x: 8, y: 9 });          // 第一槍，AP 2 -> 1
     g.test.tap({ x: 8, y: 9 });          // 第二槍，AP 歸零 -> 敵人回合
-    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(100);
+    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(70);
 
     let guard = 0;
     while (g.state.phase === 'ENEMY' && guard++ < 200) g.dispatch({ type: 'ENEMY_STEP' });
@@ -170,7 +172,7 @@ describe('§2/§3 統一點擊文法與射擊', () => {
 
     const foe = g.state.units.find((u) => u.id === 'E01')!;
     g.test.tap({ ...foe.pos });           // 新回合的第一下就是開火
-    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(90);
+    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(60);
   });
 
   it('點另一個敵人只改變鎖定，不開火', async () => {
@@ -188,7 +190,8 @@ describe('§2/§3 統一點擊文法與射擊', () => {
     g.test.tap({ x: 8, y: 9 });
     expect(g.test.selection()).toBe('TARGET:E01');
     g.test.tap({ x: 8, y: 9 });
-    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(10);
+    // v0.6：衝鋒型 25 血，步槍命中一發必死
+    expect(g.state.units.find((u) => u.id === 'E01')).toBeUndefined();
   });
 
   it('看得見但超出曼哈頓射程時不算合法目標，但仍然看得見', async () => {
@@ -214,7 +217,10 @@ describe('§2/§3 統一點擊文法與射擊', () => {
     g.test.tap({ x: 6, y: 9 });
     btn('#modal-root button[data-yes]').click();
     expect(g.state.units.find((u) => u.id === 'E01')).toBeUndefined();
-    expect(g.state.units[0].hp).toBeLessThan(100);    // 自己也吃了濺射
+    // v0.6：士兵 60 血、RR-4 濺射對自己是 60 —— 貼臉開砲會把自己一起帶走，
+    // 這正是那個確認彈窗存在的理由
+    expect(g.state.pendingReinforcement).not.toBeNull();
+    expect(g.state.casualties).toBe(1);
   });
 
   it('動畫播放中仍可輸入，回合推進不被延後', async () => {
@@ -226,7 +232,7 @@ describe('§2/§3 統一點擊文法與射擊', () => {
     // 動畫還在播的當下立刻再開一槍 —— 不應該被擋、也不應該被延後
     g.test.tap({ x: 8, y: 9 });
     expect(g.state.units[0].ap).toBe(0);
-    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(100);
+    expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(70);
     // AP 歸零就該立刻進敵人回合，不會等動畫播完
     expect(g.state.phase).toBe('ENEMY');
   });
@@ -246,9 +252,43 @@ describe('§2/§3 統一點擊文法與射擊', () => {
     g.test.tap({ x: 8, y: 9 });
     g.test.tap({ x: 8, y: 9 });
     expect(g.state.units.find((u) => u.id === 'E01')!.hp).toBe(hp);
-    expect(g.state.units[0].equipped!.ammo).toBe(5);
+    expect(g.state.units[0].equipped!.ammo).toBe(3);
     btn('#btn-log').click();
     expect(q('#log-panel')!.textContent).toContain('未命中');
+  });
+});
+
+describe('§12.12 敵人回合演出', () => {
+  beforeEach(() => { stubCanvas(); mount(); });
+
+  it('點畫面可跳過，且跳過後的狀態與完整播放完全相同', async () => {
+    const { Game } = await import('../src/ui/game');
+    const play = async (skip: boolean) => {
+      mount();
+      const g: GameType = new Game(4242);
+      g.dispatch({ type: 'WAIT' });                 // 進入敵人回合
+      expect(g.state.phase).toBe('ENEMY');
+      if (skip) g.test.tap({ x: 5, y: 9 });         // 敵人回合中點畫面 = 跳過
+      let guard = 0;
+      while (g.state.phase === 'ENEMY' && guard++ < 2000) g.test.enemySteps();
+      return JSON.stringify(g.state);
+    };
+    expect(await play(true)).toBe(await play(false));
+  });
+
+  it('敵人回合中點畫面不會被當成選取或指令', async () => {
+    const { Game } = await import('../src/ui/game');
+    const g: GameType = new Game(1);
+    g.dispatch({ type: 'WAIT' });
+    const before = JSON.stringify(g.state);
+    g.test.tap({ x: 5, y: 9 });
+    expect(g.test.selection()).toBeNull();
+    expect(JSON.stringify(g.state)).toBe(before);
+  });
+
+  it('演出間隔來自資料檔', async () => {
+    const { RULES } = await import('../src/core/content');
+    expect(RULES.presentation.enemyStepMs).toBe(200);
   });
 });
 

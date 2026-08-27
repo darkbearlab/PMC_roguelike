@@ -125,8 +125,15 @@ describe('§2.4 表現要求', () => {
   it('其餘事件都有畫面表現', () => {
     expect(render([{ kind: 'AMMO_OUT', unitId: 'P', pos: { x: 1, y: 1 } }])
       .map((d) => d.text)).toEqual(['空倉']);
-    expect(render([{ kind: 'AI_STATE', unitId: 'E', pos: { x: 1, y: 1 }, from: 'IDLE', to: 'ALERT' }])
-      .map((d) => d.text)).toEqual(['！發現']);
+    // IDLE -> ALERT 是「剛發現、這回合不開火」，SEARCH -> ALERT 是重新鎖定，
+    // 兩者的文字與顏色都要分得出來（§9.2 的反應窗口靠這個被看見）
+    const spotted = render([
+      { kind: 'AI_STATE', unitId: 'E', pos: { x: 1, y: 1 }, from: 'IDLE', to: 'ALERT' }]);
+    const relock = render([
+      { kind: 'AI_STATE', unitId: 'E', pos: { x: 1, y: 1 }, from: 'SEARCH', to: 'ALERT' }]);
+    expect(spotted.map((d) => d.text)).toEqual(['！剛發現你']);
+    expect(relock.map((d) => d.text)).toEqual(['！重新鎖定']);
+    expect(spotted[0].colour).not.toBe(relock[0].colour);
     expect(render([{ kind: 'KILL', unitId: 'E', pos: { x: 1, y: 1 }, faction: 'ENEMY', name: 'x' }])
       .map((d) => d.text)).toEqual(['擊殺']);
     // 彈道與噪音是線條不是文字，確認它們有被 stroke 出來

@@ -30,6 +30,7 @@ const pick = <K extends CombatEvent['kind']>(es: CombatEvent[], k: K) =>
 describe('§2.3 三種結果必須可區分', () => {
   it('有效命中：IMPACT 有傷害、blocked 為 0', () => {
     const s = testState(ROOM, [{ archetype: 'RUNNER', pos: { x: 4, y: 1 } }]);
+    unit(s, 'E01').hp = 100;   // 墊高血量，這條測的是傷害與 blocked，不是擊殺
     const { events } = applyCommand(s, { type: 'FIRE', target: { x: 4, y: 1 } });
     const hit = pick(events, 'IMPACT')[0];
     expect(hit.amount).toBe(30);
@@ -96,17 +97,19 @@ describe('§2.2 其餘事件都看得到', () => {
     expect(applyCommand(s, { type: 'RELOAD' }).events.map((e) => e.kind)).toContain('RELOAD');
   });
 
-  it('敵人警戒狀態改變有 AI_STATE 事件', () => {
-    let s = testState(
+  it('敵人警戒狀態改變有 AI_STATE 事件，且區分得出「剛發現」', () => {
+    const s = testState(
       ['####################', '#D.................#', '#..................#', '#.................T#', '####################'],
       [{ archetype: 'RUNNER', pos: { x: 5, y: 2 } }],
     );
-    const noise = applyCommand(s, { type: 'FIRE', target: { x: 5, y: 2 } });
-    // 目標本人被打中會直接進 ALERT（敵人回合開始時偵測），噪音則讓 IDLE 者轉 SEARCH
-    s = noise.state;
+    // 敵人回合的第一步就會偵測到玩家：IDLE -> ALERT
     const enemyTurn = applyCommand(run(s, { type: 'WAIT' }), { type: 'ENEMY_STEP' });
-    expect(kinds(enemyTurn.events)).toContain('AI_STATE');
-    expect(pick(enemyTurn.events, 'AI_STATE')[0].to).toBe('ALERT');
+    const st = pick(enemyTurn.events, 'AI_STATE');
+    expect(st).toHaveLength(1);
+    expect(st[0].from).toBe('IDLE');
+    expect(st[0].to).toBe('ALERT');
+    // 從 IDLE 轉入 → 這一回合不開火，回饋層據此給不同的表現
+    expect(enemyTurn.state.units.find((u) => u.id === 'E01')!.justSpotted).toBe(true);
   });
 
   it('完成目標與空投落地都有事件', () => {

@@ -31,6 +31,7 @@ export interface Rules {
     cover: { partial: number; good: number };
   };
   movement: { _comment: string };
+  presentation: { enemyStepMs: number; playerMoveStepMs: number };
   log: { maxEntries: number };
 }
 

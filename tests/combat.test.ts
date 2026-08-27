@@ -28,14 +28,14 @@ describe('§8.2 傷害與護甲', () => {
     expect(damageAfterArmor(10, 990)).toBe(10);  // 保底
   });
 
-  it('輕武器對裝甲型每發只造成 10 點（保底），120 血要打 12 發', () => {
+  it('輕武器對裝甲型每發只造成 10 點（保底），90 血要打 9 發', () => {
     let s = testState(ROOM, [{ archetype: 'HULK', pos: { x: 5, y: 1 } }]);
-    expect(unit(s, 'E01').hp).toBe(120);
+    expect(unit(s, 'E01').hp).toBe(90);
     s = run(s, { type: 'FIRE', target: { x: 5, y: 1 } });
-    expect(unit(s, 'E01').hp).toBe(110);
+    expect(unit(s, 'E01').hp).toBe(80);
   });
 
-  it('重武器對裝甲型造成 100 點', () => {
+  it('重武器對裝甲型一發就打掉 100 點，90 血直接死', () => {
     let s = testState(ROOM, [{ archetype: 'HULK', pos: { x: 5, y: 1 } }]);
     s = run(s, { type: 'SWAP_WEAPON' });          // 換重武器 2 AP
     expect(player(s).equipped!.id).toBe('rr4');
@@ -44,7 +44,7 @@ describe('§8.2 傷害與護甲', () => {
     let guard = 0;
     while (s.phase === 'ENEMY' && guard++ < 200) s = run(s, { type: 'ENEMY_STEP' });
     s = run(s, { type: 'FIRE', target: unit(s, 'E01').pos });
-    expect(unit(s, 'E01').hp).toBe(20);
+    expect(s.units.filter((u) => u.faction === 'ENEMY')).toHaveLength(0);
   });
 
   it('濺射對半徑內其他單位造成 floor(damage/2)，且會傷到自己人', () => {
@@ -85,7 +85,7 @@ describe('§8.1 合法性檢查先於解算', () => {
     player(s).equipped!.ammo = 0;
     expect(checkLegal(s, { type: 'FIRE', target: { x: 5, y: 1 } }).ok).toBe(false);
     s = run(s, { type: 'RELOAD' });
-    expect(player(s).equipped!.ammo).toBe(6);
+    expect(player(s).equipped!.ammo).toBe(4);
     expect(player(s).ap).toBe(1);
   });
 });
@@ -97,8 +97,8 @@ describe('§5.2 武器節奏', () => {
     expect(s.phase).toBe('PLAYER');
     expect(player(s).ap).toBe(1);
     s = run(s, { type: 'FIRE', target: { x: 5, y: 1 } });
-    expect(unit(s, 'E01').hp).toBe(100);
-    expect(player(s).equipped!.ammo).toBe(4);
+    expect(unit(s, 'E01').hp).toBe(70);
+    expect(player(s).equipped!.ammo).toBe(2);
     expect(s.phase).toBe('ENEMY');
   });
 

@@ -116,7 +116,7 @@ describe('§8.2 浮動傷害與護甲', () => {
     for (let i = 0; i < 30; i++) {
       player(s).ap = 2;
       s.phase = 'PLAYER';
-      unit(s, 'E01').hp = 120;
+      unit(s, 'E01').hp = 90;
       const r = applyCommand(s, { type: 'FIRE', target: { x: 4, y: 1 } });
       s = r.state;
       for (const e of r.events) if (e.kind === 'IMPACT') amounts.push(e.amount);

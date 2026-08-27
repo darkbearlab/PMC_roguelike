@@ -38,6 +38,7 @@ function makeUnit(
     lastKnownTarget: null,
     searchTimer: 0,
     shotsThisTurn: 0,
+    justSpotted: false,
     attacksPerTurn: a.attacksPerTurn,
   };
 }

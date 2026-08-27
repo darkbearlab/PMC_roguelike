@@ -4,7 +4,7 @@
   "SOLDIER": {
     "name": "複製兵",
     "faction": "PLAYER",
-    "hp": 100,
+    "hp": 60,
     "armor": 0,
     "armorSpread": 0,
     "maxAp": 2,
@@ -17,7 +17,7 @@
   "RUNNER": {
     "name": "衝鋒型",
     "faction": "ENEMY",
-    "hp": 40,
+    "hp": 25,
     "armor": 0,
     "armorSpread": 0,
     "maxAp": 3,
@@ -40,7 +40,7 @@
       "endsTurn": false,
       "noiseRadius": 0,
       "splash": 0,
-      "accuracy": 0.9,
+      "accuracy": 0.7,
       "optimalRange": 1,
       "falloffPerTile": 0
     }
@@ -49,7 +49,7 @@
   "HULK": {
     "name": "裝甲型",
     "faction": "ENEMY",
-    "hp": 120,
+    "hp": 90,
     "armor": 20,
     "armorSpread": 8,
     "maxAp": 1,
@@ -72,7 +72,7 @@
       "endsTurn": false,
       "noiseRadius": 0,
       "splash": 0,
-      "accuracy": 0.9,
+      "accuracy": 0.7,
       "optimalRange": 1,
       "falloffPerTile": 0
     }
@@ -81,7 +81,7 @@
   "SHOOTER": {
     "name": "射手型",
     "faction": "ENEMY",
-    "hp": 50,
+    "hp": 30,
     "armor": 0,
     "armorSpread": 0,
     "maxAp": 2,
@@ -104,7 +104,7 @@
       "endsTurn": false,
       "noiseRadius": 0,
       "splash": 0,
-      "accuracy": 0.8,
+      "accuracy": 0.5,
       "optimalRange": 5,
       "falloffPerTile": 0.05
     }

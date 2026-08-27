@@ -53,28 +53,62 @@ describe('§9.1 AI 狀態機', () => {
     expect(unit(s, 'E01').maxAp).toBeGreaterThan(player(s).maxAp);
   });
 
-  it('相鄰時攻擊；衝鋒型 3 AP 可以連打 3 下', () => {
+  it('剛發現玩家的那一回合不攻擊，下一回合才連打 3 下（兩段式察覺）', () => {
     let s = testState(HALL, [{ archetype: 'RUNNER', pos: { x: 2, y: 1 } }]);
-    const hp0 = player(s).hp;
+    player(s).maxHp = 300;
+    player(s).hp = 300;
+
+    // 第一個敵人回合：從 IDLE 發現玩家 → 只能移動轉向，不得開火
     s = run(s, { type: 'WAIT' });
     s = runEnemyTurn(s);
-    expect(player(s).hp).toBe(hp0 - 90); // 30 傷害 × 3 次
+    expect(unit(s, 'E01').aiState).toBe('ALERT');
+    expect(unit(s, 'E01').justSpotted).toBe(true);
+    expect(player(s).hp).toBe(300);
+
+    // 第二個敵人回合：反應窗口結束，3 AP 打 3 下
+    s = run(s, { type: 'WAIT' });
+    s = runEnemyTurn(s);
+    expect(unit(s, 'E01').justSpotted).toBe(false);
+    expect(player(s).hp).toBe(300 - 90);   // 30 傷害 × 3 次
   });
 
-  it('裝甲型 1 AP：一回合只能做一件事', () => {
+  it('已在 SEARCH 的敵人重新取得視線可以立刻開火 —— 堵住無限騷擾迴圈', () => {
+    let s = testState(HALL, [{ archetype: 'RUNNER', pos: { x: 2, y: 1 } }]);
+    player(s).maxHp = 300;
+    player(s).hp = 300;
+    // 直接把敵人擺成「搜索中」，模擬玩家剛退出視線又回來
+    const e = unit(s, 'E01');
+    e.aiState = 'SEARCH';
+    e.searchTimer = 3;
+    e.lastKnownTarget = { ...player(s).pos };
+
+    s = run(s, { type: 'WAIT' });
+    s = runEnemyTurn(s);
+    expect(unit(s, 'E01').aiState).toBe('ALERT');
+    expect(unit(s, 'E01').justSpotted).toBe(false);   // 沒有反應窗口
+    expect(player(s).hp).toBeLessThan(300);           // 當場就開打
+  });
+
+  it('裝甲型 1 AP：反應窗口過後一回合只能做一件事', () => {
     let s = testState(HALL, [{ archetype: 'HULK', pos: { x: 2, y: 1 } }]);
-    const hp0 = player(s).hp;
+    player(s).maxHp = 300;
+    player(s).hp = 300;
+    s = run(s, { type: 'WAIT' });
+    s = runEnemyTurn(s);          // 發現的那一回合
     s = run(s, { type: 'WAIT' });
     s = runEnemyTurn(s);
-    expect(player(s).hp).toBe(hp0 - 60);
+    expect(player(s).hp).toBe(300 - 60);
   });
 
-  it('射手型每回合上限 1 次攻擊', () => {
+  it('射手型每回合上限 1 次攻擊（反應窗口過後）', () => {
     let s = testState(HALL, [{ archetype: 'SHOOTER', pos: { x: 5, y: 1 } }]);
-    const hp0 = player(s).hp;
+    player(s).maxHp = 300;
+    player(s).hp = 300;
     s = run(s, { type: 'WAIT' });
     s = runEnemyTurn(s);
-    expect(player(s).hp).toBe(hp0 - 20);
+    s = run(s, { type: 'WAIT' });
+    s = runEnemyTurn(s);
+    expect(player(s).hp).toBe(300 - 20);
     expect(unit(s, 'E01').shotsThisTurn).toBe(1);
   });
 

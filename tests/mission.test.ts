@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { checkLegal } from '../src/core/commands';
 import { abandonedWeapons, corpseAt } from '../src/core/state';
-import { run, testState, player, unit } from './helpers';
+import { run, testState, player, unit, freezeCombat, thawCombat } from './helpers';
 
 const ROOM = [
   '################',
@@ -20,6 +20,10 @@ function runEnemyTurn(s0: ReturnType<typeof testState>) {
   }
   return s;
 }
+
+// 這一檔測的是死亡與任務流程，不是命中率：凍結浮動，讓「開一槍打死自己」必定成立。
+beforeAll(() => freezeCombat());
+afterAll(() => thawCombat());
 
 describe('§10 死亡、增援與屍體', () => {
   it('陣亡後留下屍體，屍體內含身上所有武器（含收納的重武器）', () => {
@@ -49,7 +53,7 @@ describe('§10 死亡、增援與屍體', () => {
     const fresh = unit(s, next);
     expect(fresh.pos).toEqual({ x: 6, y: 1 });      // 最近的空投點，不是起點
     expect(fresh.equipped!.id).toBe('ar9');
-    expect(fresh.equipped!.ammo).toBe(6);
+    expect(fresh.equipped!.ammo).toBe(4);
     expect(fresh.stowed).toBeNull();                 // 重武器留在屍體上
     expect(s.deployed).toBe(2);
     expect(s.pendingReinforcement).toBeNull();

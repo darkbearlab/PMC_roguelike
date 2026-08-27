@@ -14,6 +14,7 @@ import {
   applyCommand, checkLegal, interactKindAt, interactTarget, movePath, swapCost,
 } from '../core/commands';
 import { createInitialState } from '../core/setup';
+import { RULES } from '../core/content';
 import { armorRange, damageRange, hitBreakdown } from '../core/combat';
 import { COVER_LABEL } from '../core/cover';
 import { facingFromDelta, manhattan, sameTile } from '../core/grid';
@@ -33,8 +34,6 @@ import {
 } from './modals';
 import { BUILD_ID } from './build';
 
-const ENEMY_STEP_MS = 150;
-const MOVE_STEP_MS = 110;
 const TAP_SLOP = 12;
 const TAP_MS = 700;
 
@@ -77,6 +76,8 @@ export class Game {
   private modal: ModalKind = 'NONE';
   private logOpen = false;
   private skillOpen = false;
+  /** 玩家按了跳過：敵人回合直接結算到底，不再逐一演出（§12.12）。 */
+  private skipEnemyTurn = false;
   private viewW = 1;
   private viewH = 1;
   /** 沒有被 HUD 與控制列蓋住的那一段畫面。攝影機夾制用（見 render/camera.ts）。 */
@@ -97,6 +98,7 @@ export class Game {
     autoActive: (): boolean => this.auto !== null,
     autoStep: (): void => this.stepAuto(),
     refresh: (): void => this.refresh(),
+    enemySteps: (): void => this.runEnemySteps(),
   };
 
   constructor(private seed: number) {
@@ -119,6 +121,7 @@ export class Game {
     if (state === this.state) return false;
     this.state = state;
     this.effects.push(events, performance.now());
+    if (this.state.phase === 'PLAYER') this.skipEnemyTurn = false;
     this.pan = { x: 0, y: 0 };
     this.refresh();
     return true;
@@ -132,6 +135,7 @@ export class Game {
     this.pan = { x: 0, y: 0 };
     this.modal = 'NONE';
     this.skillOpen = false;
+    this.skipEnemyTurn = false;
     this.effects.clear();
     hideModal();
     this.refresh();
@@ -246,6 +250,13 @@ export class Game {
    */
   private tapTile(p: Vec2): void {
     if (this.modal !== 'NONE') return;
+    // 敵人回合中點畫面任意處 = 跳過演出，直接結算到底。
+    // 結果與完整播放完全相同 —— 規則解算本來就與演出無關。
+    if (this.state.phase === 'ENEMY') {
+      this.skipEnemyTurn = true;
+      this.updateControls();
+      return;
+    }
     this.auto = null;
     this.skillOpen = false;
     const me = activePlayerUnit(this.state);
@@ -434,7 +445,7 @@ export class Game {
     const busy = this.logOpen || this.modal !== 'NONE';
     if (s.result !== 'ONGOING') { show(banner, false); return; }
     if (s.phase === 'ENEMY') {
-      banner.textContent = '敵人回合';
+      banner.textContent = this.skipEnemyTurn ? '敵人回合（結算中）' : '敵人回合　點畫面跳過';
       show(banner, !busy);
       return;
     }
@@ -648,13 +659,13 @@ export class Game {
     if (s.result !== 'ONGOING' || s.pendingReinforcement) return;
 
     if (s.phase === 'ENEMY') {
-      if (now - this.lastStep >= ENEMY_STEP_MS) {
+      if (this.skipEnemyTurn || now - this.lastStep >= RULES.presentation.enemyStepMs) {
         this.lastStep = now;
         this.runEnemySteps();
       }
       return;
     }
-    if (this.auto && now - this.lastStep >= MOVE_STEP_MS) {
+    if (this.auto && now - this.lastStep >= RULES.presentation.playerMoveStepMs) {
       this.lastStep = now;
       this.stepAuto();
     }
@@ -665,7 +676,9 @@ export class Game {
    * 十個敵人各自 IDLE 時不該讓玩家乾等一秒半。
    */
   private runEnemySteps(): void {
-    let budget = 40;
+    // 看不見的動作全部瞬間結算，所以額度要夠大 ——
+    // 「整個敵人回合都沒有可見動作」時必須完全沒有停頓（§12.12）。
+    let budget = 600;
     while (budget-- > 0) {
       const id = this.state.enemyQueue[0];
       const actor = id ? findUnit(this.state, id) : null;
@@ -677,12 +690,14 @@ export class Game {
       if (state === this.state) break;
       this.state = state;
       this.effects.push(events, performance.now());
+      if (this.state.phase === 'PLAYER') this.skipEnemyTurn = false;
       this.syncVision();
 
       const after = id ? findUnit(this.state, id) : null;
       const nowVisible = !!after && isVisible(this.vision, this.state.map, after.pos);
       const hpAfter = activePlayerUnit(this.state)?.hp ?? 0;
 
+      if (this.skipEnemyTurn) continue;   // 跳過：只結算，不停下來演
       if (
         wasVisible || nowVisible ||
         hpAfter !== hpBefore ||

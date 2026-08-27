@@ -32,6 +32,8 @@ export function beginEnemyTurn(state: GameState): void {
     if (!e) continue;
     e.ap = e.maxAp;
     e.shotsThisTurn = 0;
+    // 上一回合「剛發現」的反應窗口到此結束，這一回合起可以開火
+    e.justSpotted = false;
     if (e.aiState === 'SEARCH' && e.searchTimer > 0) e.searchTimer -= 1;
   }
   state.enemyQueue = ids;
@@ -50,7 +52,9 @@ function perceive(state: GameState, e: Unit, events?: EventSink): void {
 
   if (canSee && player) {
     if (e.aiState !== 'ALERT') {
-      pushLog(state, 'AI', e.name + ' 發現目標');
+      // 從 IDLE 轉入才有反應窗口；從 SEARCH 轉入可以立刻開火（§9.2）
+      if (e.aiState === 'IDLE') e.justSpotted = true;
+      pushLog(state, 'AI', e.name + (e.justSpotted ? ' 發現目標（本回合尚未進入狀況）' : ' 重新鎖定目標'));
       events?.push({
         kind: 'AI_STATE', unitId: e.id, pos: { x: e.pos.x, y: e.pos.y }, from: e.aiState, to: 'ALERT',
       });
@@ -115,6 +119,8 @@ export function stepEnemy(state: GameState, enemyId: string, events?: EventSink)
       return 'DONE';
     }
     const weapon = e.equipped;
+    // 剛從 IDLE 發現玩家：這一回合只能轉向與移動，不得攻擊
+    if (e.justSpotted) return moveToward(state, e, player.pos);
     if (canAttack(state, e, player.pos, weapon).ok) {
       performAttack(state, e.id, player.pos, events);
       return 'CONTINUE';

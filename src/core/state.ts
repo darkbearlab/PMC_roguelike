@@ -70,6 +70,13 @@ export interface Unit {
   searchTimer: number;
   /** 本回合已攻擊次數。SHOOTER 每回合上限 1 次（§9）。 */
   shotsThisTurn: number;
+  /**
+   * 兩段式察覺（§9.2）：從 IDLE 轉入 ALERT 的那個回合不得攻擊，
+   * 給玩家一個回合的反應窗口。**只適用於從 IDLE 轉入**——
+   * 已在 SEARCH 的敵人重新取得視線可以立刻開火，否則反覆進出視線
+   * 就變成無限安全的騷擾迴圈。
+   */
+  justSpotted: boolean;
   /** 每回合攻擊次數上限。 */
   attacksPerTurn: number;
 }

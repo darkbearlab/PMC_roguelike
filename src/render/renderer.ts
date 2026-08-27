@@ -33,6 +33,7 @@ const C = {
   corpse: '#6d5a52',
   frameLegal: 'rgba(210, 230, 245, 0.75)',
   frameAlert: '#ff5b4a',
+  frameSpotting: '#ffb648',
   laser: '#ff4d3d',
   laserDead: '#7d8a97',
   path: '#4fd6ff',
@@ -326,13 +327,26 @@ function drawUnit(ctx: CanvasRenderingContext2D, cam: Camera, u: Unit, isActive:
 
   // 敵人 AI 狀態
   if (u.faction === 'ENEMY') {
-    const glyph = u.aiState === 'ALERT' ? '!' : u.aiState === 'SEARCH' ? '?' : '';
-    if (glyph) {
-      ctx.fillStyle = u.aiState === 'ALERT' ? '#ff5b4a' : '#ffb648';
-      ctx.font = `700 ${Math.round(t * 0.42)}px ui-sans-serif, system-ui, sans-serif`;
+    if (u.justSpotted) {
+      // 文字而不是符號：這個狀態的意思（本回合不會開火）值得講清楚
+      ctx.font = '700 11px ui-sans-serif, system-ui, "Noto Sans TC", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      ctx.fillText(glyph, c.x + t * 0.32, by - 1);
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = 'rgba(4,6,9,0.92)';
+      ctx.lineWidth = 3;
+      ctx.strokeText('剛發現', c.x, by - 2);
+      ctx.fillStyle = C.frameSpotting;
+      ctx.fillText('剛發現', c.x, by - 2);
+    } else {
+      const glyph = u.aiState === 'ALERT' ? '!' : u.aiState === 'SEARCH' ? '?' : '';
+      if (glyph) {
+        ctx.fillStyle = u.aiState === 'ALERT' ? '#ff5b4a' : '#ffb648';
+        ctx.font = `700 ${Math.round(t * 0.42)}px ui-sans-serif, system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(glyph, c.x + t * 0.32, by - 1);
+      }
     }
   }
 }
@@ -383,11 +397,17 @@ function drawTargetFrames(ctx: CanvasRenderingContext2D, sc: Scene): void {
       ctx.strokeRect(s.x + 2.5, s.y + 2.5, t - 5, t - 5);
     }
     if (u.aiState !== 'IDLE') {
+      // 「剛從 IDLE 發現、這一回合不會開火」必須與一般警戒截然不同 ——
+      // 這一回合正是玩家用來蹲下、退回掩體或先開槍的反應窗口（§9.2）。
+      // 用琥珀色虛線框而不是紅色實線閃爍，並在頭上標「剛發現」。
+      const spotting = u.justSpotted;
       ctx.save();
-      ctx.globalAlpha = 0.35 + 0.65 * blink;
-      ctx.strokeStyle = C.frameAlert;
+      ctx.globalAlpha = spotting ? 0.9 : 0.35 + 0.65 * blink;
+      ctx.strokeStyle = spotting ? C.frameSpotting : C.frameAlert;
       ctx.lineWidth = 2.5;
+      if (spotting) ctx.setLineDash([5, 4]);
       ctx.strokeRect(s.x - 1.5, s.y - 1.5, t + 3, t + 3);
+      ctx.setLineDash([]);
       ctx.restore();
     }
   }

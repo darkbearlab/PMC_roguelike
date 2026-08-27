@@ -32,7 +32,7 @@ describe('未命中路徑', () => {
     const c = toHitChance(player(s), unit(s, 'E01'), player(s).equipped!, s);
     expect(c).toBeLessThan(1);
     expect(c).toBeGreaterThanOrEqual(RULES.combat.hitFloor);
-    expect(c).toBeCloseTo(0.85, 5);   // AR-9 基礎命中，近距離無掩蔽、雙方站姿
+    expect(c).toBeCloseTo(0.55, 5);   // AR-9 基礎命中，近距離無掩蔽、雙方站姿
   });
 
   it('命中率為 0 時：不扣血，但照扣 AP 與彈藥', () => {

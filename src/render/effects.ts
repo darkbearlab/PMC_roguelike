@@ -135,8 +135,13 @@ export class EffectLayer {
         case 'AI_STATE':
           this.pips.push({
             pos: { ...e.pos },
-            text: e.to === 'ALERT' ? '！發現' : e.to === 'SEARCH' ? '？搜索' : '…失去目標',
-            colour: e.to === 'ALERT' ? C.alert : e.to === 'SEARCH' ? C.search : C.idle,
+            // IDLE -> ALERT 是「剛發現、這回合不開火」，與重新鎖定要分得出來
+            text: e.to === 'ALERT'
+              ? (e.from === 'IDLE' ? '！剛發現你' : '！重新鎖定')
+              : e.to === 'SEARCH' ? '？搜索' : '…失去目標',
+            colour: e.to === 'ALERT'
+              ? (e.from === 'IDLE' ? C.ammo : C.alert)
+              : e.to === 'SEARCH' ? C.search : C.idle,
             born: now,
           });
           break;
