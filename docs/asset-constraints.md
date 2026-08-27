@@ -2,6 +2,10 @@
 
 > 調查日期：2026-08-27　　對應版本：v0.6（commit `8e949ba`）
 > 本文件是**調查報告**，沒有修改任何程式碼、沒有新增任何資產。
+>
+> 修訂：逐格動畫的否決理由改以「等待時間複利」領頭（§6.3）；
+> 面向雖然現在不做，但命名慣例已保留位置並定義回退鏈（§7.2、§8.3）——
+> 面向之後會因為視野錐而變成規則的一部分，屆時補變體不應該要重做基礎素材。
 
 ## 證據標示
 
@@ -252,9 +256,13 @@ assets/index-*.js  Cache-Control: max-age=600   ETag: "6a8f8ef2-ea05"
 const img = assets.sprite(kindToName(kind));
 if (img) ctx.drawImage(img, s.x, s.y, t, t);
 else { /* 現有的 fillRect 路徑原封不動保留 */ }
+
+// drawUnit 內。第二個參數就是 §8.3 的面向鉤子 ——
+// 現在一定會退回無後綴的圖，但呼叫端寫法從第一天就是最終形態。
+const img = assets.sprite(unitSpriteName(u), u.facing);
 ```
 
-`drawUnit`、`drawCorpse` 同理。
+`drawCorpse` 同理。
 
 **目前完全沒有 `drawImage`、`createPattern` 或 `new Image()`**【實測：全 repo grep 為 0】，
 所以這是純粹的新增，不是改寫。
@@ -461,30 +469,34 @@ else { /* 現有的 fillRect 路徑原封不動保留 */ }
 
 ### 6.2 逐格動畫的代價【推論】
 
-以每個單位 4 幀、4 個面向估算（本專案移動是四方向，所以 4 向就夠）：
+以每個單位 4 幀估算。面向要算八向而不是四向（理由見 §7.2）：
 
 | 內容 | 張數 | WebP 有損 q80 |
 |---|---|---|
 | 靜態單張（無面向） | 5 | 約 11 KB |
-| 加四向面向 | 20 | 約 44 KB |
-| 四向 × 4 幀逐格 | 80 | 約 176 KB |
+| 加八向面向 | 40 | 約 88 KB |
+| 八向 × 4 幀逐格 | 160 | 約 352 KB |
 
-記憶體：80 張 128×128 RGBA 解碼後約 **5.2 MB**（80 × 128 × 128 × 4 bytes）。
+記憶體：160 張 128×128 RGBA 解碼後約 **10.5 MB**。
 相對 iOS 的 384MB canvas 記憶體上限微不足道【外部】，不構成問題。
 
-真正的成本不是體積或記憶體，是**美術工時**：張數從 5 張變成 80 張，是 16 倍。
+體積與記憶體都不是問題。真正的成本一是**玩家的等待時間**（§6.3 第 1 點），
+二是**美術工時**：張數從 5 張變成 160 張，是 32 倍。
 
-### 6.3 判斷：**現階段不值得做逐格動畫**【推論】
+### 6.3 判斷：**不做逐格動畫**【推論】
 
-理由：
+理由依重要性排序——**最硬的一條是等待成本，不是製作成本**：
 
-1. **回合制沒有連續運動。** 單位一次移動一格，中間只有約 110ms 的過渡
+1. **等待時間會複利。** v0.6 已經加了敵人回合逐一演出，每個動作間隔 200ms
+   （`presentation.enemyStepMs`）。逐格動畫疊在上面，每個動作的視覺長度又拉長一截，
+   十隻敵人的回合會變得難以忍受。
+   **回合制玩家會狂點畫面**——v0.6 特地做了「點畫面跳過演出」正是承認了這件事。
+   在一個玩家想加速的地方加動畫，動畫只會變成擋路的東西。
+2. **回合制沒有連續運動可演。** 單位一次移動一格，過渡只有約 110ms
    （`presentation.playerMoveStepMs`）。四幀行走循環在 110ms 內根本播不完一輪。
-2. **場上單位少且小。** 一格在手機上只有 27–46 CSS px，四幀的差異在這個尺寸下幾乎看不出來。
-3. **回饋層已經承擔了「動起來」的職責。** 傷害數字、彈道、噪音環、狀態提示都會動，
-   畫面已經不靜態了。
-4. **16 倍的美術工時買到的邊際感受很小**，而同樣的預算花在「地形紋理與單位剪影更好認」
-   對這個遊戲的價值高得多。
+3. **場上單位小。** 一格在手機上只有 27–46 CSS px，四幀的差異在這個尺寸下幾乎看不出來。
+4. **回饋層已經承擔了「動起來」的職責。** 傷害數字、彈道、噪音環、狀態提示都會動。
+5. 16 倍的美術工時只是最後一根稻草，不是主要理由。
 
 **建議的動畫層次（依投資報酬排序）：**
 
@@ -512,7 +524,17 @@ else { /* 現有的 fillRect 路徑原封不動保留 */ }
 
 界外岩層（`voidFill` + 斜紋）在畫面邊緣可見，也需要一張。
 
-**地形小計：6 種基礎 + 1 界外 = 7 張**（若 FLOOR 出 3 個變體則 9 張）
+**注意狀態變體**：`TERMINAL` 與 `SUPPLY` 各有「未完成 / 已完成」兩種畫法，
+`DROP_POINT` 的起始空投點另有一個 `⌂` 變體（那是撤離點，與一般增援落點不同）。
+
+| | 張數 |
+|---|---|
+| `floor` `wall` `half_cover` `void` | 4 |
+| `drop_point` + `drop_point_start` | 2 |
+| `terminal` + `terminal_done` | 2 |
+| `supply` + `supply_done` | 2 |
+
+**地形小計：10 張**（若 FLOOR 另出 2 個變體則 12 張）
 
 ### 7.2 單位（`actors.json`，4 種原型）
 
@@ -525,13 +547,26 @@ else { /* 現有的 fillRect 路徑原封不動保留 */ }
 
 **單位小計：5 張。**
 
-關於面向【讀碼】：`Unit.facing` 是八向，但**規格明確寫「面向不影響視野，僅美術用」**，
-移動只有四向（`MOVE_DIRECTIONS`）。所以面向變體是**可選的**：
-- 不做面向 → 5 張
-- 做四向面向 → 20 張
+#### 面向：現在不做，但命名要先留位置
 
-**建議先不做面向。** 在 27–46px 的格子裡，面向的可讀性收益低於它的四倍成本，
-而且面向目前不影響任何規則。
+【讀碼】`Unit.facing` 是八向。移動雖然只有四向（`MOVE_DIRECTIONS`），但
+`facingToward()` 另外用在**瞄準**（`combat.ts`）、**互動**（`commands.ts`）與
+**空投落地**（`commands.ts`）三處，這些會產生斜向值。
+**所以面向實際會出現全部八個值，未來的變體要留八格而不是四格。**
+
+| 方案 | 張數 | WebP 估計 |
+|---|---|---|
+| 不做面向 | 5 | 約 11 KB |
+| 四向 | 20 | 約 44 KB |
+| **八向**（實際需要的數量） | **40** | 約 88 KB |
+
+**建議先不做面向**：在 27–46px 的格子裡，面向的可讀性收益低於八倍成本，
+而規格目前明寫「面向不影響視野，僅美術用」。
+
+**但這是「現在不做」，不是「不會做」。** 面向之後會變成規則的一部分——
+潛入類型的任務需要視野錐，那時候朝向就不再只是美術。
+因此**命名慣例現在就要保留面向的位置**（§8.3），
+這樣將來補變體時只是新增檔案，不必重做基礎素材、不必改 manifest 格式、不必改載入器。
 
 ### 7.3 其他
 
@@ -549,12 +584,15 @@ else { /* 現有的 fillRect 路徑原封不動保留 */ }
 
 | 方案 | 張數 | WebP 有損 q80 估計 |
 |---|---|---|
-| **最小可用**（7 地形 + 5 單位 + 1 屍體） | **13** | **約 29 KB** |
-| 加 FLOOR 變體 | 15 | 約 33 KB |
-| 加四向面向 | 30 | 約 66 KB |
-| 加逐格動畫 | 90 | 約 198 KB |
+| **最小可用**（10 地形 + 5 單位 + 1 屍體） | **16** | **約 35 KB** |
+| 加 FLOOR 變體 | 18 | 約 40 KB |
+| 加八向面向（單位 5 → 40） | 51 | 約 112 KB |
+| 加八向逐格動畫（單位 5 → 160） | 171 | 約 376 KB |
 
-即使最完整的方案也只用掉 §2.2 建議預算（375 KB）的一半。**體積不是限制因素。**
+**最小可用方案只用掉 §2.2 建議預算（375 KB）的一成。體積不是限制因素**——
+真正的限制是可讀性（§5）與等待時間（§6.3）。
+
+只有「八向逐格動畫」會把預算吃滿，而那個方案基於 §6.3 已經否決。
 
 ---
 
@@ -592,24 +630,59 @@ else { /* 現有的 fillRect 路徑原封不動保留 */ }
 
 ### 8.3 命名與擺放
 
+#### 命名慣例（**面向的位置現在就先留著**）
+
+```
+<類別>_<主體>[_<狀態>][_<面向>]
+```
+
+- 類別：`terrain` / `unit` / `prop`
+- 面向（**目前一律省略**）：`n` `ne` `e` `se` `s` `sw` `w` `nw`
+- 全小寫、底線分隔、不含版本號或日期（版本由 git 管）
+
 ```
 public/art/
   manifest.json
-  terrain/
-    floor.webp  wall.webp  half-cover.webp  void.webp
-    drop-point.webp  terminal.webp  terminal-done.webp
-    supply.webp  supply-done.webp
-  unit/
-    soldier-stand.webp  soldier-crouch.webp
-    runner.webp  hulk.webp  shooter.webp
-  prop/
-    corpse.webp
+  terrain_floor.webp        terrain_wall.webp        terrain_half_cover.webp
+  terrain_void.webp         terrain_drop_point.webp  terrain_drop_point_start.webp
+  terrain_terminal.webp     terrain_terminal_done.webp
+  terrain_supply.webp       terrain_supply_done.webp
+  unit_soldier_stand.webp   unit_soldier_crouch.webp
+  unit_runner.webp          unit_hulk.webp           unit_shooter.webp
+  prop_corpse.webp
 ```
 
-命名規則：**全小寫、連字號分隔、不含版本號或日期**（版本由 git 管）。
-邏輯名稱＝路徑去掉 `public/art/` 與副檔名，例如 `terrain/floor`。
+**邏輯名稱 = 檔名去掉副檔名。** 不用子目錄——資產總數只有 16–18 張，
+攤平之後「名稱」與「檔案」一一對應，沒有路徑與鍵值兩套寫法的問題。
 
-**放 `public/` 而不是 `src/`**【推論】：Vite 會把 `public/` 原樣複製、不加雜湊、不進 JS bundle。
+#### 面向的解析順序（這就是那個鉤子）
+
+資產層查表時走一條**回退鏈**：
+
+```
+sprite("unit_soldier_stand", facing="ne")
+  → 先找 unit_soldier_stand_ne
+  → 找不到就退回 unit_soldier_stand
+  → 再找不到就回傳 null（呼叫端畫圖元）
+```
+
+這條規則現在就要寫進載入器，即使目前一張帶面向的圖都沒有。它帶來三件事：
+
+1. **今天交的 `unit_soldier_stand.webp` 永遠有效。** 將來補
+   `unit_soldier_stand_n.webp` 等八張時，是**新增檔案**，不動既有素材、
+   不改 manifest 格式、不改載入器。
+2. **面向可以分批交。** 只畫了 `_n` 與 `_s`？另外六向自動退回無面向版本，
+   畫面不會破。
+3. **狀態與面向正交。** `unit_soldier_crouch_n` 這種組合天然成立，
+   不需要為每個組合另外定義名稱。
+
+> 為什麼不是現在就叫 `unit_soldier_stand_any`？
+> 因為那會讓「今天的素材」帶著一個將來沒有意義的後綴，
+> 而回退鏈已經讓無後綴的名稱扮演「通用版本」的角色，語意更乾淨。【推論】
+
+#### 為什麼放 `public/`
+
+【推論】Vite 會把 `public/` 原樣複製、不加雜湊、不進 JS bundle。
 代價是這些檔案拿不到內容雜湊檔名，配合 GitHub Pages 的 `max-age=600`（§2.3）
 就是每 10 分鐘要重新驗證一次——這正是 service worker 要解決的問題。
 若之後改用雜湊檔名，manifest 需要改由建置產生，與「建置不得產生資產」的前提衝突，
@@ -624,23 +697,32 @@ public/art/
   "version": 1,
   "tileSize": 128,
   "sprites": {
-    "terrain/floor":       { "src": "terrain/floor.webp" },
-    "terrain/wall":        { "src": "terrain/wall.webp" },
-    "terrain/half-cover":  { "src": "terrain/half-cover.webp" },
-    "terrain/void":        { "src": "terrain/void.webp" },
-    "terrain/drop-point":  { "src": "terrain/drop-point.webp" },
-    "terrain/terminal":    { "src": "terrain/terminal.webp" },
-    "terrain/terminal-done": { "src": "terrain/terminal-done.webp" },
-    "terrain/supply":      { "src": "terrain/supply.webp" },
-    "terrain/supply-done": { "src": "terrain/supply-done.webp" },
-    "unit/soldier-stand":  { "src": "unit/soldier-stand.webp" },
-    "unit/soldier-crouch": { "src": "unit/soldier-crouch.webp" },
-    "unit/runner":         { "src": "unit/runner.webp" },
-    "unit/hulk":           { "src": "unit/hulk.webp" },
-    "unit/shooter":        { "src": "unit/shooter.webp" },
-    "prop/corpse":         { "src": "prop/corpse.webp" }
+    "terrain_floor":          { "src": "terrain_floor.webp" },
+    "terrain_wall":           { "src": "terrain_wall.webp" },
+    "terrain_half_cover":     { "src": "terrain_half_cover.webp" },
+    "terrain_void":           { "src": "terrain_void.webp" },
+    "terrain_drop_point":       { "src": "terrain_drop_point.webp" },
+    "terrain_drop_point_start": { "src": "terrain_drop_point_start.webp" },
+    "terrain_terminal":       { "src": "terrain_terminal.webp" },
+    "terrain_terminal_done":  { "src": "terrain_terminal_done.webp" },
+    "terrain_supply":         { "src": "terrain_supply.webp" },
+    "terrain_supply_done":    { "src": "terrain_supply_done.webp" },
+    "unit_soldier_stand":     { "src": "unit_soldier_stand.webp" },
+    "unit_soldier_crouch":    { "src": "unit_soldier_crouch.webp" },
+    "unit_runner":            { "src": "unit_runner.webp" },
+    "unit_hulk":              { "src": "unit_hulk.webp" },
+    "unit_shooter":           { "src": "unit_shooter.webp" },
+    "prop_corpse":            { "src": "prop_corpse.webp" }
   }
 }
+```
+
+將來補面向時，只是往 `sprites` 多加幾筆，既有的條目一個字都不用改：
+
+```json
+    "unit_soldier_stand":    { "src": "unit_soldier_stand.webp" },
+    "unit_soldier_stand_n":  { "src": "unit_soldier_stand_n.webp" },
+    "unit_soldier_stand_ne": { "src": "unit_soldier_stand_ne.webp" },
 ```
 
 設計原則：
@@ -650,6 +732,8 @@ public/art/
   這讓美術可以一張一張交，不必等全部到齊。
 - `variants` 欄位**現在不要加**，但格式預留了空間（每個 sprite 是物件而非字串），
   日後要加 64px 版本時不用改結構。
+- **面向不是 manifest 的欄位，而是名稱的一部分**（§8.3 的回退鏈）。
+  這樣「補面向」永遠只是新增鍵值，不會變成 schema 遷移。
 
 ### 8.5 驗收自檢（交件前跑一次）
 
@@ -658,6 +742,8 @@ public/art/
 3. 亮部（L* > 60）的面積目測 ≤ 15%。
 4. 把貼圖縮到 54px 檢查有沒有閃爍或摩爾紋。
 5. 單位貼圖放在最亮與最暗的地形上各看一次，剪影都要認得出來。
+6. 檔名符合 §8.3 的 `<類別>_<主體>[_<狀態>][_<面向>]` 慣例，
+   **目前一律不帶面向後綴**（那個位置是留給將來的）。
 
 ---
 
@@ -685,9 +771,9 @@ public/art/
 
 | 階段 | 工作 | 檔案 | 規模 |
 |---|---|---|---|
-| A | 資產載入器 + manifest 載入 + `sprite()` 查詢 + 缺圖 fallback | 新增 `src/render/assets.ts` | 80–120 行 |
+| A | 資產載入器 + manifest 載入 + `sprite()` 查詢 + **面向回退鏈（§8.3）** + 缺圖 fallback | 新增 `src/render/assets.ts` | 80–120 行 |
 | A | 在 `game.ts` 啟動時非同步載入，不阻塞第一幀 | `src/ui/game.ts` | 約 20 行 |
-| A | 測試：缺圖時不崩、manifest 缺項回 `null` | 新增 `tests/assets.test.ts` | 約 60 行 |
+| A | 測試：缺圖時不崩、manifest 缺項回 `null`、**面向回退鏈正確**（有 `_n` 用 `_n`、沒有就退回無後綴） | 新增 `tests/assets.test.ts` | 約 60 行 |
 | B | 地形貼圖化 | `renderer.ts` `drawTiles` / `drawVoid` | 改 20 行 |
 | C | 單位貼圖化（**只換本體，HP 條與狀態指示維持圖元**） | `renderer.ts` `drawUnit` | 改 15 行 |
 | D | 屍體貼圖化 | `renderer.ts` `drawCorpse` | 改 10 行 |
@@ -706,6 +792,9 @@ public/art/
 ### 9.4 每一階段的驗收
 
 - **A**：manifest 缺項、圖檔 404、載入中三種情況都必須畫出與現在完全相同的畫面。
+  面向回退鏈要在**還沒有任何面向素材**的情況下就先寫好並測過——
+  這是給「面向將來會變成規則」預留的鉤子（§7.2），
+  等到真的要補面向時才寫，就會變成連基礎素材一起重做。
 - **B**：在 320px 視窗下，§5.2 表中所有「危險」項目仍然可辨識。
 - **C**：單位剪影在最亮與最暗地形上都認得出來；HP 條與狀態指示未被貼圖蓋住。
 - **E**：CI 的線上健檢（比對 commit SHA）仍然通過——SW 不得讓健檢抓到舊版。
