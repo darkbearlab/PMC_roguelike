@@ -21,16 +21,17 @@
       <canvas id="map"></canvas>
 
       <header id="hud">
-        <div class="hud-row hud-top">
-          <div class="chip" id="hud-clock" title="世界時刻（§5）"></div>
+        <!-- HUD 只留「這個動作要不要做」的輸入（§12.6）。
+             任務帳目（時刻、名冊、敵數、損益）都在日誌面板裡，離決策一個點擊。
+             第一列的右側要讓開右上工具列，第二列可以用滿整個寬度。 -->
+        <div class="hud-row hud-primary">
           <div class="chip" id="hud-hp"></div>
           <div class="chip" id="hud-weapon"></div>
+        </div>
+        <div class="hud-row hud-secondary">
           <div class="chip" id="hud-stance"></div>
           <div class="chip" id="hud-load" title="背包負重與移動時間（§3.2）"></div>
-          <div class="chip" id="hud-roster"></div>
-          <div class="chip" id="hud-foes"></div>
         </div>
-        <div class="hud-row hud-ledger" id="hud-ledger"></div>
       </header>
 
       <div id="turn-banner" class="hidden"></div>

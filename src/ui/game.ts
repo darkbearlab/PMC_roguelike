@@ -30,7 +30,7 @@ import { EffectLayer } from '../render/effects';
 import type { Vision } from '../render/vision';
 import { computeVision, isVisible, visionKey } from '../render/vision';
 import { $, $$, esc, show } from './dom';
-import { renderHud } from './hud';
+import { missionPanelHtml, renderHud } from './hud';
 import { lootPanelHtml, selfPanelHtml, wireMenu } from './menus';
 import {
   hideModal, showAbortConfirm, showReinforcement, showSplashConfirm, showSummary,
@@ -544,11 +544,24 @@ export class Game {
     });
   }
 
+  /**
+   * 小卡的位置與高度。
+   *
+   * 高度**必須量出來**，不能用 `50dvh` 那種比例：直向手機扣掉網址列之後
+   * 可視高度只剩約 550px，50dvh 減掉方向盤與留白之後只剩二十幾像素，
+   * 卡片會整個塌掉 —— 比例值撐不住真實的手機高度。
+   *
+   * 卡片可以蓋住地圖，用滿整個可觸區域。§12.8 的「士兵與四個鄰格不能被蓋住」
+   * 管的是**常駐 UI**（HUD 與控制列），不是這種讀完就關掉的清單卡片：
+   * 打開它的當下你在讀清單、按按鈕，不是在點地圖。
+   * 原本為了不越過畫面中線而砍高度，結果是搜刮面板只剩 96px、一次看兩件東西。
+   */
   private placeSheet(host: HTMLElement, at: Vec2 | null): void {
     const me = activePlayerUnit(this.state);
     const below = !!me && !!at && at.y > me.pos.y;
     host.classList.toggle('sheet--top', below);
     host.classList.toggle('sheet--bottom', !below);
+    host.style.maxHeight = Math.round(Math.max(120, this.safe.bottom - this.safe.top)) + 'px';
   }
 
   private updateLog(): void {
@@ -557,7 +570,10 @@ export class Game {
     const items = this.state.log.slice(-40).reverse()
       .map((l) => '<li class="kind-' + l.kind + '">[' + l.at + '] ' + esc(l.text) + '</li>')
       .join('');
-    host.innerHTML = '<h3>戰鬥紀錄<button class="close" data-close="1">關閉</button></h3>'
+    // 任務帳目擺在紀錄上方：HUD 讓出來的那幾行搬到這裡（§12.6）
+    host.innerHTML = '<h3>戰況<button class="close" data-close="1">關閉</button></h3>'
+      + missionPanelHtml(this.state)
+      + '<h3 class="sub">戰鬥紀錄</h3>'
       + '<p class="note">build ' + esc(BUILD_ID) + '　seed ' + this.state.rngSeed + '</p>'
       + '<ol>' + items + '</ol>';
     this.placeSheet(host, null);

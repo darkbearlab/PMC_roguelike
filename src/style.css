@@ -41,16 +41,21 @@ html, body {
 #map { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 
 /* ---------------- HUD（浮動、半透明） ---------------- */
+/* HUD 只放「這一下要做什麼」的輸入（§12.6）。兩列，約佔畫面高度一成。 */
 #hud {
   position: absolute;
   top: env(safe-area-inset-top); left: 0; right: 0;
-  padding: 6px 172px 7px 8px;  /* 右側留給右上工具列的三顆鍵 */
+  padding: 6px 8px 7px 8px;
   background: linear-gradient(to bottom, var(--glass), rgba(11, 15, 20, 0.34));
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
   border-bottom: 1px solid var(--glass-line);
 }
 .hud-row { display: flex; align-items: center; gap: var(--gap); flex-wrap: wrap; }
+/* 只有第一列要讓開右上工具列（三顆 48px 鍵 + 間距）。
+   第二列用滿整個寬度 —— 防禦狀態那格是最長的一格，擠在 218px 裡會一直換行。 */
+.hud-primary { padding-right: 164px; }
+.hud-secondary { margin-top: 5px; }
 .chip {
   font-size: 10.5px; line-height: 1;
   padding: 5px 6px; border-radius: 5px;
@@ -60,6 +65,7 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 .chip.warn { color: #2a0f0c; background: var(--danger); border-color: #ff8b7f; font-weight: 600; }
+.sheet h3.sub { margin-top: 12px; }
 .hud-ledger {
   display: block; margin-top: 5px;
   font-size: 10.5px; color: var(--ink-dim); letter-spacing: .2px;
@@ -198,17 +204,19 @@ html, body {
 }
 /*
  * 目標在士兵下方 → 小卡靠上；否則靠下。
- * max-height 刻意留出 34px 餘裕，讓卡片的邊永遠不會越過畫面正中線 ——
- * 士兵鎖在正中央，所以他跟目標都保證不會被蓋住。
+ *
+ * **max-height 由 placeSheet() 依實測的可觸區域覆寫**，這裡的值只是後備。
+ * 原本寫 `50dvh - ...`，在直向手機扣掉網址列之後（可視高度約 550px）
+ * 只剩二十幾像素，卡片會整個塌掉 —— 比例值撐不住真實的手機高度。
  */
-:root { --sheet-gap: 34px; --dpad-h: calc(var(--btn) * 3 + var(--btn-gap) * 2 + 20px); }
+:root { --dpad-h: calc(var(--btn) * 3 + var(--btn-gap) * 2 + 20px); }
 .sheet--bottom {
   bottom: calc(env(safe-area-inset-bottom) + var(--dpad-h));
-  max-height: calc(50dvh - var(--dpad-h) - var(--sheet-gap));
+  max-height: 40dvh;
 }
 .sheet--top {
   top: calc(env(safe-area-inset-top) + 66px);
-  max-height: calc(50dvh - 66px - var(--sheet-gap));
+  max-height: 40dvh;
 }
 .sheet h3 {
   margin: 0 0 5px; font-size: 12.5px; font-weight: 700; color: var(--accent);

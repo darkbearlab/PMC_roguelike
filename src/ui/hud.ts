@@ -22,11 +22,16 @@ export function shortName(name: string): string {
   return name.split(' ')[0];
 }
 
+/**
+ * HUD 只留「這個動作要不要做」的輸入（§12.6）：
+ * 還能挨幾發、還能開幾槍、讓出行動權後會被怎麼打、走一格要多久。
+ *
+ * 任務帳目（世界時刻、名冊、敵數、戰況損益）全部搬進日誌面板 ——
+ * 它們回答的是「這一場打得怎麼樣」，不是「這一下要做什麼」，
+ * 而在直向手機上它們曾經吃掉將近三成的畫面高度。
+ */
 export function renderHud(state: GameState): void {
   const u = activePlayerUnit(state);
-
-  // v0.7：沒有 AP 了。這一格改成顯示世界時刻，讓玩家對「花了多少時間」有概念。
-  $('#hud-clock').textContent = 'T ' + state.clock;
 
   $('#hud-hp').textContent = u ? `HP ${Math.max(0, u.hp)}/${u.maxHp}` : 'HP —';
 
@@ -41,22 +46,36 @@ export function renderHud(state: GameState): void {
   // 負重（§3.2）：玩家要看得出「再撿就會變慢」
   const load = totalWeight(u ? u.backpack : null);
   const tier = weightTierIndex(load);
-  $('#hud-load').textContent = u
-    ? `負重 ${fmtWeight(load)}/${maxWeight()}・移動 ${moveCostForWeight(load)}`
-    : '負重 —';
+  // 移動時間只有在「不是基準值」時才值得佔位 —— 沒被拖慢就不用一直報。
+  $('#hud-load').textContent = !u ? '負重 —'
+    : tier === 0 ? `負重 ${fmtWeight(load)}/${maxWeight()}`
+    : `負重 ${fmtWeight(load)}/${maxWeight()}・移動 ${moveCostForWeight(load)}`;
   $('#hud-load').classList.toggle('warn', tier > 0);
 
   // 防禦狀態：玩家要在按下結束回合前，知道自己會以什麼狀態承受攻擊（§12.11）
+  // 沒人瞄得到你的時候，掩蔽等級不是可用的資訊 —— 那時候只要知道姿勢就好。
+  // 有人瞄得到才把等級與人數攤開，那正是這一格要被讀到的時候。
   const def = playerDefence(state);
-  $('#hud-stance').textContent = u
-    ? (u.stance === 'CROUCH' ? '蹲' : '站') + '・' + COVER_LABEL[def.level]
-      + (def.threats > 0 ? '（' + def.threats + ' 人瞄得到）' : '（無人瞄準）')
-    : '姿勢 —';
+  const posture = u ? (u.stance === 'CROUCH' ? '蹲' : '站') : '—';
+  $('#hud-stance').textContent = !u ? '姿勢 —'
+    : def.threats === 0 ? posture + '・無人瞄準'
+    : posture + '・' + COVER_LABEL[def.level] + '・' + def.threats + ' 人瞄得到';
   $('#hud-stance').classList.toggle('warn', def.threats > 0 && def.level === 'NONE');
-  $('#hud-roster').textContent = `名冊 ${state.roster.length}`;
-  $('#hud-foes').textContent = `敵 ${enemies(state).length}`;
+}
 
-  $('#hud-ledger').innerHTML = ledgerHtml(state);
+/**
+ * 任務帳目（§12.6）。日誌面板頂端與止損二次確認共用。
+ *
+ * 這些數字全部是「這一場打得怎麼樣」，不是「這一下要做什麼」——
+ * 所以它們不常駐 HUD，而是在玩家真的要問這個問題時（開日誌、考慮止損）才出現。
+ */
+export function missionPanelHtml(state: GameState): string {
+  return '<div class="hud-row">'
+    + '<div class="chip">時刻 ' + state.clock + '</div>'
+    + '<div class="chip">名冊 ' + state.roster.length + '</div>'
+    + '<div class="chip">敵 ' + enemies(state).length + '</div>'
+    + '</div>'
+    + '<p class="hud-ledger">' + ledgerHtml(state) + '</p>';
 }
 
 /** §12.3 戰況損益。止損二次確認也用同一份文字。 */
