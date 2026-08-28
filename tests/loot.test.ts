@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { checkLegal } from '../src/core/commands';
 import {
-  countAmmo, effectiveMoveTime, maxWeight, moveCostForWeight, totalWeight,
+  countAmmo, effectiveMoveTime, maxWeight, moveCostForWeight, nextTierAt, totalWeight,
 } from '../src/core/inventory';
 import { RULES } from '../src/core/content';
 import { lootAt } from '../src/core/state';
@@ -27,37 +27,38 @@ describe('§3.2 負重分級', () => {
   it('分級表來自資料檔，上限 50', () => {
     expect(maxWeight()).toBe(50);
     expect(RULES.backpack.weightTiers.map((t) => [t.maxWeight, t.moveCost]))
-      .toEqual([[20, 10], [35, 12], [50, 14]]);
+      .toEqual([[30, 10], [40, 12], [50, 14]]);
   });
 
-  it('v0.12：初始配備多了一個封合劑，士兵一開場就被拖慢一級', () => {
+  it('初始配備仍然落在基準速度內，但餘裕不多', () => {
     const s = testState(ROOM);
     const w = totalWeight(bagOf(s));
     expect(w).toBe(23);                       // 24×0.5 + 2×3 + 封合劑 5
-    expect(moveCostForWeight(w)).toBe(12);    // v0.11 是 18 → 10
-    expect(effectiveMoveTime(player(s))).toBe(12);
-    // 丟掉封合劑就回到基準速度 —— 這是開場第一個決定
-    expect(moveCostForWeight(w - 5)).toBe(10);
+    expect(moveCostForWeight(w)).toBe(10);    // 第一級放寬到 30 之後仍是基準速度
+    expect(effectiveMoveTime(player(s))).toBe(10);
+    // 但只剩 7 的餘裕：撿一個動力核心（6）就快要掉級了
+    expect(nextTierAt(w)).toBe(30);
+    expect(moveCostForWeight(31)).toBe(12);
   });
 
   it('跨過門檻移動時間就變慢', () => {
     const s = testState(ROOM);
-    expect(moveCostForWeight(20)).toBe(10);
-    expect(moveCostForWeight(21)).toBe(12);
-    expect(moveCostForWeight(35)).toBe(12);
-    expect(moveCostForWeight(36)).toBe(14);
+    expect(moveCostForWeight(30)).toBe(10);
+    expect(moveCostForWeight(31)).toBe(12);
+    expect(moveCostForWeight(40)).toBe(12);
+    expect(moveCostForWeight(41)).toBe(14);
     const p = player(s);
     p.backpack!.items.push({
-      id: 'X', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 1,
+      id: 'X', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 2,
     });
-    expect(totalWeight(p.backpack)).toBe(29);
+    expect(totalWeight(p.backpack)).toBe(35);
     expect(effectiveMoveTime(p)).toBe(12);
   });
 
   it('負重真的讓移動變慢，不只是顯示', () => {
     let s = testState(ROOM);
     player(s).backpack!.items.push({
-      id: 'X', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 1,
+      id: 'X', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 2,
     });
     s = run(s, { type: 'MOVE', dir: 'E' });
     expect(player(s).nextActAt).toBe(12);
