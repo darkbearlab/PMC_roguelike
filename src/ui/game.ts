@@ -25,7 +25,7 @@ import { COVER_LABEL } from '../core/cover';
 import { facingFromDelta, manhattan, sameTile } from '../core/grid';
 import { inBounds } from '../core/map';
 import type { Camera } from '../render/camera';
-import { computeCamera, screenToTile } from '../render/camera';
+import { computeCamera, screenToTile, tileCenter } from '../render/camera';
 import type { Ghost, InteractPreview, Lock, MovePreview } from '../render/renderer';
 import { draw } from '../render/renderer';
 import { EffectLayer } from '../render/effects';
@@ -34,6 +34,8 @@ import { computeVision, isVisible, visionKey } from '../render/vision';
 import { $, $$, esc, show } from './dom';
 import { fmtWeight, missionPanelHtml, renderHud, shortName } from './hud';
 import { carriedWeight } from '../core/inventory';
+import { MotionLayer, PanLayer } from '../render/motion';
+import { UI } from './config';
 import type { Deployment } from '../core/meta';
 import { backpackHtml, lootPanelHtml, selfPanelHtml, wireMenu } from './menus';
 import {
@@ -101,6 +103,12 @@ export class Game {
   private safe = { top: 0, bottom: 1 };
   /** 戰場回饋層。動畫狀態只活在這裡，不進 GameState（§12.9）。 */
   private effects = new EffectLayer();
+  /** 格間移動演出（v0.17）。同上：純呈現，`GameState` 裡沒有它的任何痕跡。 */
+  private motion = new MotionLayer();
+  /** 攝影機平移（v0.17 §2）。平移期間行動中的單位不得開始動作（§3.1）。 */
+  private panner = new PanLayer();
+  /** 上一次算出來的鏡頭目標。平移的起點取自這裡。 */
+  private camAim: Vec2 | null = null;
 
   /** 測試用入口。正式流程一律走 canvas 的 pointer 事件與 rAF 迴圈。 */
   readonly test = {
@@ -117,6 +125,15 @@ export class Game {
     autoActive: (): boolean => this.auto !== null,
     autoStep: (): void => this.stepAuto(),
     refresh: (): void => this.refresh(),
+    /** v0.17 §5：量測腳本用來把動畫旋鈕歸零做對照。 */
+    config: (): typeof UI => UI,
+    canFireAt: (p: Vec2): boolean => checkLegal(this.state, { type: 'FIRE', target: p }).ok,
+    /** v0.17：這個單位現在畫在哪（浮點格座標）。動畫是純呈現，所以只有測試看得到它。 */
+    renderPosOf: (id: string): Vec2 => {
+      const u = findUnit(this.state, id);
+      return u ? this.motion.posOf(id, u.pos, performance.now()) : { x: -1, y: -1 };
+    },
+    needsPan: (p: Vec2): boolean => this.needsPan(p),
     enemySteps: (): void => this.runEnemySteps(),
   };
 
@@ -146,10 +163,15 @@ export class Game {
   // ---------------------------------------------------------------- 指令
 
   dispatch(cmd: Command): boolean {
+    // §1.3：新的輸入進來 → 當前這一步立刻瞬移完成 → 立即處理下一步。
+    // 趕路的時候不擋人。
+    this.motion.finishAll();
+    const before = this.posSnapshot();
     const { state, events } = applyCommand(this.state, cmd);
     if (state === this.state) return false;
     this.state = state;
     this.effects.push(events, performance.now());
+    this.trackMoves(before, UI.animation.playerMoveMs);
     if (isPlayerTurn(this.state)) this.skipEnemyTurn = false;
     this.recenter();               // 玩家做了事 → 鏡頭回到士兵（§12.15）
     this.refresh();
@@ -167,9 +189,31 @@ export class Game {
     this.restart();
   }
 
+  /** 動作前的位置快照。比對前後才知道誰動了、要幫誰補一段位移。 */
+  private posSnapshot(): Map<string, Vec2> {
+    const m = new Map<string, Vec2>();
+    for (const u of this.state.units) m.set(u.id, { ...u.pos });
+    return m;
+  }
+
+  /** 誰的邏輯位置變了，就幫他補一段位移動畫（v0.17 §1）。 */
+  private trackMoves(before: Map<string, Vec2>, dur: number): void {
+    if (dur <= 0) return;
+    const now = performance.now();
+    for (const u of this.state.units) {
+      const from = before.get(u.id);
+      if (!from) continue;                       // 新落地的單位不滑進來
+      if (from.x === u.pos.x && from.y === u.pos.y) continue;
+      this.motion.begin(u.id, from, u.pos, dur, now);
+    }
+  }
+
   restart(): void {
     this.state = createInitialState(this.seed, this.forcedMap ?? undefined, this.deployment ?? undefined);
     this.ghosts.clear();
+    this.motion.clear();
+    this.panner.finish();
+    this.camAim = null;
     this.auto = null;
     this.sel = null;
     this.recenter();
@@ -186,6 +230,8 @@ export class Game {
     this.syncVision();
     this.updateGhosts();
     const me = activePlayerUnit(this.state);
+    // 輪到玩家就一定不再聚焦在敵人身上 —— 否則鏡頭會卡在上一個行動者那裡。
+    if (isPlayerTurn(this.state)) this.spotlight = null;
     if (this.spotlight) this.focus = { ...this.spotlight };
     else if (me) this.focus = { ...me.pos };
     this.validateSelection();
@@ -286,7 +332,11 @@ export class Game {
       return;
     }
     if (s.kind === 'LOOT') {
-      if (!lootAt(this.state, s.pos)) this.sel = null;
+      // §4.4：容器被掠奪後不會消失，所以不能用「主體失效」當條件。
+      // 改為兩個明確的條件，滿足任一就關：拿空了，或走離相鄰範圍。
+      const pile = lootAt(this.state, s.pos);
+      if (!pile || pile.items.length === 0) { this.sel = null; return; }
+      if (manhattan(me.pos, s.pos) > UI.lootCloseDistance) this.sel = null;
       return;
     }
     if (s.kind === 'INTERACT') {
@@ -307,6 +357,8 @@ export class Game {
     if (!isPlayerTurn(this.state) && !this.state.pendingReinforcement && !isMissionOver(this.state)) {
       // 敵方行動演出中，點畫面任意處 = 跳過，直接結算到再次輪到玩家
       this.skipEnemyTurn = true;
+      this.motion.finishAll();
+      this.panner.finish();
       this.updateControls();
       return;
     }
@@ -557,7 +609,9 @@ export class Game {
     host.innerHTML = s.kind === 'SELF' ? selfPanelHtml(this.state)
       : s.kind === 'BAG' ? backpackHtml(this.state)
       : lootPanelHtml(this.state, at);
-    this.placeSheet(host, at, s.kind === 'BAG');
+    // §4.1：**凡是不消耗遊戲時間的介面，都可以蓋住整張地圖。**
+    // 士兵資訊、背包、掠奪都不花時間 —— 盤面是靜止的，玩家不需要一邊看地圖一邊決策。
+    this.placeSheet(host, at, true);
     show(host, true);
     wireMenu(host, at, {
       pickup: (lootId, itemIndex, slot) => {
@@ -809,16 +863,68 @@ export class Game {
     if (isMissionOver(s) || s.pendingReinforcement) return;
 
     if (!isPlayerTurn(s)) {
+      // §3.1：攝影機平移 → 到位 → 該單位才行動。平移期間不推進。
+      if (!this.skipEnemyTurn && this.panner.active(now)) return;
       if (this.skipEnemyTurn || now - this.lastStep >= RULES.presentation.enemyStepMs) {
+        // §2.2：目標已經舒服地待在畫面內就不平移、也不等待。
+        // 只有真的需要平移時才先花一次 panMs，下一個 tick 才讓它動。
+        if (!this.skipEnemyTurn && this.aimAtActor(now)) return;
         this.lastStep = now;
         this.runEnemySteps();
       }
       return;
     }
-    if (this.auto && now - this.lastStep >= RULES.presentation.playerMoveStepMs) {
+    // 自動移動的節奏與位移動畫對齊：動畫還在跑就別急著送下一步，
+    // 否則畫面上會看到單位「跳一格再滑回去」。
+    const gap = Math.max(RULES.presentation.playerMoveStepMs, UI.animation.playerMoveMs);
+    if (this.auto && now - this.lastStep >= gap) {
       this.lastStep = now;
       this.stepAuto();
     }
+  }
+
+  /**
+   * 若下一個要行動的單位不在畫面上（或太靠邊），先把鏡頭平移過去（§2）。
+   *
+   * @returns true = 這一幀開始平移了，呼叫端不要推進回合。
+   */
+  private aimAtActor(now: number): boolean {
+    const actor = activeUnit(this.state);
+    if (!actor || actor.faction !== 'ENEMY') return false;
+    // 看不見的敵人不值得把鏡頭帶過去 —— 那一段照舊瞬間結算
+    if (!isVisible(this.vision, this.state.map, actor.pos)) return false;
+    if (!this.needsPan(actor.pos)) {
+      this.spotlight = { ...actor.pos };
+      return false;
+    }
+    const from = this.camAim ?? this.focus;
+    this.spotlight = { ...actor.pos };
+    this.pan = { x: 0, y: 0 };
+    this.panner.begin(from, actor.pos, UI.animation.panMs, now);
+    return UI.animation.panMs > 0;
+  }
+
+  /**
+   * 這一格需要把鏡頭移過去嗎？（§2.2）
+   *
+   * 判準是「它在不在畫面裡、離邊緣夠不夠遠」，不是「它是不是鏡頭中心」——
+   * 加上平移期間暫停之後，若每一隻敵人都要平移再等，十隻的一輪會非常久。
+   */
+  private needsPan(t: Vec2): boolean {
+    const m = UI.animation.edgeMargin;
+    if (m <= 0) return false;
+    const from = this.camAim ?? this.focus;
+    const cam = computeCamera(this.state.map, this.viewW, this.viewH, from, this.pan, this.safe);
+    const c = tileCenter(cam, t);
+    const pad = m * cam.tile;
+    const uncomfortable = c.x < pad || c.x > this.viewW - pad
+      || c.y < this.safe.top + pad || c.y > this.safe.bottom - pad;
+    if (!uncomfortable) return false;
+    // 地圖邊界會夾住鏡頭：目標卡在角落時，它「離畫面邊緣很近」是必然的，
+    // 平移過去也不會改善。**平移不會真的移動視野時就不要平移**，
+    // 否則整場都在為了角落的敵人多等一次 panMs。
+    const to = computeCamera(this.state.map, this.viewW, this.viewH, t, { x: 0, y: 0 }, this.safe);
+    return Math.abs(to.ox - cam.ox) + Math.abs(to.oy - cam.oy) > cam.tile * 0.5;
   }
 
   /**
@@ -835,10 +941,13 @@ export class Game {
       const wasVisible = !!actor && isVisible(this.vision, this.state.map, actor.pos);
       const hpBefore = activePlayerUnit(this.state)?.hp ?? 0;
 
+      const before = this.posSnapshot();
       const { state, events } = applyCommand(this.state, { type: 'ADVANCE' });
       if (state === this.state) break;
       this.state = state;
       this.effects.push(events, performance.now());
+      // 跳過演出時不播動畫 —— 跳過後的結果必須與完整播放完全相同（§3.3）
+      if (!this.skipEnemyTurn) this.trackMoves(before, UI.animation.enemyMoveMs);
       if (isPlayerTurn(this.state)) this.skipEnemyTurn = false;
       this.syncVision();
 
@@ -849,16 +958,33 @@ export class Game {
       if (isPlayerTurn(this.state) || this.state.pendingReinforcement || isMissionOver(this.state)) break;
       if (this.skipEnemyTurn) continue;   // 跳過：只結算，不停下來演
       if (wasVisible || nowVisible || hpAfter !== hpBefore) {
-        // 鏡頭強制帶到正在行動的那個單位，並取消玩家的手動平移（§12.15）
-        this.spotlight = { ...(after ? after.pos : (actor as { pos: Vec2 }).pos) };
-        this.recenter();
+        // 鏡頭跟著正在行動的那個單位，並取消玩家的手動平移（§12.15 / §2.1）。
+        // 需不需要真的平移由 §2.2 決定 —— 已經在畫面裡就零延遲。
+        const to = after ? after.pos : (actor as { pos: Vec2 }).pos;
+        this.spotlight = { ...to };
+        this.pan = { x: 0, y: 0 };
+        if (this.needsPan(to)) {
+          this.panner.begin(this.camAim ?? this.focus, to, UI.animation.panMs, performance.now());
+        }
         break;
       }
     }
     if (isPlayerTurn(this.state) || this.state.pendingReinforcement || isMissionOver(this.state)) {
       this.spotlight = null;
+      this.panner.finish();
     }
     this.refresh();
+  }
+
+  /** 鏡頭該對準的那一格，取的是**動畫中的**位置。 */
+  private visualFocus(now: number): Vec2 {
+    const id = this.spotlight
+      ? this.state.units.find((u) => sameTile(u.pos, this.spotlight as Vec2))?.id
+      : activePlayerUnit(this.state)?.id;
+    if (!id) return this.focus;
+    const u = findUnit(this.state, id);
+    if (!u) return this.focus;
+    return this.motion.posOf(u.id, u.pos, now);
   }
 
   private buildLock(): Lock | null {
@@ -924,7 +1050,13 @@ export class Game {
   }
 
   private render(now: number): void {
-    this.cam = computeCamera(this.state.map, this.viewW, this.viewH, this.focus, this.pan, this.safe);
+    // 鏡頭看的是**畫面上**的位置，不是邏輯位置：
+    // 否則玩家自己走一格時，格子瞬間置中而人還在滑，看起來會像倒退嚕。
+    const aim = this.panner.active(now)
+      ? this.panner.focus(this.focus, now)
+      : this.visualFocus(now);
+    this.camAim = aim;
+    this.cam = computeCamera(this.state.map, this.viewW, this.viewH, aim, this.pan, this.safe);
     draw(this.ctx, this.viewW, this.viewH, {
       state: this.state,
       vision: this.vision,
@@ -935,6 +1067,7 @@ export class Game {
       movePreview: this.buildMovePreview(),
       interactPreview: this.buildInteractPreview(),
       time: now,
+      renderPos: (u) => this.motion.posOf(u.id, u.pos, now),
     });
     // 回饋層畫在最上層。它只是被畫出來，不會擋住輸入也不會延後回合推進。
     // 口令要知道「這個敵人看不看得見」與「玩家在哪」：

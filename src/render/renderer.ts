@@ -107,6 +107,16 @@ export interface Scene {
   interactPreview: InteractPreview | null;
   /** 毫秒時間戳，用於點滅動畫。 */
   time: number;
+  /**
+   * 單位現在**畫**在哪（浮點格座標，v0.17）。
+   * 邏輯位置在動作結算當下就已經改變，這只是把畫面追上去 —— 不影響任何規則。
+   */
+  renderPos?: (u: Unit) => Vec2;
+}
+
+/** 單位的繪製座標。沒有動畫層就用邏輯位置。 */
+function at(sc: Scene, u: Unit): Vec2 {
+  return sc.renderPos ? sc.renderPos(u) : u.pos;
 }
 
 export function draw(ctx: CanvasRenderingContext2D, w: number, h: number, sc: Scene): void {
@@ -296,13 +306,15 @@ function drawUnits(ctx: CanvasRenderingContext2D, sc: Scene): void {
   const me = activePlayerUnit(state);
   for (const u of state.units) {
     if (u.faction === 'ENEMY' && !isVisible(vision, state.map, u.pos)) continue;
-    drawUnit(ctx, cam, u, me ? u.id === me.id : false);
+    drawUnit(ctx, cam, u, me ? u.id === me.id : false, at(sc, u));
   }
 }
 
-function drawUnit(ctx: CanvasRenderingContext2D, cam: Camera, u: Unit, isActive: boolean): void {
+function drawUnit(
+  ctx: CanvasRenderingContext2D, cam: Camera, u: Unit, isActive: boolean, pos: Vec2,
+): void {
   const t = cam.tile;
-  const c = tileCenter(cam, u.pos);
+  const c = tileCenter(cam, pos);
   const color = u.faction === 'PLAYER' ? C.player : (FOE[u.archetype] ?? '#ff5b4a');
   const crouched = u.stance === 'CROUCH';
   const r = t * (crouched ? 0.26 : 0.34);
@@ -416,7 +428,7 @@ function drawTargetFrames(ctx: CanvasRenderingContext2D, sc: Scene): void {
   for (const u of state.units) {
     if (u.faction !== 'ENEMY') continue;
     if (!isVisible(vision, state.map, u.pos)) continue;
-    const s = tileToScreen(cam, u.pos);
+    const s = tileToScreen(cam, at(sc, u));
 
     if (legal.has(u.id)) {
       ctx.strokeStyle = C.frameLegal;
