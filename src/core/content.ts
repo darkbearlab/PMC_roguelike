@@ -7,13 +7,16 @@ import weaponsJson from '../data/weapons.json';
 import actorsJson from '../data/actors.json';
 import itemsJson from '../data/items.json';
 import calloutsJson from '../data/callouts.json';
+import contractsJson from '../data/contracts.json';
+import contractRulesJson from '../data/contract-rules.json';
 import mission01Json from '../data/maps/mission_01.json';
 import mission02Json from '../data/maps/mission_02.json';
 import mission03Json from '../data/maps/mission_03.json';
 import mission04Json from '../data/maps/mission_04.json';
 
 import type { FireMode, Weapon, WeaponClass } from './state';
-import type { RawMap } from './map';
+import type { MapStats, RawMap } from './map';
+import type { ContractBrief } from './contracts';
 
 export interface Rules {
   roster: { size: number; idPrefix: string };
@@ -126,6 +129,21 @@ export interface ItemDef {
   };
 }
 
+/** 合約清單的推導規則（§18.2 / §18.3）。門檻與權重全在資料檔。 */
+export interface ContractRules {
+  listSize: number;
+  maxTags: number;
+  minTags: number;
+  tags: {
+    id: string; label: string; priority: number;
+    stat: keyof MapStats; op: 'gte' | 'lte'; value: number;
+  }[];
+  difficulty: {
+    terms: { stat: keyof MapStats; base: number; weight: number }[];
+    bands: { max: number; rating: string; label: string }[];
+  };
+}
+
 export const RULES: Rules = rulesJson as unknown as Rules;
 export const WEAPONS: Weapon[] = weaponsJson as unknown as Weapon[];
 export const ACTORS: Record<string, ActorArchetype> = actorsJson as unknown as Record<string, ActorArchetype>;
@@ -154,6 +172,16 @@ export const ITEMS: Record<string, ItemDef> = Object.fromEntries(
 export const CALLOUTS: Record<string, string> = Object.fromEntries(
   Object.entries(calloutsJson as Record<string, string>).filter(([k]) => !k.startsWith('_')),
 );
+
+/**
+ * 合約簡報（§18.4）。**手寫文案**，與地圖資料分離 ——
+ * 地形標籤與難度評級則相反，一律由統計值推導（§18.2）。
+ */
+export const CONTRACTS: Record<string, ContractBrief> = Object.fromEntries(
+  Object.entries(contractsJson as Record<string, unknown>).filter(([k]) => !k.startsWith('_')),
+) as Record<string, ContractBrief>;
+
+export const CONTRACT_RULES: ContractRules = contractRulesJson as unknown as ContractRules;
 
 /** 射擊模式的循環順序（§2.5：點一下循環切換）。 */
 export function fireModeOrder(): FireMode[] {

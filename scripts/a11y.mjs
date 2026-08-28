@@ -131,6 +131,41 @@ await p.locator('#modal-root button[data-yes]').click();
 await p.waitForTimeout(250);
 results.push(await audit('結算畫面'));
 
+// ---- 合約清單（§18.5）。走的是另一條入口：沒有 ?map= 才會出現 ----
+await p.goto((process.env.URL || 'http://localhost:4188/') + '?seed=1', { waitUntil: 'networkidle' });
+await p.waitForTimeout(300);
+if (await p.locator('.c-card').count() !== 3) {
+  console.log('❌ 合約清單沒有出現三張卡片');
+  process.exitCode = 1;
+}
+results.push(await audit('合約清單（收合）'));
+await p.locator('.c-card button[data-toggle]').first().click();
+await p.waitForTimeout(150);
+results.push(await audit('合約清單（展開簡報）'));
+// 展開之後整份公文要讀得完：卡片不得被裁掉，畫面要捲得到底
+const readable = await p.evaluate(() => {
+  const card = document.querySelector('.c-card.open');
+  const root = document.querySelector('#contract-root');
+  root.scrollTop = root.scrollHeight;
+  return {
+    hasBrief: !!card.querySelector('.c-brief'),
+    cardBottom: Math.round(card.getBoundingClientRect().bottom),
+    scrollable: root.scrollHeight > root.clientHeight,
+  };
+});
+console.log(readable.hasBrief ? `✅ 合約簡報可展開並捲動（可捲動 = ${readable.scrollable}）` : '❌ 展開後沒有簡報');
+// 出擊 → 回到戰鬥畫面
+await p.locator('.c-card.open button[data-go]').click();
+await p.waitForTimeout(400);
+const started = await p.evaluate(() => ({
+  hidden: document.querySelector('#contract-root').classList.contains('hidden'),
+  map: window.__game && window.__game.state.map.id,
+}));
+console.log(started.hidden && started.map
+  ? `✅ 確認出擊後進入 ${started.map}，清單已關閉`
+  : '❌ 出擊流程沒有進入任務：' + JSON.stringify(started));
+if (!started.hidden || !started.map) process.exitCode = 1;
+
 const bad = [...results.flatMap(r => r.bad), ...reachBad];
 const scroll = results.filter(r => r.hScroll);
 console.log(bad.length ? '❌ 觸控區過小:\n  ' + bad.join('\n  ') : '✅ 所有可點擊元素 >= 48x48 CSS px 且命中區互不重疊 (320px 寬視窗)');

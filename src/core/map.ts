@@ -32,6 +32,8 @@ export interface MapStats {
   /** 對東西向／南北向射手提供得出掩蔽的可通行格比例。 */
   dirCoverEW: number;
   dirCoverNS: number;
+  /** 周圍八格不是牆的比例。量的是建築的寬窄，與掩體多寡無關（v0.14）。 */
+  openness: number;
   mainDist: number;
   routeLen: number;
   /** 走最短路徑要連續暴露幾格。 */

@@ -168,6 +168,33 @@ export function directionalCover(m) {
   return { ew: ew / n, ns: ns / n };
 }
 
+/**
+ * 空間開闊度（v0.14）：可通行格的周圍八格中，**不是牆**的比例。
+ *
+ * 這裡刻意只把 `#` 算作阻擋，**半掩體不算** —— 要量的是建築的寬窄，
+ * 不是掩體多寡（那是 coverDensity 的事）。若把掩體一起算進去，
+ * 掩體密集的倉儲區會被判成「狹窄」，而那正好是它最不狹窄的原因。
+ *
+ * 合約清單的「空間狹窄／開闊地形」標籤由這個值推導（§18.2）。
+ */
+export function openness(m) {
+  let n = 0;
+  let free = 0;
+  for (let y = 0; y < m.h; y++) {
+    for (let x = 0; x < m.w; x++) {
+      if (at(m, x, y) === '#') continue;
+      n++;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          if (at(m, x + dx, y + dy) !== '#') free++;
+        }
+      }
+    }
+  }
+  return n === 0 ? 0 : free / (8 * n);
+}
+
 export function findAll(m, ch) {
   const out = [];
   for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) if (m.g[y][x] === ch) out.push({ x, y });
@@ -319,7 +346,7 @@ export function validate(def) {
       walkable, covers, density, drops: drops.length,
       dropGap: drops.length >= 2 ? `${minGap}–${maxGap}` : '—',
       mainDist, routeLen: route ? route.length - 1 : 0, directRun, forcedRun, estRun,
-      dirCover: directionalCover(m),
+      dirCover: directionalCover(m), openness: openness(m),
       enemies: enemies.length, kinds, caches: caches.length,
     },
   };
@@ -329,7 +356,7 @@ export function validate(def) {
  * 把定義轉成 core/map.ts 吃的 RawMap。
  *
  * **統計值一併寫進 JSON**（v0.14）：合約清單的地形標籤與難度評級都由它推導，
- * 不得手寫（§14.2）。手寫的標籤會在地圖被修改後開始說謊，而地圖一定會被修改；
+ * 不得手寫（§18.2）。手寫的標籤會在地圖被修改後開始說謊，而地圖一定會被修改；
  * 統計值不會 —— 它跟著 `npm run map:build` 一起重算，CI 會比對。
  */
 export function toRawMap(def, stats) {
@@ -350,6 +377,7 @@ export function toRawMap(def, stats) {
       coverDensity: round3(stats.density),
       dirCoverEW: round3(stats.dirCover.ew),
       dirCoverNS: round3(stats.dirCover.ns),
+      openness: round3(stats.openness),
       mainDist: stats.mainDist,
       routeLen: stats.routeLen,
       directRun: stats.directRun,

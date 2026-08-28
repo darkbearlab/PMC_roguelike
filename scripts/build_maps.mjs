@@ -34,7 +34,8 @@ for (const def of MAPS) {
     + `　主目標距離 ${stats.mainDist}（走 ${stats.routeLen} 步）`
     + `　暴露：直線 ${stats.directRun} / 必經 ${stats.forcedRun}`
     + `　預估耗時 ${stats.estRun}`
-    + `　方向性掩蔽 東西 ${(stats.dirCover.ew * 100).toFixed(0)}% / 南北 ${(stats.dirCover.ns * 100).toFixed(0)}%`);
+    + `　方向性掩蔽 東西 ${(stats.dirCover.ew * 100).toFixed(0)}% / 南北 ${(stats.dirCover.ns * 100).toFixed(0)}%`
+    + `　開闊度 ${(stats.openness * 100).toFixed(0)}%`);
   console.log(`敵人 ${stats.enemies} ` + JSON.stringify(stats.kinds) + `　搜刮點 ${stats.caches}`);
 
   if (errors.length) {
@@ -59,11 +60,12 @@ const rows = allStats.map((s) => [
   `${s.directRun} / ${s.forcedRun}`,
   String(s.estRun),
   `${(s.dirCover.ew * 100).toFixed(0)}% / ${(s.dirCover.ns * 100).toFixed(0)}%`,
+  `${(s.openness * 100).toFixed(0)}%`,
   `${s.enemies}　R${s.kinds.RUNNER ?? 0} S${s.kinds.SHOOTER ?? 0} H${s.kinds.HULK ?? 0}`,
   String(s.caches),
 ]);
 const head = ['id', '名稱', '尺寸', '可通行', '掩體（密度）', '空投點／間距',
-  '主目標距離／步數', '暴露 直線／必經', '預估耗時', '方向性掩蔽 東西／南北', '敵人組成', '搜刮點'];
+  '主目標距離／步數', '暴露 直線／必經', '預估耗時', '方向性掩蔽 東西／南北', '開闊度', '敵人組成', '搜刮點'];
 const md = [
   '# 地圖統計摘要',
   '',
@@ -97,6 +99,8 @@ const md = [
   '  實際耗時一定更高（交火、繞路、搜刮、裝填）。它是靜態的，所以進得了 CI（§13.5）。',
   '- **方向性掩蔽 東西／南北** = 對該軸向射手提供得出掩蔽的可通行格比例。',
   '  掩體列的走向等於在決定哪個軸向的交火是安全的，所以兩者的**差距**有上限（v0.13）。',
+  '- **開闊度** = 可通行格周圍八格中不是牆的比例。只算牆、不算半掩體 ——',
+  '  量的是建築的寬窄，不是掩體多寡。合約清單的地形標籤由這個值推導（§18.2）。',
   '',
 ];
 mkdirSync(HERE + '/../docs', { recursive: true });

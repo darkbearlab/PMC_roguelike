@@ -119,8 +119,16 @@ export class Game {
     enemySteps: (): void => this.runEnemySteps(),
   };
 
-  /** @param forcedMap `?map=<id>` 指定的地圖；null 代表由種子隨機選（§13.2）。 */
-  constructor(private seed: number, private forcedMap: RawMap | null = null) {
+  /**
+   * @param forcedMap `?map=<id>` 指定的地圖；null 代表由種子隨機選（§13.2）。
+   * @param onReturnToList 有值時，結算畫面會多一顆「返回合約清單」（§18.1）。
+   *                       `?map=` 除錯流程沒有清單可回，所以是選填的。
+   */
+  constructor(
+    private seed: number,
+    private forcedMap: RawMap | null = null,
+    private onReturnToList: (() => void) | null = null,
+  ) {
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('取不到 Canvas 2D context');
     this.ctx = ctx;
@@ -144,6 +152,16 @@ export class Game {
     this.recenter();               // 玩家做了事 → 鏡頭回到士兵（§12.15）
     this.refresh();
     return true;
+  }
+
+  /**
+   * 換一份合約（§18.1）。**不重建 Game** —— 事件監聽與 rAF 迴圈只綁一次，
+   * 每回清單重新建一個 Game 會把它們疊起來。
+   */
+  loadMission(seed: number, map: RawMap): void {
+    this.seed = seed;
+    this.forcedMap = map;
+    this.restart();
   }
 
   restart(): void {
@@ -615,7 +633,11 @@ export class Game {
     if (this.modal === 'SPLASH') return;
     if (s.result !== 'ONGOING' && this.modal !== 'SUMMARY') {
       this.modal = 'SUMMARY';
-      showSummary(s, () => this.restart());
+      showSummary(
+        s,
+        () => this.restart(),
+        this.onReturnToList,
+      );
       return;
     }
     if (this.modal === 'SUMMARY' || this.modal === 'ABORT') return;

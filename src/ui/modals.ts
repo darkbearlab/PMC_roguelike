@@ -117,8 +117,18 @@ function resultTitle(state: GameState): [string, string] {
   return RESULT_TITLE[state.result] ?? RESULT_TITLE.ONGOING;
 }
 
-/** §11.4 結算畫面。 */
-export function showSummary(state: GameState, onRestart: () => void): void {
+/**
+ * §11.4 結算畫面。
+ *
+ * @param onReturnToList v0.14：回到**重新產生**的合約清單。
+ *   與「重新開始」是兩件事 —— 後者重打同一份合約、同一個種子，
+ *   前者換一批合約。`?map=` 的除錯流程沒有清單可回，所以可以是 null。
+ */
+export function showSummary(
+  state: GameState,
+  onRestart: () => void,
+  onReturnToList: (() => void) | null = null,
+): void {
   const [title, cls] = resultTitle(state);
   const sec = state.objectives.secondary;
   const r = open(
@@ -138,7 +148,15 @@ export function showSummary(state: GameState, onRestart: () => void): void {
     + '<ul>' + extractedList(state) + '</ul>'
     + '<p><b>遺留在戰場上</b>（未回收的損失）：</p>'
     + '<ul>' + abandonedList(state) + '</ul>'
-    + '<div class="menu-actions"><button class="primary" data-restart="1">重新開始</button></div>',
+    + '<div class="menu-actions">'
+    + (onReturnToList
+      ? '<button class="primary" data-list="1">返回合約清單<em>重新開出一批合約</em></button>'
+      : '')
+    + '<button' + (onReturnToList ? '' : ' class="primary"')
+    + ' data-restart="1">重新開始<em>同一份合約，同一個種子</em></button>'
+    + '</div>',
   );
   (r.querySelector('button[data-restart]') as HTMLButtonElement).addEventListener('click', onRestart);
+  const back = r.querySelector<HTMLButtonElement>('button[data-list]');
+  if (back && onReturnToList) back.addEventListener('click', onReturnToList);
 }

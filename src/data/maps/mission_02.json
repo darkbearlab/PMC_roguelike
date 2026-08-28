@@ -161,6 +161,7 @@
     "coverDensity": 0.042,
     "dirCoverEW": 0.302,
     "dirCoverNS": 0.467,
+    "openness": 0.782,
     "mainDist": 48,
     "routeLen": 48,
     "directRun": 4,

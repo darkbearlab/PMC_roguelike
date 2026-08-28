@@ -1,0 +1,42 @@
+{
+  "_comment": "合約清單的推導規則（§18.2 / §18.3）。標籤與難度評級一律由地圖統計值推導，不得手寫 —— 手寫的標籤會在地圖被修改後開始說謊，統計值不會。門檻與權重全部放在這裡，方便調整。",
+
+  "listSize": 3,
+
+  "_tags": "op: gte（>=）或 lte（<=）。priority 小的先顯示；同分依表中順序。顯示上限 maxTags，不足 minTags 時清單本身沒問題，只是這張圖的性格不強烈。",
+  "maxTags": 4,
+  "minTags": 2,
+  "tags": [
+    { "id": "COVERED", "label": "掩蔽充足", "priority": 10, "stat": "coverDensity", "op": "gte", "value": 0.18 },
+    { "id": "BARE", "label": "掩蔽稀少", "priority": 10, "stat": "coverDensity", "op": "lte", "value": 0.1 },
+    { "id": "RANGED", "label": "敵方以遠程為主", "priority": 12, "stat": "shooterRatio", "op": "gte", "value": 0.5 },
+    { "id": "FORCED", "label": "有必經的無掩護段", "priority": 15, "stat": "forcedRun", "op": "gte", "value": 3 },
+    { "id": "NARROW", "label": "空間狹窄", "priority": 20, "stat": "openness", "op": "lte", "value": 0.8 },
+    { "id": "WIDE", "label": "開闊地形", "priority": 20, "stat": "openness", "op": "gte", "value": 0.86 },
+    { "id": "EXPOSED", "label": "存在無掩護路段", "priority": 25, "stat": "directRun", "op": "gte", "value": 6 },
+    { "id": "DEEP", "label": "縱深大", "priority": 30, "stat": "estRun", "op": "gte", "value": 1200 },
+    { "id": "SCARCE", "label": "現地補給稀少", "priority": 40, "stat": "caches", "op": "lte", "value": 2 },
+    { "id": "HEAVY", "label": "存在重裝目標", "priority": 90, "stat": "hulks", "op": "gte", "value": 1 }
+  ],
+
+  "_difficulty": "score = Σ (stat - base) × weight。讀的是**地形說了什麼**，不是機器人跑出什麼 —— 那是兩件事，見 README。權重與級距都在這裡改。",
+  "difficulty": {
+    "terms": [
+      { "stat": "enemyCount", "base": 8, "weight": 1.0 },
+      { "stat": "shooterRatio", "base": 0.3, "weight": 15 },
+      { "stat": "hulks", "base": 1, "weight": 1.5 },
+      { "stat": "coverDensity", "base": 0.15, "weight": -25 },
+      { "stat": "openness", "base": 0.82, "weight": 8 },
+      { "stat": "forcedRun", "base": 0, "weight": 1.5 },
+      { "stat": "directRun", "base": 4, "weight": 0.25 },
+      { "stat": "estRun", "base": 1000, "weight": 0.003 },
+      { "stat": "caches", "base": 3, "weight": -1.0 }
+    ],
+    "bands": [
+      { "max": 5.5, "rating": "C", "label": "例行" },
+      { "max": 8, "rating": "B", "label": "有阻力" },
+      { "max": 10.5, "rating": "A", "label": "高風險" },
+      { "max": 9999, "rating": "S", "label": "資產減損預期偏高" }
+    ]
+  }
+}
