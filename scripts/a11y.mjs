@@ -57,11 +57,12 @@ await p.waitForTimeout(150);
 results.push(await audit('自己的詳細狀態'));
 await p.evaluate(() => window.__game.test.tap({ x: -1, y: -1 }));
 
-// 技能摺疊選單
-await p.locator('#controls button[data-act="SKILL"]').click();
+// 背包（v0.12：技能與背包合併成一顆，§12.20）
+await p.locator('#controls button[data-act="BAG"]').click();
 await p.waitForTimeout(150);
-results.push(await audit('技能選單'));
-await p.locator('#controls button[data-act="SKILL"]').click();
+results.push(await audit('背包'));
+await p.locator('#tile-menu button[data-do="close"]').click();
+await p.waitForTimeout(150);
 
 // 紀錄面板
 await p.locator('#btn-log').click();

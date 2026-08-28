@@ -13,7 +13,9 @@ import { checkLegal, commandTime, interactTarget } from '../core/commands';
 import { manhattan } from '../core/grid';
 import { describe as describeSequence } from '../core/sequence';
 import { RULES } from '../core/content';
-import { countAmmo, maxWeight, stackWeight, totalWeight } from '../core/inventory';
+import {
+  countAmmo, maxWeight, moveCostForWeight, nextTierAt, stackWeight, totalWeight, weightTierIndex,
+} from '../core/inventory';
 import { esc } from './dom';
 import { fmtWeight, itemText } from './hud';
 
@@ -24,6 +26,8 @@ const FACING_ZH: Record<string, string> = {
 export interface MenuHandlers {
   pickup(lootId: string, itemIndex: number, slot?: WeaponSlot): void;
   takeAll(lootId: string): void;
+  prepare(itemId: string): void;
+  drop(itemId: string): void;
   interact(pos: Vec2): void;
   abortSequence(): void;
   close(): void;
@@ -48,7 +52,7 @@ function weaponLine(state: GameState, w: PlayerUnit['equipped']): string {
   return w.name + ' ' + w.ammo + '/' + w.magazine + spare + mode;
 }
 
-function backpackHtml(bag: PlayerUnit['backpack']): string {
+function bagSummaryLine(bag: PlayerUnit['backpack']): string {
   if (!bag) return '';
   if (bag.items.length === 0) return '<p class="note">背包：空的</p>';
   return '<p class="note">背包：'
@@ -84,7 +88,7 @@ export function selfPanelHtml(state: GameState): string {
       ? '<br><b>蹲姿：只看得見面向的前方半平面</b>，後方三格是盲區。方向鍵可轉向（不花時間）。'
       : '<br>站姿為全方位視野，面向不影響看得見什麼。')
     + '</p>'
-    + backpackHtml(u.backpack)
+    + bagSummaryLine(u.backpack)
     + '<div class="menu-actions">'
     + (u.pendingSequence
       ? '<button class="danger" data-do="abort-seq">中止 ' + esc(describeSequence(u.pendingSequence))
@@ -158,13 +162,43 @@ export function lootPanelHtml(state: GameState, pos: Vec2): string {
   return html + '</div>';
 }
 
+/**
+ * 準備與丟棄要二次確認（§12.20）。
+ *
+ * 用「同一顆鍵按兩次」而不是另開一個對話框：手機上單手可達，
+ * 而且不會把已經滿版的背包再蓋一層。第一下把該鍵換成確認樣式，
+ * 按別的鍵就取消 —— 誤觸的代價只是多看一眼。
+ */
+function needsConfirm(kind: string | undefined): boolean {
+  return kind === 'prepare' || kind === 'drop';
+}
+
 export function wireMenu(host: HTMLElement, at: Vec2, h: MenuHandlers): void {
+  let armed: HTMLButtonElement | null = null;
+  const disarm = (): void => {
+    if (!armed) return;
+    armed.classList.remove('confirm');
+    if (armed.dataset.label) armed.innerHTML = armed.dataset.label;
+    armed = null;
+  };
+
   host.querySelectorAll<HTMLButtonElement>('button[data-do]').forEach((btn) => {
     btn.addEventListener('click', () => {
+      if (needsConfirm(btn.dataset.do) && armed !== btn) {
+        disarm();
+        armed = btn;
+        btn.dataset.label = btn.innerHTML;
+        btn.innerHTML = '再按一次確認<em>' + esc(btn.textContent?.trim().slice(0, 14) ?? '') + '</em>';
+        btn.classList.add('confirm');
+        return;
+      }
+      disarm();
       switch (btn.dataset.do) {
         case 'interact': h.interact(at); break;
         case 'abort-seq': h.abortSequence(); break;
         case 'take-all': h.takeAll(btn.dataset.loot as string); break;
+        case 'prepare': h.prepare(btn.dataset.item as string); break;
+        case 'drop': h.drop(btn.dataset.item as string); break;
         case 'pickup':
           h.pickup(
             btn.dataset.loot as string,
@@ -176,4 +210,65 @@ export function wireMenu(host: HTMLElement, at: Vec2, h: MenuHandlers): void {
       }
     });
   });
+}
+
+/**
+ * 背包（§12.20）。**檢視不花時間** —— 那是玩家自己的東西，屬於資訊而非行動。
+ *
+ * 這裡沒有「使用」，只有「準備」。使用一律回到戰鬥主畫面按「用」（§12.19）：
+ * 準備要花 10，所以「你身上現在準備好的是什麼」變成一個要提前做的決定，
+ * 與「現在手上拿的是哪把槍」完全對稱。
+ */
+export function backpackHtml(state: GameState): string {
+  const u = activePlayerUnit(state);
+  if (!u || !u.backpack) return '';
+  const load = totalWeight(u.backpack);
+  const tier = weightTierIndex(load);
+  const next = nextTierAt(load);
+  const prepared = u.preparedId
+    ? u.backpack.items.find((it) => it.id === u.preparedId) ?? null
+    : null;
+
+  let html = head('背包')
+    + '<div class="stat-grid">'
+    + stat('負重', fmtWeight(load) + '/' + maxWeight(), tier > 0)
+    + stat('移動一格', String(moveCostForWeight(load)), tier > 0)
+    + stat('準備欄', prepared ? prepared.name : '空', !!prepared)
+    + '</div>';
+
+  // 負重級距在 v0.9 是隱形的，玩家只能從移動變慢間接感覺到。這一版要說出來。
+  html += '<p class="note">'
+    + (tier === 0
+      ? '目前是最輕的級距（移動 ' + moveCostForWeight(0) + '）。'
+      : '<b>已經被拖慢了。</b>')
+    + (next !== null
+      ? '　再撿 ' + fmtWeight(next - load + 0.5) + ' 就會掉到下一級（移動 '
+        + moveCostForWeight(next + 1) + '）。'
+      : '　已經是最重的級距。')
+    + '</p>';
+
+  if (u.backpack.items.length === 0) {
+    return html + '<p class="note">背包是空的。</p><div class="menu-actions"></div>';
+  }
+
+  html += '<div class="menu-actions">';
+  for (const it of u.backpack.items) {
+    const label = esc(itemText(it)) + '（' + fmtWeight(stackWeight(it)) + '）';
+    const isPrepared = prepared !== null && prepared.id === it.id;
+    if (it.kind === 'CONSUMABLE') {
+      const legal = checkLegal(state, { type: 'PREPARE', itemId: it.id });
+      html += '<button data-do="prepare" data-item="' + esc(it.id) + '"'
+        + (legal.ok ? ' class="primary"' : ' disabled')
+        + '>' + (isPrepared ? '已準備：' : '準備 ') + label
+        + '<em>' + (legal.ok ? '費時 ' + RULES.time.prepare : esc(legal.reason)) + '</em></button>';
+    } else {
+      html += '<button disabled>' + label + '<em>'
+        + (it.kind === 'WEAPON' ? '放在背包裡的武器不能用，要先換到手持或收納'
+          : it.kind === 'AMMO' ? '裝填時自動使用' : '帶出去才有價值')
+        + '</em></button>';
+    }
+    html += '<button class="danger" data-do="drop" data-item="' + esc(it.id) + '">丟下 '
+      + label + '<em>不花時間，落在腳下</em></button>';
+  }
+  return html + '</div>';
 }

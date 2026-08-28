@@ -30,12 +30,14 @@ describe('§3.2 負重分級', () => {
       .toEqual([[20, 10], [35, 12], [50, 14]]);
   });
 
-  it('初始負重落在第一級：一開始就站在門檻上，撿東西才會是決定', () => {
+  it('v0.12：初始配備多了一個封合劑，士兵一開場就被拖慢一級', () => {
     const s = testState(ROOM);
     const w = totalWeight(bagOf(s));
-    expect(w).toBe(18);                       // 24×0.5 + 2×3
-    expect(moveCostForWeight(w)).toBe(10);
-    expect(effectiveMoveTime(player(s))).toBe(10);
+    expect(w).toBe(23);                       // 24×0.5 + 2×3 + 封合劑 5
+    expect(moveCostForWeight(w)).toBe(12);    // v0.11 是 18 → 10
+    expect(effectiveMoveTime(player(s))).toBe(12);
+    // 丟掉封合劑就回到基準速度 —— 這是開場第一個決定
+    expect(moveCostForWeight(w - 5)).toBe(10);
   });
 
   it('跨過門檻移動時間就變慢', () => {
@@ -48,7 +50,7 @@ describe('§3.2 負重分級', () => {
     p.backpack!.items.push({
       id: 'X', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 1,
     });
-    expect(totalWeight(p.backpack)).toBe(24);
+    expect(totalWeight(p.backpack)).toBe(29);
     expect(effectiveMoveTime(p)).toBe(12);
   });
 
@@ -163,7 +165,7 @@ describe('§4.3 搜刮操作', () => {
     player(s).backpack!.items.push({
       id: 'Z', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 5,
     });
-    expect(totalWeight(bagOf(s))).toBe(48);
+    expect(totalWeight(bagOf(s))).toBe(53);
     const legal = checkLegal(s, { type: 'PICKUP', lootId: 'LX', itemIndex: 1 });   // 6 重
     expect(legal.ok).toBe(false);
     expect(legal.reason).toContain('背包裝不下');
@@ -171,6 +173,7 @@ describe('§4.3 搜刮操作', () => {
 
   it('全部拿走在超重時盡可能拿（可堆疊的拿得下的部分）', () => {
     let s = withCache();
+    player(s).backpack!.items = player(s).backpack!.items.filter((i) => i.defId !== 'SEALANT');
     player(s).backpack!.items.push({
       id: 'Z', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 5,
     });
@@ -190,6 +193,7 @@ describe('§4.3 全部拿走的邊界', () => {
       id: 'LY', kind: 'CACHE', pos: { x: 2, y: 1 }, label: '重物箱',
       items: [{ id: 'H', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 1 }],
     });
+    player(s).backpack!.items = player(s).backpack!.items.filter((i) => i.defId !== 'SEALANT');
     player(s).backpack!.items.push({
       id: 'Z', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 5,
     });

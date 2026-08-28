@@ -19,6 +19,10 @@
     "stance": 3,
     "facing": 0,
     "deploy": 10,
+    "_prepare": "把一件消耗品放進準備欄的花費（§12.19）。免費的話準備欄就只是多一次點擊 —— 玩家會在需要時免費換上想要的東西，等同於直接從背包使用。收 10 之後，它就與「現在手上拿的是哪把槍」完全對稱：你身上準備好的是什麼，是一個要提前做、事後才發現對不對的決定。",
+    "prepare": 10,
+    "_drop": "丟棄不花時間：丟東西比撿東西快，而且緊急時不該被時間懲罰。負重直接等於被追擊時的生存率。",
+    "drop": 0,
     "swap": { "LIGHT": 10, "HEAVY": 20 }
   },
 
@@ -32,13 +36,16 @@
       { "maxWeight": 35, "moveCost": 12 },
       { "maxWeight": 50, "moveCost": 14 }
     ],
+    "_sealant": "士兵初始帶一個封合劑（§4.1）。其餘靠搜刮 —— 恢復必須稀有，不是標準配備。",
     "startingItems": [
       { "defId": "AMMO_RIFLE", "qty": 24 },
-      { "defId": "AMMO_ROCKET", "qty": 2 }
+      { "defId": "AMMO_ROCKET", "qty": 2 },
+      { "defId": "SEALANT", "qty": 1 }
     ],
     "_reinforcement": "增援只配步槍彈，跟他只配 AR-9 是同一個道理（§10.1）。火箭彈在前一個人的屍體上。",
     "reinforcementItems": [
-      { "defId": "AMMO_RIFLE", "qty": 24 }
+      { "defId": "AMMO_RIFLE", "qty": 24 },
+      { "defId": "SEALANT", "qty": 1 }
     ]
   },
 
@@ -76,7 +83,9 @@
 
   "sequences": {
     "_comment": "系列動作：效果只在整套走完時發生。走到一半的單位是暴露的、可被打斷的。",
+    "_interrupt": "v0.12：每個序列標註被打斷之後會怎樣。判準是『已經完成的物理狀態改變會不會自己消失』—— 退殼退了就是退了。RESUMABLE 的進度存在武器上，不是存在單位上（§5.6）。",
     "RR4_RELOAD": {
+      "sequenceType": "RESUMABLE",
       "label": "裝填 RR-4",
       "steps": [
         { "id": "OPEN_BOLT", "label": "開栓退殼", "time": 10 },

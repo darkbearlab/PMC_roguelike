@@ -44,6 +44,7 @@ function makeUnit(
     transitionTime: a.time.transition,
     transitioning: false,
     pendingSequence: null,
+    preparedId: null,
     declared: null,
     patrolLeft: 0,
   };

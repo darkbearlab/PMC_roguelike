@@ -12,11 +12,12 @@ import { activePlayerUnit, lootAt, findUnit, unitAt } from '../core/state';
 import type { Command } from '../core/commands';
 import type { RawMap } from '../core/map';
 import {
-  applyCommand, checkLegal, commandTime, interactKindAt, interactTarget, movePath, movePhase,
+  applyCommand, checkLegal, commandTime, findBagItem, interactKindAt, interactTarget,
+  movePath, movePhase,
   swapTime,
 } from '../core/commands';
 import { activeUnit, isMissionOver, isPlayerTurn } from '../core/scheduler';
-import { describe as describeSequence } from '../core/sequence';
+import { describe as describeSequence, remainingTime } from '../core/sequence';
 import { createInitialState } from '../core/setup';
 import { RULES } from '../core/content';
 import { armorRange, damageRange, effectiveMode, hitBreakdown } from '../core/combat';
@@ -31,8 +32,9 @@ import { EffectLayer } from '../render/effects';
 import type { Vision } from '../render/vision';
 import { computeVision, isVisible, visionKey } from '../render/vision';
 import { $, $$, esc, show } from './dom';
-import { missionPanelHtml, renderHud } from './hud';
-import { lootPanelHtml, selfPanelHtml, wireMenu } from './menus';
+import { fmtWeight, missionPanelHtml, renderHud, shortName } from './hud';
+import { totalWeight } from '../core/inventory';
+import { backpackHtml, lootPanelHtml, selfPanelHtml, wireMenu } from './menus';
 import {
   hideModal, showAbortConfirm, showReinforcement, showSplashConfirm, showSummary,
 } from './modals';
@@ -50,6 +52,7 @@ type Sel =
   | { kind: 'LOOT'; pos: Vec2; lootId: string }
   | { kind: 'INTERACT'; pos: Vec2 }
   | { kind: 'SELF' }
+  | { kind: 'BAG' }
   | null;
 
 /** 自動移動的中斷條件需要記住出發時的狀況。 */
@@ -89,7 +92,6 @@ export class Game {
   private lastStep = 0;
   private modal: ModalKind = 'NONE';
   private logOpen = false;
-  private skillOpen = false;
   /** 玩家按了跳過：敵人回合直接結算到底，不再逐一演出（§12.12）。 */
   private skipEnemyTurn = false;
   private viewW = 1;
@@ -108,6 +110,7 @@ export class Game {
       if (!s) return null;
       if (s.kind === 'TARGET') return 'TARGET:' + s.unitId;
       if (s.kind === 'SELF') return 'SELF';
+      if (s.kind === 'BAG') return 'BAG';
       return s.kind + ':' + s.pos.x + ',' + s.pos.y;
     },
     autoActive: (): boolean => this.auto !== null,
@@ -150,7 +153,6 @@ export class Game {
     this.sel = null;
     this.recenter();
     this.modal = 'NONE';
-    this.skillOpen = false;
     this.skipEnemyTurn = false;
     this.effects.clear();
     hideModal();
@@ -288,7 +290,6 @@ export class Game {
       return;
     }
     this.auto = null;
-    this.skillOpen = false;
     const me = activePlayerUnit(this.state);
     if (!me || !inBounds(this.state.map, p)) { this.clearSel(); return; }
 
@@ -467,7 +468,13 @@ export class Game {
     $<HTMLButtonElement>('button[data-act="MODE"]').title = w && down
       ? '彈藥不足，實際會用' + RULES.fireModes[shown].label + '發'
       : '射擊模式（不花時間）';
-    en('button[data-act="SKILL"]', true);
+    en('button[data-act="BAG"]', true);
+    // 背包本身隨時開得了（檢視不花時間），但「用」要準備欄裡有東西（§12.19）
+    en('button[data-act="USE"]', checkLegal(s, { type: 'USE_ITEM' }).ok);
+    const prep = u ? findBagItem(u, u.preparedId) : null;
+    $('#lbl-prepared').textContent = prep ? shortName(prep.name) : '—';
+    $<HTMLButtonElement>('button[data-act="USE"]').classList.toggle('armed', !!prep);
+    $('#lbl-load').textContent = u ? fmtWeight(totalWeight(u.backpack)) : '—';
 
     $('#lbl-stance').textContent = u && u.stance === 'STAND' ? '蹲' : '站';
     // 按鈕上顯示的是**時間花費**，不再是 AP（§7.2）
@@ -479,14 +486,11 @@ export class Game {
     const sw = u ? swapTime(u) : Infinity;
     $('#lbl-swap').textContent = Number.isFinite(sw) ? String(sw) : '—';
 
-    $<HTMLButtonElement>('button[data-act="SKILL"]').classList.toggle('on', this.skillOpen);
+    $<HTMLButtonElement>('button[data-act="BAG"]').classList
+      .toggle('on', !!this.sel && this.sel.kind === 'BAG');
     $<HTMLButtonElement>('#btn-log').classList.toggle('on', this.logOpen);
     $<HTMLButtonElement>('#btn-tapmove').classList.toggle('off', !this.tapMove);
     show($('#btn-recenter'), this.panned());
-    show($('#skill-menu'), this.skillOpen);
-    if (this.skillOpen) {
-      $('#skill-menu').innerHTML = '<p class="note">（尚無可用技能）</p>';
-    }
     this.updateBanner();
   }
 
@@ -500,7 +504,8 @@ export class Game {
     // 承諾中：讓玩家看得出自己正在蓄勢，以及還剩幾步（§5.5）
     const me = activePlayerUnit(s);
     if (me && me.pendingSequence) {
-      banner.textContent = describeSequence(me.pendingSequence);
+      banner.textContent = describeSequence(me.pendingSequence)
+        + '　還要 ' + remainingTime(me.pendingSequence);
       show(banner, !busy);
       return;
     }
@@ -515,11 +520,11 @@ export class Game {
 
   // ---------------------------------------------------------------- 卡片與紀錄
 
-  /** 只有「看自己」與「翻屍體」需要卡片；射擊、移動、互動的預覽都畫在戰場上。 */
+  /** 「看自己」「翻屍體」「開背包」需要卡片；射擊、移動、互動的預覽都畫在戰場上。 */
   private updateCard(): void {
     const host = $('#tile-menu');
     const s = this.sel;
-    const needsCard = !!s && (s.kind === 'SELF' || s.kind === 'LOOT');
+    const needsCard = !!s && (s.kind === 'SELF' || s.kind === 'LOOT' || s.kind === 'BAG');
     if (!needsCard || this.modal !== 'NONE') {
       show(host, false);
       host.innerHTML = '';
@@ -528,10 +533,10 @@ export class Game {
     const me = activePlayerUnit(this.state);
     if (!me) { show(host, false); return; }
     const at = s.kind === 'LOOT' ? s.pos : me.pos;
-    host.innerHTML = s.kind === 'SELF'
-      ? selfPanelHtml(this.state)
+    host.innerHTML = s.kind === 'SELF' ? selfPanelHtml(this.state)
+      : s.kind === 'BAG' ? backpackHtml(this.state)
       : lootPanelHtml(this.state, at);
-    this.placeSheet(host, at);
+    this.placeSheet(host, at, s.kind === 'BAG');
     show(host, true);
     wireMenu(host, at, {
       pickup: (lootId, itemIndex, slot) => {
@@ -540,6 +545,10 @@ export class Game {
         this.updateCard();
       },
       takeAll: (lootId) => { this.dispatch({ type: 'TAKE_ALL', lootId }); this.updateCard(); },
+      // 準備要花時間，所以做完就把面板收掉 —— 讓玩家回到戰場看清楚代價
+      prepare: (itemId) => { this.dispatch({ type: 'PREPARE', itemId }); this.clearSel(); },
+      // 丟棄不花時間，通常會連丟好幾樣，面板留著
+      drop: (itemId) => { this.dispatch({ type: 'DROP', itemId }); this.updateCard(); },
       interact: (pos) => { this.dispatch({ type: 'INTERACT', pos }); this.clearSel(); },
       abortSequence: () => { this.dispatch({ type: 'ABORT_SEQUENCE' }); this.clearSel(); },
       close: () => this.clearSel(),
@@ -558,11 +567,27 @@ export class Game {
    * 打開它的當下你在讀清單、按按鈕，不是在點地圖。
    * 原本為了不越過畫面中線而砍高度，結果是搜刮面板只剩 96px、一次看兩件東西。
    */
-  private placeSheet(host: HTMLElement, at: Vec2 | null): void {
+  /**
+   * @param full 滿版面板（背包、日誌）：**連按鈕群一起蓋掉**，只留 HUD。
+   *             打開它們的當下你在讀清單而不是在打，看得完整比看得到底下的地圖重要。
+   *             退出只靠右上的「關閉」，所以那顆鍵一定要在。
+   */
+  private placeSheet(host: HTMLElement, at: Vec2 | null, full = false): void {
     const me = activePlayerUnit(this.state);
-    const below = !!me && !!at && at.y > me.pos.y;
+    const below = !full && !!me && !!at && at.y > me.pos.y;
     host.classList.toggle('sheet--top', below);
     host.classList.toggle('sheet--bottom', !below);
+    host.classList.toggle('sheet--full', full);
+
+    if (full) {
+      host.style.top = Math.round(this.safe.top) + 'px';
+      host.style.bottom = '8px';
+      host.style.maxHeight = '';
+      return;
+    }
+    // 上下緣都用**實測的**可觸區域，不用 CSS 猜的方向盤高度。
+    host.style.top = below ? Math.round(this.safe.top) + 'px' : '';
+    host.style.bottom = below ? '' : Math.round(this.viewH - this.safe.bottom) + 'px';
     host.style.maxHeight = Math.round(Math.max(120, this.safe.bottom - this.safe.top)) + 'px';
   }
 
@@ -578,7 +603,7 @@ export class Game {
       + '<h3 class="sub">戰鬥紀錄</h3>'
       + '<p class="note">build ' + esc(BUILD_ID) + '　seed ' + this.state.rngSeed + '</p>'
       + '<ol>' + items + '</ol>';
-    this.placeSheet(host, null);
+    this.placeSheet(host, null, true);
     show(host, true);
     this.updateBanner();
     const btn = host.querySelector<HTMLButtonElement>('button[data-close]');
@@ -643,7 +668,12 @@ export class Game {
       },
       SWAP: () => this.dispatch({ type: 'SWAP_WEAPON' }),
       MODE: () => this.dispatch({ type: 'CYCLE_FIRE_MODE' }),
-      SKILL: () => { this.skillOpen = !this.skillOpen; this.updateControls(); },
+      BAG: () => {
+        // 開背包不花時間 —— 那是玩家自己的東西，屬於資訊而不是行動（§12.20）
+        this.sel = this.sel && this.sel.kind === 'BAG' ? null : { kind: 'BAG' };
+        this.afterSelect();
+      },
+      USE: () => this.dispatch({ type: 'USE_ITEM' }),
     };
     for (const btn of $$<HTMLButtonElement>('#controls button[data-act]')) {
       const fn = act[btn.dataset.act as string];

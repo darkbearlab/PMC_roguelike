@@ -31,6 +31,7 @@
         <div class="hud-row hud-secondary">
           <div class="chip" id="hud-stance"></div>
           <div class="chip" id="hud-load" title="背包負重與移動時間（§3.2）"></div>
+          <div class="chip" id="hud-prepared" title="準備欄（§12.19）"></div>
         </div>
       </header>
 
@@ -63,10 +64,15 @@
         </div>
 
         <!-- 右：動作區。開火鍵已刪除，射擊一律透過地圖點擊。 -->
+        <!-- 兩欄三列，左上角留空（與左下移動區同一個慣例）。
+             最常用的「彈／換」落在最靠拇指的下緣。 -->
         <div id="actions">
-          <div id="skill-menu" class="hidden"></div>
+          <span class="pad-blank"></span>
           <button type="button" data-act="MODE"><b id="lbl-mode">單</b><small id="lbl-mode-ammo">1</small></button>
-          <button type="button" data-act="SKILL"><b>技能</b></button>
+          <!-- v0.12：技能與背包合併成一顆（§12.20），空出位置給「用」。
+               技能目前沒有內容，而背包是會反覆開的東西。 -->
+          <button type="button" data-act="BAG"><b>包</b><small id="lbl-load">18</small></button>
+          <button type="button" data-act="USE"><b>用</b><small id="lbl-prepared">—</small></button>
           <button type="button" data-act="RELOAD"><b>彈</b><small id="lbl-reload">1</small></button>
           <button type="button" data-act="SWAP"><b>換</b><small id="lbl-swap">—</small></button>
         </div>

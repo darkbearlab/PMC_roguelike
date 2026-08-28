@@ -106,19 +106,31 @@ describe('§6 按鈕配置', () => {
     expect(wait.parentElement!.id).toBe('move-cluster');
     const acts = Array.from(document.querySelectorAll('#actions button')).map(
       (b) => (b as HTMLElement).dataset.act);
-    expect(acts).toEqual(['MODE', 'SKILL', 'RELOAD', 'SWAP']);
+    // v0.12：技能與背包合併成一顆「包」，並空出位置給「用」（§12.20）
+    expect(acts).toEqual(['MODE', 'BAG', 'USE', 'RELOAD', 'SWAP']);
   });
 
-  it('技能鍵可展開收合，選單內容為空', async () => {
+  it('背包鍵可開合，開啟不花時間（§12.20）', async () => {
+    const { Game } = await import('../src/ui/game');
+    const g = new Game(1);
+    const sheet = q('#tile-menu')!;
+    expect(sheet.classList.contains('hidden')).toBe(true);
+    const before = g.state.clock;
+
+    btn('button[data-act="BAG"]').click();
+    expect(sheet.classList.contains('hidden')).toBe(false);
+    expect(sheet.textContent).toContain('背包');
+    expect(sheet.textContent).toContain('負重');
+    expect(g.state.clock).toBe(before);          // 檢視是資訊，不是行動
+
+    btn('button[data-act="BAG"]').click();
+    expect(sheet.classList.contains('hidden')).toBe(true);
+  });
+
+  it('「用」鍵在準備欄為空時是灰的', async () => {
     const { Game } = await import('../src/ui/game');
     new Game(1);
-    const menu = q('#skill-menu')!;
-    expect(menu.classList.contains('hidden')).toBe(true);
-    btn('button[data-act="SKILL"]').click();
-    expect(menu.classList.contains('hidden')).toBe(false);
-    expect(menu.textContent).toContain('尚無可用技能');
-    btn('button[data-act="SKILL"]').click();
-    expect(menu.classList.contains('hidden')).toBe(true);
+    expect(btn('button[data-act="USE"]').disabled).toBe(true);
   });
 
   it('日誌開合在右上，且不可用按鈕是灰掉而非隱藏', async () => {

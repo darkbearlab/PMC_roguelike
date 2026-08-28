@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { checkLegal, commandTime, movePhase } from '../src/core/commands';
 import { RULES } from '../src/core/content';
-import { advanceToPlayer, run, testState, player } from './helpers';
+import { advanceToPlayer, run, testState, player, unburden } from './helpers';
 
 const OPEN = [
   '#########',
@@ -26,7 +26,7 @@ const WALLED = [
 
 describe('§12.14 站立時方向鍵直接移動', () => {
   it('面向跟著移動方向改變，一按就走', () => {
-    let s = testState(OPEN);
+    let s = unburden(testState(OPEN));
     expect(player(s).stance).toBe('STAND');
     expect(movePhase(player(s), 'E')).toBe('STEP');
     s = run(s, { type: 'MOVE', dir: 'E' });
@@ -36,7 +36,7 @@ describe('§12.14 站立時方向鍵直接移動', () => {
   });
 
   it('站立時面向不影響任何規則，所以不需要先轉', () => {
-    let s = testState(OPEN);
+    let s = unburden(testState(OPEN));
     player(s).facing = 'N';
     s = run(s, { type: 'MOVE', dir: 'S' });
     expect(player(s).pos).toEqual({ x: 1, y: 2 });
@@ -45,7 +45,7 @@ describe('§12.14 站立時方向鍵直接移動', () => {
 
 describe('§12.14 蹲下時先轉向、再移動', () => {
   it('按非面向的方向 → 只轉向，不移動，不花時間', () => {
-    let s = testState(OPEN);
+    let s = unburden(testState(OPEN));
     player(s).stance = 'CROUCH';
     player(s).facing = 'S';
     const at = player(s).nextActAt;
@@ -59,7 +59,7 @@ describe('§12.14 蹲下時先轉向、再移動', () => {
   });
 
   it('再按一次同方向才真的走', () => {
-    let s = testState(OPEN);
+    let s = unburden(testState(OPEN));
     player(s).stance = 'CROUCH';
     player(s).facing = 'S';
     s = run(s, { type: 'MOVE', dir: 'E' });            // 轉
@@ -70,7 +70,7 @@ describe('§12.14 蹲下時先轉向、再移動', () => {
   });
 
   it('轉向永遠合法 —— 面向牆壁蹲著也是一種選擇', () => {
-    const s = testState(WALLED);
+    const s = unburden(testState(WALLED));
     const u = player(s);
     u.stance = 'CROUCH';
     u.facing = 'S';
@@ -82,7 +82,7 @@ describe('§12.14 蹲下時先轉向、再移動', () => {
   });
 
   it('轉過去之後撞牆才會被擋下：兩下的意義不同', () => {
-    let s = testState(WALLED);
+    let s = unburden(testState(WALLED));
     player(s).stance = 'CROUCH';
     player(s).facing = 'S';
     s = run(s, { type: 'MOVE', dir: 'N' });            // 轉向牆
@@ -92,7 +92,7 @@ describe('§12.14 蹲下時先轉向、再移動', () => {
   });
 
   it('轉向不讓出行動權：連轉四次時鐘不動', () => {
-    let s = testState(OPEN, [{ archetype: 'HULK', pos: { x: 7, y: 3 } }]);
+    let s = unburden(testState(OPEN, [{ archetype: 'HULK', pos: { x: 7, y: 3 } }]));
     player(s).stance = 'CROUCH';
     for (const dir of ['N', 'E', 'S', 'W'] as const) s = run(s, { type: 'MOVE', dir });
     expect(s.clock).toBe(0);
@@ -100,7 +100,7 @@ describe('§12.14 蹲下時先轉向、再移動', () => {
   });
 
   it('站起來之後方向鍵又恢復成直接走', () => {
-    let s = testState(OPEN);
+    let s = unburden(testState(OPEN));
     player(s).stance = 'CROUCH';
     player(s).facing = 'S';
     s = run(s, { type: 'TOGGLE_STANCE' });             // 站起來（花 3）

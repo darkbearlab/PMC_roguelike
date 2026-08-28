@@ -13,13 +13,36 @@ import { facingFromDelta, manhattan } from '../src/core/grid';
 import { MAPS, RULES } from '../src/core/content';
 import type { RawMap } from '../src/core/map';
 import { countAmmo } from '../src/core/inventory';
+import { playerDefence } from '../src/core/cover';
+import { interruptOf } from '../src/core/sequence';
 import type { Facing, GameState, Vec2 } from '../src/core/state';
 
 function botAction(s: GameState, goal: Vec2): GameState {
   const u = activePlayerUnit(s);
   if (!u) return s;
   // 承諾中的序列：笨機器人一律走完，不中止
-  if (u.pendingSequence) return run(s, { type: 'SEQUENCE_STEP' });
+  // 序列走到一半：須重來的（治療）一旦有人瞄得到就放棄，別把 40 時間丟進火裡
+  if (u.pendingSequence) {
+    const restart = interruptOf(u.pendingSequence.id) === 'RESTART';
+    if (restart && playerDefence(s).threats > 0) return run(s, { type: 'ABORT_SEQUENCE' });
+    return run(s, { type: 'SEQUENCE_STEP' });
+  }
+  // v0.12：血少又沒人瞄得到就包紮。條件刻意簡單 ——
+  // 「沒人看得到我」正是封合劑那 40 時間唯一走得完的時候（§4）。
+  const hurt = u.hp <= u.maxHp * 0.5;
+  if (hurt && playerDefence(s).threats === 0) {
+    if (u.preparedId) {
+      const used = run(s, { type: 'USE_ITEM' });
+      if (used !== s) return used;
+    } else {
+      const kit = u.backpack?.items.find((it) => it.kind === 'CONSUMABLE');
+      if (kit) {
+        const prepped = run(s, { type: 'PREPARE', itemId: kit.id });
+        if (prepped !== s) return prepped;
+      }
+    }
+  }
+
   // 腳邊有東西就拿（笨機器人不挑，全拿）
   const pile = s.loot.find(
     (c) => manhattan(c.pos, u.pos) <= 1 && checkLegal(s, { type: 'TAKE_ALL', lootId: c.id }).ok,

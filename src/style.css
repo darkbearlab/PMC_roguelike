@@ -64,6 +64,7 @@ html, body {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+.chip.accent { color: var(--accent); border-color: var(--accent); }
 .chip.warn { color: #2a0f0c; background: var(--danger); border-color: #ff8b7f; font-weight: 600; }
 .sheet h3.sub { margin-top: 12px; }
 .hud-ledger {
@@ -97,6 +98,7 @@ html, body {
 /* ---------------- 控制列（浮動，中間留空讓地圖可點） ---------------- */
 #controls {
   position: absolute;
+  z-index: 4;   /* 低於 .sheet：滿版面板（背包、日誌）要蓋得住按鈕 */
   left: 0; right: 0;
   bottom: calc(env(safe-area-inset-bottom) + 8px);
   padding: 0 10px;
@@ -121,7 +123,20 @@ html, body {
 }
 .pad-blank { width: var(--btn); height: var(--btn); }   /* 左上角留空 */
 
-#actions { position: relative; display: grid; grid-template-columns: var(--btn); gap: var(--btn-gap); }
+/*
+ * 動作區：v0.12 起五顆（模式／包／用／彈／換）。
+ *
+ * 排成一直行的話高度會吃掉 292px，可觸區域只剩 180px —— 地圖直向只看得到
+ * 五格半，比 v0.11 少了三分之一。改成兩欄三列（172px），把那 120px 還給地圖。
+ * 左上角留空，與左下移動區的慣例一致（§12.7）。
+ */
+#actions {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, var(--btn));
+  gap: var(--btn-gap);
+}
+#actions .pad-blank { width: var(--btn); height: var(--btn); }
 
 /* 技能摺疊選單：往上展開，項目順序固定，不依可用性重排 */
 #skill-menu {
@@ -181,6 +196,12 @@ html, body {
   text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
 }
 #top-right button.on { border-color: var(--accent); background: rgba(20, 62, 84, 0.85); }
+/* 準備欄有東西時，「用」鍵要看得出來是活的 */
+#controls button.armed { border-color: var(--accent); color: var(--accent); }
+/* 二次確認：按鍵自己變成確認鍵，不另開對話框（§12.20） */
+.menu-actions button.confirm {
+  border-color: var(--warn); color: var(--warn); border-style: dashed;
+}
 /* 關掉的點擊移動：灰字加刪除線，一眼看得出是「關著」而不是「不能按」 */
 #top-right button.off { color: var(--ink-dim); text-decoration: line-through; }
 #btn-recenter { border-color: var(--warn); color: var(--warn); }
@@ -218,6 +239,12 @@ html, body {
   top: calc(env(safe-area-inset-top) + 66px);
   max-height: 40dvh;
 }
+/*
+ * 滿版面板（背包、日誌）：**連按鈕群一起蓋掉**，只留 HUD。
+ * 打開它們的當下你在讀清單，不是在打 —— 蓋住的東西你本來就不會按，
+ * 而看得完整比看得到底下的地圖重要得多。退出只靠右上的「關閉」。
+ */
+.sheet--full { max-height: none; }
 .sheet h3 {
   margin: 0 0 5px; font-size: 12.5px; font-weight: 700; color: var(--accent);
   display: flex; justify-content: space-between; align-items: center; gap: 8px;

@@ -21,6 +21,24 @@
     "weight": 1
   },
 
+  "_consumable": "§4 消耗品。做成資料驅動的：之後新增穿甲彈、興奮劑、煙霧彈應該只要改這個檔，不用改程式。use.sequenceType 一律 RESTART —— 生理性動作被打斷就是白做（§5.6）。",
+  "SEALANT": {
+    "name": "戰地封合劑",
+    "kind": "CONSUMABLE",
+    "weight": 5,
+    "_why": "恢復必須慢、必須不完全、必須稀有（§4.1）。慢是最重要的一條：40 時間等同四次移動，所以它無法在交火中進行 —— 玩家必須先脫離接觸，而那正好是開闊地圖要求的打法。",
+    "_lore": "這個時代的醫療不是治療而是更換：受了重傷就換一具身體。戰場上的封合劑只是權宜之計，讓你撐完這趟 —— 這也順帶解釋了為什麼它永遠治不好。",
+    "use": {
+      "sequenceType": "RESTART",
+      "label": "使用戰地封合劑",
+      "steps": [
+        { "id": "STAUNCH", "label": "止血", "time": 20 },
+        { "id": "SEAL", "label": "封合", "time": 20 }
+      ],
+      "effects": [{ "kind": "HEAL", "amount": 25 }]
+    }
+  },
+
   "SCRAP": {
     "name": "廢金屬",
     "kind": "VALUABLE",

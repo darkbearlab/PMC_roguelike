@@ -226,6 +226,8 @@ export function canAttack(
   weapon: Weapon | null,
 ): Legality {
   if (!weapon) return no('沒有裝備武器');
+  // 已退殼、未裝填的槍打不出東西（§5.6）。ammo 也會是 0，但講清楚比較好懂。
+  if (weapon.reloadProgress > 0) return no('槍膛開著，還沒裝填完');
   if (weapon.ammo <= 0) return no('彈藥耗盡');
   if (manhattan(attacker.pos, targetPos) > weapon.range) return no('超出射程');
 

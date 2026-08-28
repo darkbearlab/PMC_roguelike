@@ -52,6 +52,13 @@ export function renderHud(state: GameState): void {
     : `負重 ${fmtWeight(load)}/${maxWeight()}・移動 ${moveCostForWeight(load)}`;
   $('#hud-load').classList.toggle('warn', tier > 0);
 
+  // 準備欄（§12.19）：HUD 上要一眼看得到現在身上準備好的是什麼
+  const prep = u && u.preparedId
+    ? (u.backpack ? u.backpack.items.find((it) => it.id === u.preparedId) : null)
+    : null;
+  $('#hud-prepared').textContent = prep ? '備 ' + shortName(prep.name) : '備 —';
+  $('#hud-prepared').classList.toggle('accent', !!prep);
+
   // 防禦狀態：玩家要在按下結束回合前，知道自己會以什麼狀態承受攻擊（§12.11）
   // 沒人瞄得到你的時候，掩蔽等級不是可用的資訊 —— 那時候只要知道姿勢就好。
   // 有人瞄得到才把等級與人數攤開，那正是這一格要被讀到的時候。

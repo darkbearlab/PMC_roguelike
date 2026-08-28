@@ -175,3 +175,17 @@ export function itemQty(pile: LootPile | null | undefined, defId: string): numbe
   if (!pile) return 0;
   return pile.items.filter((it) => it.defId === defId).reduce((a, it) => a + it.qty, 0);
 }
+
+/**
+ * 清空背包，讓士兵回到「基準速度」（移動一格 10）。
+ *
+ * v0.12 起初始配備多了一個封合劑（重 5），總重 23 越過第一級門檻 20，
+ * 所以士兵一開場就是移動 12。**排程器、轉向、時間成本那些測試量的是機制，
+ * 不是這一版的配裝**，所以它們先卸下負重再測；
+ * 「初始配備到底多重」由 loot.test.ts 單獨釘住。
+ */
+export function unburden(s: GameState): GameState {
+  const u = activePlayerUnit(s);
+  if (u && u.backpack) u.backpack.items = [];
+  return s;
+}

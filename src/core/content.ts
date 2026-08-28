@@ -25,6 +25,10 @@ export interface Rules {
     interact: number;
     stance: number;
     facing: number;
+    /** 把一件消耗品放進準備欄（§12.19）。 */
+    prepare: number;
+    /** 丟棄。刻意為 0：緊急時減重不該被時間懲罰。 */
+    drop: number;
     deploy: number;
     swap: Record<WeaponClass, number>;
   };
@@ -106,6 +110,16 @@ export interface ItemDef {
   weight: number;
   ammoType?: string;
   value?: number;
+  /**
+   * 消耗品的使用方式（§4）。資料驅動：新增品項只要改 items.json。
+   * 序列 id 直接用該消耗品的 defId。
+   */
+  use?: {
+    label: string;
+    sequenceType: 'RESUMABLE' | 'RESTART';
+    steps: { id: string; label: string; time: number }[];
+    effects?: { kind: string; amount: number }[];
+  };
 }
 
 export const RULES: Rules = rulesJson as unknown as Rules;

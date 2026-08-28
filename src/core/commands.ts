@@ -43,6 +43,12 @@ export type Command =
   | { type: 'PICKUP'; lootId: string; itemIndex: number; slot?: WeaponSlot }
   | { type: 'TAKE_ALL'; lootId: string }
   | { type: 'CYCLE_FIRE_MODE' }
+  /** 把背包裡的一件消耗品放進準備欄（§12.19）。花 time.prepare。 */
+  | { type: 'PREPARE'; itemId: string }
+  /** 使用準備欄裡的東西。開始一套序列，效果只在走完時發生。 */
+  | { type: 'USE_ITEM' }
+  /** 丟棄背包裡的一件東西，落在腳下成為可搜刮的堆。不花時間。 */
+  | { type: 'DROP'; itemId: string }
   | { type: 'INTERACT'; pos: Vec2 }
   | { type: 'WAIT' }
   | { type: 'SEQUENCE_STEP' }
@@ -98,6 +104,13 @@ export function commandTime(state: GameState, cmd: Command): number | null {
     case 'PICKUP':
     case 'TAKE_ALL': return RULES.loot.takeTime;
     case 'CYCLE_FIRE_MODE': return 0;   // 切換模式不花時間（§2.5）
+    case 'PREPARE': return RULES.time.prepare;
+    case 'DROP': return RULES.time.drop;
+    case 'USE_ITEM': {
+      // 開始序列本身不花時間，第一步才花（與裝填一致）
+      if (!u || !u.preparedId) return null;
+      return 0;
+    }
     case 'INTERACT': return RULES.time.interact;
     case 'WAIT': return RULES.time.wait;
     default: return null;
@@ -112,6 +125,7 @@ const PLAYER_COMMANDS = new Set<Command['type']>([
   'MOVE', 'SET_STANCE', 'TOGGLE_STANCE', 'SET_FACING', 'FIRE',
   'RELOAD', 'SWAP_WEAPON', 'PICKUP', 'TAKE_ALL', 'INTERACT', 'WAIT',
   'SEQUENCE_STEP', 'ABORT_SEQUENCE', 'CYCLE_FIRE_MODE',
+  'PREPARE', 'USE_ITEM', 'DROP',
 ]);
 
 /** 系列動作進行中時，這個單位輪到時只能執行下一步或中止（§5.5）。 */
@@ -176,7 +190,8 @@ function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
     case 'RELOAD': {
       const w = u.equipped;
       if (!w) return no('沒有裝備武器');
-      if (w.ammo >= w.magazine) return no('彈匣已滿');
+      // 已經退殼、還沒裝完的槍，這一步是「接著裝」而不是「彈匣已滿」
+      if (w.ammo >= w.magazine && w.reloadProgress === 0) return no('彈匣已滿');
       // v0.9：彈藥是背包裡的資源（§1.1）。背包空了就裝不了。
       if (w.magazine < 99 && countAmmo(u.backpack, w.ammoType) <= 0) return no('沒有備用彈藥');
       return OK;
@@ -185,6 +200,23 @@ function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
       const w = u.equipped;
       if (!w) return no('沒有裝備武器');
       return w.modes.length > 1 ? OK : no('這把武器只有單發');
+    }
+    case 'PREPARE': {
+      const it = findBagItem(u, cmd.itemId);
+      if (!it) return no('背包裡沒有這件東西');
+      if (it.kind !== 'CONSUMABLE') return no('只有消耗品可以準備');
+      if (u.preparedId === it.id) return no('已經準備好了');
+      return OK;
+    }
+    case 'USE_ITEM': {
+      if (!u.preparedId) return no('準備欄是空的');
+      const it = findBagItem(u, u.preparedId);
+      if (!it) return no('準備欄裡的東西不見了');
+      return seq.sequenceDef(it.defId) ? OK : no('這件東西不能用');
+    }
+    case 'DROP': {
+      const it = findBagItem(u, cmd.itemId);
+      return it ? OK : no('背包裡沒有這件東西');
     }
     case 'SEQUENCE_STEP':
       return u.pendingSequence ? OK : no('沒有進行中的動作');
@@ -361,18 +393,26 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
     case 'SEQUENCE_STEP': {
       const active = u.pendingSequence;
       if (!active) break;
-      const last = seq.isLastStep(active);
-      if (last) {
-        seq.applyCompletion(s, u, active.id);
-        const w = u.equipped;
-        if (w) {
-          events.push({ kind: 'RELOAD', unitId: u.id, pos: { x: u.pos.x, y: u.pos.y }, weaponName: w.name });
-        }
-        pushLog(s, 'INFO', u.name + ' 完成裝填');
-        u.pendingSequence = null;
+      if (!seq.isLastStep(active)) { seq.advanceStep(u, active); break; }
+
+      const isReload = active.id === 'RR4_RELOAD';
+      seq.applyCompletion(s, u, active.id);
+      if (isReload && u.equipped) {
+        const got = refillFromBackpack(u, u.equipped);
+        events.push({
+          kind: 'RELOAD', unitId: u.id, pos: { x: u.pos.x, y: u.pos.y }, weaponName: u.equipped.name,
+        });
+        pushLog(s, 'INFO', u.name + ' 完成裝填（+' + got + '）');
       } else {
-        active.index += 1;
+        // 消耗品：走完才生效，而且用掉就沒了（§4）
+        const it = findBagItem(u, u.preparedId);
+        if (it) {
+          consumeOne(u, it);
+          if (!findBagItem(u, it.id)) u.preparedId = null;
+        }
+        pushLog(s, 'INFO', u.name + ' 完成' + (seq.sequenceDef(active.id)?.label ?? '動作'));
       }
+      u.pendingSequence = null;
       break;
     }
     case 'ABORT_SEQUENCE':
@@ -416,6 +456,25 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
       pushLog(s, 'INFO', u.name + ' 切換為' + RULES.fireModes[w.mode].label + '發');
       break;
     }
+    case 'PREPARE': {
+      const it = findBagItem(u, cmd.itemId) as Item;
+      u.preparedId = it.id;
+      pushLog(s, 'INFO', u.name + ' 把 ' + it.name + ' 拿到隨手可及的地方');
+      break;
+    }
+    case 'USE_ITEM': {
+      const it = findBagItem(u, u.preparedId) as Item;
+      seq.begin(u, it.defId);
+      cost = 0;                       // 開始序列本身不花時間，第一步才花
+      pushLog(s, 'INFO', u.name + ' 開始' + seq.describe(u.pendingSequence!));
+      break;
+    }
+    case 'DROP': {
+      const it = findBagItem(u, cmd.itemId) as Item;
+      dropAtFeet(s, u, it);
+      pushLog(s, 'INFO', u.name + ' 丟下 ' + itemLabel(it));
+      break;
+    }
     case 'INTERACT': {
       const kind = interactTarget(s, u, cmd.pos);
       const f = facingToward(u.pos, cmd.pos);
@@ -456,6 +515,41 @@ export function refillFromBackpack(u: Unit, w: Weapon): number {
   const got = takeAmmo(u.backpack, w.ammoType, need);
   w.ammo += got;
   return got;
+}
+
+/** 從背包裡找一件東西。 */
+export function findBagItem(u: Unit, id: string | null): Item | null {
+  if (!id || !u.backpack) return null;
+  return u.backpack.items.find((it) => it.id === id) ?? null;
+}
+
+/** 用掉一件（堆疊的只扣一個）。 */
+function consumeOne(u: Unit, item: Item): void {
+  if (!u.backpack) return;
+  item.qty -= 1;
+  if (item.qty <= 0) u.backpack.items = u.backpack.items.filter((x) => x.id !== item.id);
+}
+
+/**
+ * 丟到腳下（§12.20）。腳下已經有一堆就併進去，沒有就新開一堆。
+ *
+ * 丟棄是這一版的重點功能而不是附屬品：負重直接拖慢移動，
+ * 而移動速度在被追擊時就等於生存率。玩家必須能在戰鬥中決定
+ * 「這批戰利品不值得我用命換」。
+ */
+function dropAtFeet(s: GameState, u: Unit, item: Item): void {
+  if (!u.backpack) return;
+  u.backpack.items = u.backpack.items.filter((x) => x.id !== item.id);
+  if (u.preparedId === item.id) u.preparedId = null;
+  const here = s.loot.find((c) => sameTile(c.pos, u.pos));
+  if (here) { here.items.push(item); return; }
+  s.loot.push({
+    id: 'L' + s.nextEntitySerial++,
+    kind: 'CACHE',
+    pos: { x: u.pos.x, y: u.pos.y },
+    label: '丟在地上的東西',
+    items: [item],
+  });
 }
 
 /** UI 與紀錄用的物品標籤。 */

@@ -53,6 +53,7 @@
       "fireTime": 10,
       "reloadTime": 0,
       "reloadSequence": null,
+    "reloadProgress": 0,
       "noiseRadius": 0,
       "splash": 0,
       "accuracy": 0.7,
@@ -82,7 +83,8 @@
     "loot": [
       { "defId": "AMMO_RIFLE", "qty": 6, "chance": 1 },
       { "defId": "AMMO_ROCKET", "qty": 1, "chance": 0.4 },
-      { "defId": "CORE", "qty": 1, "chance": 0.5 }
+      { "defId": "CORE", "qty": 1, "chance": 0.5 },
+      { "defId": "SEALANT", "qty": 1, "chance": 0.25 }
     ],
     "attack": {
       "id": "hulk_slam",
@@ -101,6 +103,7 @@
       "fireTime": 15,
       "reloadTime": 0,
       "reloadSequence": null,
+    "reloadProgress": 0,
       "noiseRadius": 0,
       "splash": 0,
       "accuracy": 0.7,
@@ -129,7 +132,8 @@
     },
     "loot": [
       { "defId": "AMMO_RIFLE", "qty": 6, "chance": 1 },
-      { "defId": "OPTICS", "qty": 1, "chance": 0.3 }
+      { "defId": "OPTICS", "qty": 1, "chance": 0.3 },
+      { "defId": "SEALANT", "qty": 1, "chance": 0.2 }
     ],
     "attack": {
       "id": "shooter_smg",
@@ -148,6 +152,7 @@
       "fireTime": 12,
       "reloadTime": 0,
       "reloadSequence": null,
+    "reloadProgress": 0,
       "noiseRadius": 0,
       "splash": 0,
       "accuracy": 0.5,

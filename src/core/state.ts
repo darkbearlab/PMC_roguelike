@@ -25,7 +25,7 @@ export type AmmoType = 'RIFLE' | 'ROCKET';
 /** 射擊模式（§2）。三種時間花費相同，差別只在耗彈與命中。 */
 export type FireMode = 'SINGLE' | 'BURST' | 'AUTO';
 
-export type ItemKind = 'AMMO' | 'VALUABLE' | 'DNA' | 'WEAPON';
+export type ItemKind = 'AMMO' | 'VALUABLE' | 'DNA' | 'WEAPON' | 'CONSUMABLE';
 
 /**
  * 背包裡的一個堆疊（§3.1）。
@@ -84,6 +84,14 @@ export interface Weapon {
   reloadTime: number;
   /** 裝填要走的系列動作 id；null = 單一動作即可完成（§5.5）。 */
   reloadSequence: string | null;
+  /**
+   * 可續行序列（`RESUMABLE`）的進度：已經完成幾個步驟（§5.6）。
+   *
+   * **進度存在武器上，不是存在單位上。** 退殼退了就是退了 ——
+   * 收起來、換另一把、之後再換回來，那顆彈殼也不會自己跳回去。
+   * 這產生一個很好的戰術狀態：開始裝填、挨了一輪、退回掩體、接著裝完。
+   */
+  reloadProgress: number;
   noiseRadius: number;    // 開火噪音半徑（格）
   splash: number;         // 濺射半徑，0 = 無
   // --- 命中相關：MVP 不生效，但欄位與管線必須存在，見 §8.1 ---
@@ -133,6 +141,16 @@ export interface Unit {
   transitioning: boolean;
   /** 進行中的系列動作（§5.5）。非 null 時，這個單位輪到時只能執行下一步。 */
   pendingSequence: Sequence | null;
+  /**
+   * 準備欄（§12.19）：現在身上「隨手可用」的那一件消耗品的 item id。
+   *
+   * 東西**仍然放在背包裡**，這裡只是一個標記 —— 所以重量、陣亡遺留、
+   * 撤離帶出全部自動跟著背包走，不需要另一套規則。
+   *
+   * 準備要花時間（§5.2 的 time.prepare）。免費的話準備欄就只是多一次點擊，
+   * 玩家會在需要時免費換上想要的東西，等同於直接從背包使用。
+   */
+  preparedId: string | null;
   /** 已宣告、下次輪到必定執行的動作（§9.4）。玩家單位一律 null。 */
   declared: Declaration | null;
   /** SEARCH 收尾還要巡視幾次（§9.3）。 */
@@ -174,6 +192,16 @@ export interface Declaration {
   /** FLANK 專用：繞畫面的左邊還是右邊（給口令用）。 */
   side?: 'LEFT' | 'RIGHT';
 }
+
+/**
+ * 系列動作被打斷之後會怎樣（§5.6）。
+ *
+ * 判準是**已經完成的物理狀態改變會不會自己消失**：
+ * 退殼退了就是退了，不會自己裝回去；包紮包到一半被打斷，那塊敷料就廢了。
+ */
+export type SequenceInterrupt =
+  | 'RESUMABLE'   // 進度保留，下次從中斷的步驟接續（機械性動作）
+  | 'RESTART';    // 進度歸零，已花費的時間不退還（生理性、精密性動作）
 
 /**
  * 系列動作（§5.5）。效果只在整套走完時發生 ——
