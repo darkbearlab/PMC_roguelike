@@ -14,7 +14,9 @@ import type {
 import { activePlayerUnit, lootAt } from './state';
 import { DIR_VEC, facingToward, manhattan, sameTile } from './grid';
 import { findTiles, tileAt } from './map';
-import { canStep, findPath, nearestFreeTileOfType, occupiedBy, terrainPassable } from './pathfind';
+import {
+  canStep, findPath, nearestFreeTileOfType, occupiedBy, terrainPassable, vaultTarget,
+} from './pathfind';
 import { canAttack, performAttack, type Legality } from './combat';
 import { stepEnemy } from './ai';
 import { RULES, archetype, fireModeOrder } from './content';
@@ -111,17 +113,24 @@ export function swapTime(u: Unit): number {
  * 這是刻意的防呆：蹲姿的視野是面向決定的，玩家想調整視野時最不該發生的事
  * 就是意外離開掩體。站立時面向不影響任何規則，所以直接走。
  */
-export function movePhase(u: Unit, dir: Facing): 'TURN' | 'STEP' {
-  return u.stance === 'CROUCH' && u.facing !== dir ? 'TURN' : 'STEP';
+export function movePhase(
+  state: GameState, u: Unit, dir: Facing,
+): 'TURN' | 'STEP' | 'VAULT' {
+  if (u.stance === 'CROUCH' && u.facing !== dir) return 'TURN';
+  return vaultTarget(state, u.pos, dir, { ignoreUnitIds: [u.id] }) ? 'VAULT' : 'STEP';
 }
 
 export function commandTime(state: GameState, cmd: Command): number | null {
   const u = activePlayerUnit(state);
   switch (cmd.type) {
-    case 'MOVE':
+    case 'MOVE': {
       if (!u) return RULES.time.move;
       // 移動時間受負重影響（§3.2）。轉向不算移動，所以不受負重影響。
-      return movePhase(u, cmd.dir) === 'TURN' ? RULES.time.facing : effectiveMoveTime(u);
+      // 翻越是固定成本：它換的是「穿過去」，不是「走得快」。
+      const phase = movePhase(state, u, cmd.dir);
+      if (phase === 'TURN') return RULES.time.facing;
+      return phase === 'VAULT' ? RULES.time.vault : effectiveMoveTime(u);
+    }
     case 'SET_STANCE':
     case 'TOGGLE_STANCE': return RULES.time.stance;
     case 'SET_FACING': return RULES.time.facing;
@@ -211,7 +220,11 @@ function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
   switch (cmd.type) {
     case 'MOVE': {
       // 蹲姿的第一下是轉向，轉向永遠合法 —— 面向牆壁蹲著也是一種選擇
-      if (movePhase(u, cmd.dir) === 'TURN') return OK;
+      const phase = movePhase(state, u, cmd.dir);
+      if (phase === 'TURN') return OK;
+      // 翻越（§1）：撞向半身掩體本來是「什麼都不會發生」的非法輸入，
+      // 現在把翻越接上去 —— **沒有新增任何按鈕**。
+      if (phase === 'VAULT') return u.pendingSequence ? no('正在進行中的動作') : OK;
       const to = { x: u.pos.x + DIR_VEC[cmd.dir].x, y: u.pos.y + DIR_VEC[cmd.dir].y };
       if (!terrainPassable(state, to)) return no('地形不可通行');
       if (occupiedBy(state, to, [u.id])) return no('該格已被佔據');
@@ -410,8 +423,22 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
 
   switch (cmd.type) {
     case 'MOVE': {
-      if (movePhase(u, cmd.dir) === 'TURN') { u.facing = cmd.dir; break; }
+      const phase = movePhase(s, u, cmd.dir);
+      if (phase === 'TURN') { u.facing = cmd.dir; break; }
       u.facing = cmd.dir;
+      if (phase === 'VAULT') {
+        const land = vaultTarget(s, u.pos, cmd.dir, { ignoreUnitIds: [u.id] });
+        if (!land) break;
+        u.pos = { x: land.x, y: land.y };
+        // §1.2：**落地必定是站姿。這是翻越真正的代價，比時間成本重要。**
+        // 你落在開闊處，而且掩體現在在你錯的那一側 ——
+        // 如果對面有人，你剛剛跳進他懷裡。這一條讓翻越自我節制。
+        const stood = u.stance === 'CROUCH';
+        u.stance = 'STAND';
+        pushLog(s, 'INFO', u.name + ' 翻越掩體，落在 (' + land.x + ',' + land.y + ')'
+          + (stood ? '　—— 落地站姿，掩體現在在你身後' : ''));
+        break;
+      }
       u.pos = { x: u.pos.x + DIR_VEC[cmd.dir].x, y: u.pos.y + DIR_VEC[cmd.dir].y };
       break;
     }
@@ -822,7 +849,13 @@ function deployReinforcement(s: GameState, soldierId: string, events: EventSink)
 export function movePath(state: GameState, to: Vec2): Vec2[] | null {
   const u = activePlayerUnit(state);
   if (!u) return null;
-  return findPath(state, u.pos, to, { ignoreUnitIds: [u.id] });
+  // v0.19：路徑要算**時間**而不是步數 —— 翻越是兩格但花兩倍時間，
+  // 若只數格子，尋路會把每一排掩體都當成捷徑。
+  return findPath(state, u.pos, to, {
+    ignoreUnitIds: [u.id],
+    stepCost: effectiveMoveTime(u),
+    vaultCost: RULES.time.vault,
+  });
 }
 
 export function lootUnder(state: GameState): LootPile | null {

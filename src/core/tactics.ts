@@ -14,8 +14,8 @@ import type { DeclKind } from './state';
 import { DIR_VEC, manhattan, sameTile } from './grid';
 import { coverAgainst, type CoverLevel } from './cover';
 import { hasLineOfSight } from './los';
-import { occupiedBy, terrainPassable } from './pathfind';
-import { archetype } from './content';
+import { occupiedBy, terrainPassable, vaultTarget } from './pathfind';
+import { RULES, archetype } from './content';
 
 export interface AiWeights {
   approach: number;
@@ -52,6 +52,8 @@ export interface Candidate {
   posScore: number;
   /** 這一格是不是「留在原地」。 */
   stay: boolean;
+  /** 要翻越掩體才到得了（v0.19 §1.3）。花的時間是兩倍，落地強制站姿。 */
+  vault: boolean;
 }
 
 /**
@@ -66,7 +68,7 @@ export interface Candidate {
  * 成本極低，但它會讓敵人**主動繞開玩家的掩體**。
  */
 export function scoreCandidate(
-  state: GameState, u: Unit, at: Vec2, target: Vec2, w: AiWeights,
+  state: GameState, u: Unit, at: Vec2, target: Vec2, w: AiWeights, vault = false,
 ): Candidate {
   const here = manhattan(u.pos, target);
   const there = manhattan(at, target);
@@ -85,8 +87,20 @@ export function scoreCandidate(
   const posScore = w.selfCover * selfCover
     + w.targetExposure * targetExposure
     + w.canShoot * canShoot;
-  const score = w.approach * approach + posScore;
-  return { pos: { x: at.x, y: at.y }, raw, score, posScore, stay: sameTile(at, u.pos) };
+  // 評分裡沒有時間項，用一個懲罰值代表翻越比走一步貴。
+  //
+  // **懲罰要跟著實際時間走**，不能寫死：§4 說「若成排掩體不再構成屏障，
+  // 先調高翻越時間」—— 若懲罰與時間脫鉤，那個旋鈕對敵人就完全沒有作用。
+  // 所以係數乘上「多花了幾倍的時間」。
+  const extra = Math.max(0, (RULES.time.vault - u.moveTime) / Math.max(1, u.moveTime));
+  const penalty = vault ? RULES.ai.vaultPenalty * extra : 0;
+  // **原型差異不必另外寫**：翻過去之後掩體在你身後，`selfCover` 自然歸零，
+  // 所以射手型（selfCover 權重高）本來就不會想翻，衝鋒型（只看 approach）會。
+  const score = w.approach * approach + posScore - penalty;
+  return {
+    pos: { x: at.x, y: at.y }, raw, score, posScore,
+    stay: sameTile(at, u.pos), vault,
+  };
 }
 
 /** 固定的決勝順序（§9.2）。北、東、南、西，最後才是原地。 */
@@ -97,9 +111,13 @@ export function candidates(state: GameState, u: Unit, target: Vec2): Candidate[]
   const out: Candidate[] = [];
   for (const d of ORDER) {
     const p = { x: u.pos.x + DIR_VEC[d].x, y: u.pos.y + DIR_VEC[d].y };
-    if (!terrainPassable(state, p)) continue;
-    if (occupiedBy(state, p, [u.id])) continue;
-    out.push(scoreCandidate(state, u, p, target, w));
+    if (terrainPassable(state, p) && !occupiedBy(state, p, [u.id])) {
+      out.push(scoreCandidate(state, u, p, target, w));
+      continue;
+    }
+    // 走不過去就看能不能翻過去（§1.3）—— 不然掩體列對敵人是單向膜
+    const land = vaultTarget(state, u.pos, d, { ignoreUnitIds: [u.id] });
+    if (land) out.push(scoreCandidate(state, u, land, target, w, true));
   }
   out.push(scoreCandidate(state, u, u.pos, target, w));   // 原地永遠是候選
   return out;

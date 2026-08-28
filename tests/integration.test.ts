@@ -13,11 +13,11 @@ function run(s: GameState, cmd: Command): GameState {
   return applyCommand(s, cmd).state;
 }
 
-import { findPath } from '../src/core/pathfind';
+import { findPath, stepDirection } from '../src/core/pathfind';
 import { activePlayerUnit, unitAt } from '../src/core/state';
 import { findTiles } from '../src/core/map';
 import { canAttack } from '../src/core/combat';
-import { facingFromDelta, manhattan } from '../src/core/grid';
+import { manhattan } from '../src/core/grid';
 import type { Facing, GameState, Vec2 } from '../src/core/state';
 
 describe('mission_01 地圖完整性（§13.1）', () => {
@@ -94,7 +94,8 @@ function botTurn(s: GameState, goal: Vec2): GameState {
   if (path && path.length > 0) {
     const step = path[0];
     if (unitAt(s, step)) return run(s, { type: 'WAIT' });
-    const dir = facingFromDelta(step.x - u.pos.x, step.y - u.pos.y);
+    // v0.19：翻越那一步在路徑上是兩格，要用 stepDirection
+    const dir = stepDirection(u.pos, step);
     if (dir) {
       const next = run(s, { type: 'MOVE', dir: dir as Facing });
       if (next !== s) return next;

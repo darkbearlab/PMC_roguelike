@@ -31,6 +31,8 @@ export interface Rules {
     interact: number;
     stance: number;
     facing: number;
+    /** 翻越半身掩體（v0.19）。一次兩格、兩倍時間、落地強制站姿。 */
+    vault: number;
     /** 把一件消耗品放進準備欄（§12.19）。 */
     prepare: number;
     /** 丟棄。刻意為 0：緊急時減重不該被時間懲罰。 */
@@ -123,6 +125,8 @@ export interface Rules {
     patrolTurnTime: number;
     searchWrapUpTurns: number;
     calloutRange: number;
+    /** 翻越候選的評分懲罰（v0.19）。 */
+    vaultPenalty: number;
   };
   combat: {
     enableToHitRoll: boolean;

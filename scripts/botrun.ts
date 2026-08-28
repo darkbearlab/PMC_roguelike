@@ -5,14 +5,14 @@ import type { Command } from '../src/core/commands';
 
 /** applyCommand 現在回傳 { state, events }（§8.6）；這支探針只看狀態。 */
 const run = (s: GameState, c: Command): GameState => applyCommand(s, c).state;
-import { findPath } from '../src/core/pathfind';
+import { findPath, stepDirection } from '../src/core/pathfind';
 import { isPlayerTurn } from '../src/core/scheduler';
 import { activePlayerUnit, unitAt } from '../src/core/state';
 import { canAttack } from '../src/core/combat';
 import { facingFromDelta, manhattan } from '../src/core/grid';
 import { MAPS, RULES } from '../src/core/content';
 import type { RawMap } from '../src/core/map';
-import { countAmmo } from '../src/core/inventory';
+import { countAmmo, effectiveMoveTime } from '../src/core/inventory';
 import { playerDefence } from '../src/core/cover';
 import { interruptOf } from '../src/core/sequence';
 import type { Facing, GameState, Vec2 } from '../src/core/state';
@@ -65,7 +65,7 @@ function botAction(s: GameState, goal: Vec2): GameState {
   if (u.equipped && u.equipped.ammo === 0) return run(s, { type: 'RELOAD' });
   const step = nextStep(s, u.pos, goal);
   if (step) {
-    const dir = facingFromDelta(step.x - u.pos.x, step.y - u.pos.y);
+    const dir = stepDirection(u.pos, step);
     if (dir) {
       const next = run(s, { type: 'MOVE', dir: dir as Facing });
       if (next !== s) return next;
@@ -90,10 +90,16 @@ let plan: Vec2[] | null = null;
 function nextStep(s: GameState, from: Vec2, goal: Vec2): Vec2 | null {
   const valid = plan
     && plan.length > 0
-    && manhattan(from, plan[0]) === 1
+    && manhattan(from, plan[0]) <= 2      // 翻越那一步是兩格（v0.19）
+    && stepDirection(from, plan[0]) !== null
     && !unitAt(s, plan[0]);
   if (!valid) {
-    const fresh = findPath(s, from, goal, { ignoreUnitIds: [activePlayerUnit(s)!.id] });
+    const me = activePlayerUnit(s)!;
+    const fresh = findPath(s, from, goal, {
+      ignoreUnitIds: [me.id],
+      stepCost: effectiveMoveTime(me),
+      vaultCost: RULES.time.vault,
+    });
     plan = fresh && fresh.length > 0 && !unitAt(s, fresh[0]) ? fresh : null;
   }
   if (!plan || plan.length === 0) return null;

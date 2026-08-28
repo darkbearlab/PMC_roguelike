@@ -118,8 +118,15 @@ describe('§5.3 / §6 地形與切角', () => {
     expect(checkLegal(s, { type: 'MOVE', dir: 'S' }).ok).toBe(true);
     placePlayer(s, { x: 2, y: 3 });
     expect(checkLegal(s, { type: 'MOVE', dir: 'N' }).ok).toBe(false); // (2,2) = '#'
+    // v0.19：撞向半身掩體不再是「什麼都不會發生」，而是翻越 ——
+    // 但**人仍然不會站在掩體格上**，他會落在對面。
     placePlayer(s, { x: 3, y: 3 });
-    expect(checkLegal(s, { type: 'MOVE', dir: 'N' }).ok).toBe(false); // (3,2) = '+'
+    const before = { ...player(s).pos };
+    expect(checkLegal(s, { type: 'MOVE', dir: 'N' }).ok).toBe(true);   // (3,2) = '+' → 翻越
+    const after = run(s, { type: 'MOVE', dir: 'N' });
+    expect(player(after).pos).toEqual({ x: 3, y: 1 });                 // 跨過去，不是站上去
+    expect(player(after).pos).not.toEqual({ x: 3, y: 2 });
+    expect(before).toEqual({ x: 3, y: 3 });
   });
 
   it('四方向移動下沒有「切角」這種走法：對角格必須繞兩步', () => {

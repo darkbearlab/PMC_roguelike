@@ -28,7 +28,7 @@ describe('§12.14 站立時方向鍵直接移動', () => {
   it('面向跟著移動方向改變，一按就走', () => {
     let s = unburden(testState(OPEN));
     expect(player(s).stance).toBe('STAND');
-    expect(movePhase(player(s), 'E')).toBe('STEP');
+    expect(movePhase(s, player(s), 'E')).toBe('STEP');
     s = run(s, { type: 'MOVE', dir: 'E' });
     expect(player(s).pos).toEqual({ x: 2, y: 1 });
     expect(player(s).facing).toBe('E');
@@ -50,7 +50,7 @@ describe('§12.14 蹲下時先轉向、再移動', () => {
     player(s).facing = 'S';
     const at = player(s).nextActAt;
 
-    expect(movePhase(player(s), 'E')).toBe('TURN');
+    expect(movePhase(s, player(s), 'E')).toBe('TURN');
     expect(commandTime(s, { type: 'MOVE', dir: 'E' })).toBe(RULES.time.facing);
     s = run(s, { type: 'MOVE', dir: 'E' });
     expect(player(s).facing).toBe('E');
@@ -63,7 +63,7 @@ describe('§12.14 蹲下時先轉向、再移動', () => {
     player(s).stance = 'CROUCH';
     player(s).facing = 'S';
     s = run(s, { type: 'MOVE', dir: 'E' });            // 轉
-    expect(movePhase(player(s), 'E')).toBe('STEP');
+    expect(movePhase(s, player(s), 'E')).toBe('STEP');
     s = run(s, { type: 'MOVE', dir: 'E' });            // 走
     expect(player(s).pos).toEqual({ x: 2, y: 1 });
     expect(player(s).nextActAt).toBe(RULES.time.move);
@@ -76,7 +76,7 @@ describe('§12.14 蹲下時先轉向、再移動', () => {
     u.facing = 'S';
     // 北邊 (2,1) 是牆：站著按 N 非法，蹲著按 N 是轉向，合法
     expect(checkLegal(s, { type: 'MOVE', dir: 'N' }).ok).toBe(true);
-    expect(movePhase(u, 'N')).toBe('TURN');
+    expect(movePhase(s, u, 'N')).toBe('TURN');
     u.stance = 'STAND';
     expect(checkLegal(s, { type: 'MOVE', dir: 'N' }).ok).toBe(false);
   });
@@ -106,6 +106,6 @@ describe('§12.14 蹲下時先轉向、再移動', () => {
     s = run(s, { type: 'TOGGLE_STANCE' });             // 站起來（花 3）
     s = advanceToPlayer(s);
     expect(player(s).stance).toBe('STAND');
-    expect(movePhase(player(s), 'E')).toBe('STEP');
+    expect(movePhase(s, player(s), 'E')).toBe('STEP');
   });
 });

@@ -23,7 +23,7 @@ import { facingToward, manhattan, sameTile } from './grid';
 import { unitSees } from './sight';
 import { hasLineOfSight } from './los';
 import { canAttack, performAttack } from './combat';
-import { findPath, occupiedBy } from './pathfind';
+import { findPath, isVaultStep, occupiedBy } from './pathfind';
 import { spend } from './scheduler';
 import { CALLOUTS, RULES } from './content';
 import {
@@ -92,12 +92,22 @@ function faceToward(u: Unit, target: Vec2): void {
   if (f) u.facing = f;
 }
 
-/** 走到指定的相鄰格。 */
+/**
+ * 走到指定的格。**可能是翻越**（v0.19 §1.3）——
+ * 否則掩體列會變成單向膜：玩家穿得過去，敵人只能繞路，
+ * 那會直接架空 v0.10 的側翼繞行機制。
+ */
 function stepTo(state: GameState, e: Unit, next: Vec2): number | null {
   if (occupiedBy(state, next, [e.id])) return null;
+  const vault = isVaultStep(state, e.pos, next);
+  if (!vault && manhattan(e.pos, next) !== 1) return null;
   const f = facingToward(e.pos, next);
   if (f) e.facing = f;
   e.pos = { x: next.x, y: next.y };
+  if (vault) {
+    e.stance = 'STAND';                 // §1.2：落地必定站姿，敵人也一樣
+    return RULES.time.vault;
+  }
   return e.moveTime;
 }
 

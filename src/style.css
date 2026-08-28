@@ -528,3 +528,18 @@ html, body {
 .ledger li.rule { border-top: 1px solid var(--glass-line); padding: 0; margin: 4px 0; }
 .ledger li.total { font-size: 14px; padding-top: 5px; }
 .ledger li.total span { color: var(--ink); font-weight: 600; }
+
+/* 翻越（§23.2）：方向鍵的第三種狀態。
+   會移動＝青框、會轉向＝琥珀框、會翻越＝紫框加上右上角的花費數字。
+   翻越比走一步貴一倍，所以「按下去之前就看得到」比外框顏色更要緊。 */
+#dpad button[data-dir].will-vault {
+  border-color: #b9a2e0;
+  color: #d9c9ff;
+}
+#dpad button[data-dir].will-vault::after {
+  content: attr(data-cost);
+  position: absolute;
+  top: 3px; right: 5px;
+  font-size: 10px; font-weight: 600; color: #b9a2e0;
+}
+#dpad button[data-dir] { position: relative; }

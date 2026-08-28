@@ -22,7 +22,7 @@ import { createInitialState } from '../core/setup';
 import { RULES } from '../core/content';
 import { armorRange, damageRange, effectiveMode, hitBreakdown } from '../core/combat';
 import { COVER_LABEL } from '../core/cover';
-import { facingFromDelta, manhattan, sameTile } from '../core/grid';
+import { manhattan, sameTile } from '../core/grid';
 import { inBounds } from '../core/map';
 import type { Camera } from '../render/camera';
 import { computeCamera, screenToTile, tileCenter } from '../render/camera';
@@ -33,7 +33,8 @@ import type { Vision } from '../render/vision';
 import { computeVision, isVisible, visionKey } from '../render/vision';
 import { $, $$, esc, show } from './dom';
 import { fmtWeight, missionPanelHtml, renderHud, shortName } from './hud';
-import { carriedWeight } from '../core/inventory';
+import { carriedWeight, effectiveMoveTime } from '../core/inventory';
+import { pathTime, stepDirection } from '../core/pathfind';
 import { MotionLayer, PanLayer } from '../render/motion';
 import { UI } from './config';
 import type { Deployment, MissionLedger } from '../core/meta';
@@ -500,7 +501,8 @@ export class Game {
     }
 
     const next = a.path[0];
-    const dir = facingFromDelta(next.x - u.pos.x, next.y - u.pos.y);
+    // 翻越那一步在路徑上是兩格，所以要用 stepDirection 而不是自己算 delta
+    const dir = stepDirection(u.pos, next);
     if (!dir || !this.dispatch({ type: 'MOVE', dir })) { this.auto = null; this.updateControls(); return; }
     a.path.shift();
     a.hp = activePlayerUnit(this.state)?.hp ?? a.hp;
@@ -519,9 +521,18 @@ export class Game {
       const dir = btn.dataset.dir as Facing;
       btn.disabled = busy || !checkLegal(s, { type: 'MOVE', dir }).ok;
       // 蹲姿時同一顆鍵有兩種意思，玩家必須在按下去之前就分得出來（§12.14）
-      const phase = u && u.stance === 'CROUCH' ? movePhase(u, dir) : null;
+      // §3.2：三種狀態要分得出來 —— 會移動、會轉向、會翻越。
+      const phase = u ? movePhase(s, u, dir) : null;
       btn.classList.toggle('will-turn', phase === 'TURN');
-      btn.classList.toggle('will-step', phase === 'STEP');
+      btn.classList.toggle('will-step', phase === 'STEP' && u?.stance === 'CROUCH');
+      btn.classList.toggle('will-vault', phase === 'VAULT');
+      // 翻越比較貴，所以按下去之前就要看得到（沿用「按鈕顯示時間花費」的慣例）
+      const cost = commandTime(s, { type: 'MOVE', dir });
+      btn.title = phase === 'VAULT' ? '翻越掩體　費時 ' + cost
+        : phase === 'TURN' ? '轉向（不花時間）'
+        : '移動　費時 ' + cost;
+      // 方向鍵上直接寫出花費 —— 翻越比較貴，按下去之前就要看得到（§3.2）
+      btn.dataset.cost = phase === 'VAULT' ? String(cost ?? '') : '';
     }
     const en = (sel: string, ok: boolean): void => {
       $<HTMLButtonElement>(sel).disabled = busy || !ok;
@@ -1049,8 +1060,13 @@ export class Game {
     const me = activePlayerUnit(this.state);
     const path = movePath(this.state, s.pos);
     if (!me || !path || path.length === 0) return null;
-    // 尋路預覽顯示的是**總時間花費**，不是 AP（§7.2）
-    return { path, time: path.length * me.moveTime, affordable: true };
+    // 尋路預覽顯示的是**總時間花費**，不是 AP（§7.2）。
+    // v0.19：路徑上可能有翻越那種比較貴的邊，所以要逐段加總。
+    return {
+      path,
+      time: pathTime(this.state, me.pos, path, effectiveMoveTime(me), RULES.time.vault),
+      affordable: true,
+    };
   }
 
   private buildInteractPreview(): InteractPreview | null {

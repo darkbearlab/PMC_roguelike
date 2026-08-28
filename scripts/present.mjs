@@ -176,7 +176,8 @@ const trace = await p.evaluate(async () => {
 ok(trace.enemyFrames > 10, `有取樣到敵人回合（${trace.enemyFrames} 幀）`);
 console.log('   trace →', JSON.stringify(trace));
 ok(trace.spotSet === 0, '敵人回合期間不會把鏡頭焦點交給敵人（spotlight 一直是 null）');
-ok(trace.worst < 1.01,
+// v0.19：翻越一次移動兩格，所以玩家自己那一步的滑動最長是 2 格
+ok(trace.worst < 2.01,
   `敵人回合期間鏡頭一直待在玩家身上（最遠離開 ${trace.worst.toFixed(2)} 格，只是玩家自己那一步的滑動）`);
 console.log('errors:', errs.length ? errs : 'none');
 if (errs.length) process.exitCode = 1;
