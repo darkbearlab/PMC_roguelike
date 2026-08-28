@@ -83,7 +83,7 @@ const pan = await p.evaluate(async () => {
 });
 ok(pan.centre === false && pan.nearby === false,
   '§2.2 目標舒服地待在畫面內 → 不平移也不等待');
-ok(pan.faraway === true, '§2.2 目標在畫面外 → 才平移');
+ok(pan.faraway === true, '§2.2 目標在畫面外 → 才平移（僅在 followActingUnit = PAN 時才會用到）');
 
 // --- §4.2 選單全螢幕（同樣重新載入）---
 await p.goto('http://localhost:4188/?seed=1&map=mission_01', { waitUntil: 'networkidle' });
@@ -140,6 +140,44 @@ ok(loot.afterEmpty === null, '§4.4 條件一：容器被拿空 → 自動關閉
 ok(loot.reopened && loot.reopened.startsWith('LOOT'), '重新打開');
 ok(loot.afterWalk === null, '§4.4 條件二：走離相鄰範圍 → 自動關閉');
 
+// --- 攝影機在敵人回合完全不動（試玩回報：追尾會暈）---
+await p.goto('http://localhost:4188/?seed=1&map=mission_01', { waitUntil: 'networkidle' });
+await p.waitForTimeout(400);
+ok(await p.evaluate(() => window.__game.test.config().animation.followActingUnit === 'OFF'),
+  '預設是 OFF');
+
+// 往前走幾步引出敵人回合，全程取樣鏡頭原點
+const trace = await p.evaluate(async () => {
+  const g = window.__game;
+  let enemyFrames = 0;
+  let worst = 0;          // 敵人回合期間，鏡頭焦點離玩家最遠有多少格
+  let spotSet = 0;
+  const sample = () => {
+    if (g.test.isPlayerTurn()) return;
+    enemyFrames++;
+    if (g.test.spotlight()) spotSet++;
+    const me = g.state.units.find((u) => u.faction === 'PLAYER');
+    if (!me) return;
+    const f = g.test.focus();
+    worst = Math.max(worst, Math.abs(f.x - me.pos.x) + Math.abs(f.y - me.pos.y));
+  };
+  for (let i = 0; i < 12; i++) {
+    g.test.tap({ ...g.state.objectives.main.pos });
+    g.test.tap({ ...g.state.objectives.main.pos });
+    for (let k = 0; k < 40; k++) {
+      await new Promise((r) => requestAnimationFrame(r));
+      sample();
+      if (g.state.result !== 'ONGOING') break;
+    }
+    if (g.state.result !== 'ONGOING' || g.state.pendingReinforcement) break;
+  }
+  return { enemyFrames, worst, spotSet };
+});
+ok(trace.enemyFrames > 10, `有取樣到敵人回合（${trace.enemyFrames} 幀）`);
+console.log('   trace →', JSON.stringify(trace));
+ok(trace.spotSet === 0, '敵人回合期間不會把鏡頭焦點交給敵人（spotlight 一直是 null）');
+ok(trace.worst < 1.01,
+  `敵人回合期間鏡頭一直待在玩家身上（最遠離開 ${trace.worst.toFixed(2)} 格，只是玩家自己那一步的滑動）`);
 console.log('errors:', errs.length ? errs : 'none');
 if (errs.length) process.exitCode = 1;
 await b.close();

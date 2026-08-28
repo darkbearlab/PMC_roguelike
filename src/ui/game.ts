@@ -134,6 +134,8 @@ export class Game {
       return u ? this.motion.posOf(id, u.pos, performance.now()) : { x: -1, y: -1 };
     },
     needsPan: (p: Vec2): boolean => this.needsPan(p),
+    spotlight: (): Vec2 | null => this.spotlight,
+    focus: (): Vec2 => this.camAim ?? this.focus,
     enemySteps: (): void => this.runEnemySteps(),
   };
 
@@ -889,6 +891,9 @@ export class Game {
    * @returns true = 這一幀開始平移了，呼叫端不要推進回合。
    */
   private aimAtActor(now: number): boolean {
+    // OFF：鏡頭完全不跟著敵人跑。一輪十隻敵人來回追尾會讓人暈 ——
+    // **看得到敵人在做什麼，代價不該是玩家的生理不適。**
+    if (UI.animation.followActingUnit === 'OFF') return false;
     const actor = activeUnit(this.state);
     if (!actor || actor.faction !== 'ENEMY') return false;
     // 看不見的敵人不值得把鏡頭帶過去 —— 那一段照舊瞬間結算
@@ -900,6 +905,7 @@ export class Game {
     const from = this.camAim ?? this.focus;
     this.spotlight = { ...actor.pos };
     this.pan = { x: 0, y: 0 };
+    if (UI.animation.followActingUnit !== 'PAN') return false;   // SNAP：直接跳，不等
     this.panner.begin(from, actor.pos, UI.animation.panMs, now);
     return UI.animation.panMs > 0;
   }
@@ -958,13 +964,15 @@ export class Game {
       if (isPlayerTurn(this.state) || this.state.pendingReinforcement || isMissionOver(this.state)) break;
       if (this.skipEnemyTurn) continue;   // 跳過：只結算，不停下來演
       if (wasVisible || nowVisible || hpAfter !== hpBefore) {
-        // 鏡頭跟著正在行動的那個單位，並取消玩家的手動平移（§12.15 / §2.1）。
-        // 需不需要真的平移由 §2.2 決定 —— 已經在畫面裡就零延遲。
-        const to = after ? after.pos : (actor as { pos: Vec2 }).pos;
-        this.spotlight = { ...to };
-        this.pan = { x: 0, y: 0 };
-        if (this.needsPan(to)) {
-          this.panner.begin(this.camAim ?? this.focus, to, UI.animation.panMs, performance.now());
+        // 鏡頭要不要跟著正在行動的那個單位，由 followActingUnit 決定。
+        // OFF 時鏡頭一動也不動，連玩家自己拖過的視角都保留。
+        if (UI.animation.followActingUnit !== 'OFF') {
+          const to = after ? after.pos : (actor as { pos: Vec2 }).pos;
+          this.spotlight = { ...to };
+          this.pan = { x: 0, y: 0 };
+          if (UI.animation.followActingUnit === 'PAN' && this.needsPan(to)) {
+            this.panner.begin(this.camAim ?? this.focus, to, UI.animation.panMs, performance.now());
+          }
         }
         break;
       }

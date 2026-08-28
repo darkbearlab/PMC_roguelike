@@ -17,6 +17,17 @@ export interface UiConfig {
     panMs: number;
     /** 離畫面邊緣幾格以內算「太靠邊」，需要平移。 */
     edgeMargin: number;
+    /**
+     * 敵人行動時攝影機要不要跟過去。
+     *
+     * - `OFF`（預設）：完全不跟，鏡頭一直待在玩家身上
+     * - `SNAP`：瞬間跳過去（v0.16 以前的行為）
+     * - `PAN`：平滑平移過去（v0.17 加的）
+     *
+     * 預設是 OFF，因為一輪十隻敵人、鏡頭在不同單位之間來回追尾會讓人暈。
+     * **看得到敵人在做什麼，代價不該是玩家的生理不適。**
+     */
+    followActingUnit: 'OFF' | 'SNAP' | 'PAN';
   };
   /** 掠奪選單自動關閉的曼哈頓距離門檻。 */
   lootCloseDistance: number;
