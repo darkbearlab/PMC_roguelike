@@ -137,6 +137,29 @@ function itemButtons(
     + '</em></button>';
 }
 
+/**
+ * 目標點的互動鍵（v0.19 附錄）。
+ *
+ * **屍體會落在目標點上。**在此之前介面查搜刮堆優先於查目標點，
+ * 於是「敵人剛好死在終端機上」= 那個終端機永遠按不到 ——
+ * 規則層一直是合法的，到不了的是介面。
+ *
+ * 修法是把互動鍵放進掠奪面板，而不是改變點擊的優先順序：
+ * 屍體上的東西與目標點都在同一格，兩件事都要做得到。
+ */
+function interactButtonHtml(state: GameState, u: PlayerUnit, pos: Vec2): string {
+  const kind = interactTarget(state, u, pos);
+  if (!kind) return '';
+  const label = kind === 'TERMINAL' ? '存取終端（主目標）'
+    : kind === 'SUPPLY' ? '回收補給箱（次要目標）'
+    : '撤離（帶著背包走人）';
+  const legal = checkLegal(state, { type: 'INTERACT', pos });
+  return '<button data-do="interact" ' + (legal.ok ? 'class="primary"' : 'disabled') + '>'
+    + esc(label) + '<em>'
+    + (legal.ok ? '費時 ' + commandTime(state, { type: 'INTERACT', pos }) : esc(legal.reason))
+    + '</em></button>';
+}
+
 /** 點一堆東西 → 可拿的清單。§4.3 的兩段式文法：第一下顯示，第二下拿。 */
 export function lootPanelHtml(state: GameState, pos: Vec2): string {
   const u = activePlayerUnit(state);
@@ -144,16 +167,20 @@ export function lootPanelHtml(state: GameState, pos: Vec2): string {
   if (!u || !pile) return '';
   const inReach = manhattan(u.pos, pos) <= 1;
   const room = maxWeight() - carriedWeight(u);
+  // 同一格既是屍體又是目標點的情況（v0.19 附錄）——兩件事都要做得到
+  const interact = interactButtonHtml(state, u, pos);
 
   let html = head(pile.label);
   if (pile.items.length === 0) {
-    return html + '<p class="note">這裡已經空了。</p><div class="menu-actions"></div>';
+    return html + '<p class="note">這裡已經空了。</p>'
+      + '<div class="menu-actions">' + interact + '</div>';
   }
   html += '<p class="note">'
     + (inReach
       ? '每次搜刮費時 ' + RULES.loot.takeTime + '　背包還剩 ' + fmtWeight(room) + ' 重量'
       : '必須走到這一格或相鄰格')
-    + '</p><div class="menu-actions">';
+    + '</p><div class="menu-actions">'
+    + interact;
 
   if (inReach) {
     const allLegal = checkLegal(state, { type: 'TAKE_ALL', lootId: pile.id });
