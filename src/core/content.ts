@@ -14,7 +14,7 @@ import mission02Json from '../data/maps/mission_02.json';
 import mission03Json from '../data/maps/mission_03.json';
 import mission04Json from '../data/maps/mission_04.json';
 
-import type { Calibre, FireMode, Weapon, WeaponClass } from './state';
+import type { Calibre, FireMode, WeaponClass, WeaponType } from './state';
 import type { MapStats, RawMap } from './map';
 import type { ContractBrief } from './contracts';
 
@@ -114,7 +114,8 @@ export interface ActorArchetype {
   sightRange: number;
   aim: number;
   evasion: number;
-  attack?: Weapon;
+  /** 敵人的攻擊也是一份型號資料；實際單位身上掛的是它的實例。 */
+  attack?: WeaponType;
   /** 敵人屍體的掉落表（§4.2）。抽值順序固定：由上而下各抽一次。 */
   loot?: { defId: string; qty: number; chance: number }[];
   /** 落點評分的權重（§9.2）。權重必須依原型不同，否則三種敵人會退化成同一種打法。 */
@@ -162,7 +163,8 @@ export interface ContractRules {
 }
 
 export const RULES: Rules = rulesJson as unknown as Rules;
-export const WEAPONS: Weapon[] = weaponsJson as unknown as Weapon[];
+/** 武器**型號**（v0.15 附錄 A）。世界上實際存在的那幾把是實例，見 core/weapon.ts。 */
+export const WEAPONS: WeaponType[] = weaponsJson as unknown as WeaponType[];
 export const ACTORS: Record<string, ActorArchetype> = actorsJson as unknown as Record<string, ActorArchetype>;
 /**
  * 四張手刻地圖（§13.1）。順序固定 —— 隨機選圖用的是索引，
@@ -205,11 +207,7 @@ export function fireModeOrder(): FireMode[] {
   return RULES.fireModes.order;
 }
 
-export function weaponById(id: string): Weapon {
-  const w = WEAPONS.find((x) => x.id === id);
-  if (!w) throw new Error(`未知的武器 id: ${id}`);
-  return cloneWeapon(w);
-}
+
 
 export function archetype(id: string): ActorArchetype {
   const a = ACTORS[id];
@@ -217,7 +215,4 @@ export function archetype(id: string): ActorArchetype {
   return a;
 }
 
-/** 武器是可變狀態（ammo），每個實例都必須是獨立複本。 */
-export function cloneWeapon(w: Weapon): Weapon {
-  return { ...w };
-}
+

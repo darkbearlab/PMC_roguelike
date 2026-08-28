@@ -298,6 +298,58 @@ type FireMode = 'SINGLE' | 'BURST' | 'VOLLEY' | 'AUTO';
 type ReloadMode = 'FULL' | 'INCREMENTAL';
 type ItemKind = 'AMMO' | 'VALUABLE' | 'DNA' | 'WEAPON' | 'CONSUMABLE';
 
+/**
+ * 詞條（v0.15 附錄 A）。**v0.15 一律為空，不實作任何效果。**
+ * modifiers 的鍵對應 WeaponStats 的數值欄位，值為加法修正。
+ */
+interface Affix {
+  id: string;
+  name: string;
+  modifiers: Record<string, number>;   // 例如 { accuracy: 0.05, reloadTime: -2 }
+}
+
+/**
+ * 來歷（v0.15 附錄 A）。**v0.15 一律為空。**
+ * actor **只存公司或勢力名稱，不得存放帳號或使用者識別** —— 這是多人時的隱私邊界。
+ */
+interface Provenance {
+  event: string;      // 'MANUFACTURED' | 'RECOVERED' | 'SALVAGED' …
+  actor: string;      // 公司或勢力名稱
+  note?: string;
+}
+
+/** 一把槍的數值。型號與實例共用同一組欄位，差別在來源。 */
+interface WeaponStats {
+  name: string; class: WeaponClass;
+  damage: number; damageSpread: number; penetration: number;
+  range: number; magazine: number; calibre: Calibre; weight: number;
+  modes: FireMode[]; fireTime: number; reloadTime: number;
+  reloadMode: ReloadMode; reloadSequence: string | null; swapTime?: number;
+  noiseRadius: number; splash: number;
+  accuracy: number; optimalRange: number; falloffPerTile: number;
+}
+
+/** 武器**型號**：data/weapons.json 的一筆。不可變，全世界共用一份。 */
+interface WeaponType extends WeaponStats {
+  id: string;
+  ammo: number;    // 出廠預設
+  mode: FireMode;  // 出廠預設
+}
+
+/**
+ * 武器**實例**：世界上實際存在的那一把槍（v0.15 附錄 A）。
+ * 玩家持有、掉落、拾取、遺落的都是實例。
+ */
+interface WeaponInstance extends WeaponStats {
+  instanceId: string;   // 決定性來源（狀態流水號），不得用時間或 UUID
+  typeId: string;
+  ammo: number;
+  mode: FireMode;
+  reloadProgress: number;
+  affixes: Affix[];      // v0.15 一律為空
+  provenance: Provenance[];  // v0.15 一律為空
+}
+
 /** 出擊前配裝（v0.15 §19）。是 createInitialState 的輸入，所以決定論不受影響。 */
 interface Loadout {
   primary: string | null;                    // 武器 id；null = 空手
@@ -2359,3 +2411,82 @@ RR-4       20
 3. **經濟** —— 武器與彈藥的價格，配裝才會真正變成取捨
 4. **名冊差異化** —— 目前四人數值相同，「派誰去」還不是決策
 5. **地形統計加入平均可視距離** —— 現行難度評級抓不到「這張圖根本打不起來」的情況
+
+---
+
+## 19 附錄 A：武器是實例，不是型號引用（v0.15）
+
+> **本次不新增任何玩法。**只是把資料模型改成日後接得上的形狀。
+
+### A.1 為什麼要現在做
+
+專案有一條長期路線：武器將來會有詞條而變得獨一無二，並且會在伺服器端流通 ——
+玩家陣亡遺落的槍，經拾荒者回收後重新洗進獎勵池，可能出現在另一個玩家的任務裡。
+
+那條路線的最低前提是：**一把槍必須是一個「實例」，不是一個型號引用。**
+若武器只是「玩家擁有 AR-9 這個型號」，那就沒有任何東西可以被追蹤、
+被標記、被賦予來歷 —— 追蹤到的只是一個名字。
+
+現在加欄位幾乎零成本；等背包、屍體、戰利品、配裝、存檔全部長好之後再改，
+會動到每一處。這與命中率鉤子、`penetration` 欄位、`CombatEvent` 事件流
+是同一種作法：**先留形狀、後填內容。**
+
+### A.2 型號與實例
+
+見 §4 的 `WeaponType` / `WeaponInstance`。所有持有處都持有實例：
+`Unit.equipped`、`Unit.stowed`、背包中的武器、屍體上的武器、
+配裝畫面的選擇結果、結算畫面的「帶出」與「遺留」。
+
+**搬動一把槍（換手、掉落、撿起）保留它的 `instanceId`** ——
+換了識別碼追蹤就斷了。只有「造一把一樣的新槍」才會拿新號（`duplicateWeapon`）。
+
+`instanceId` **必須是決定性的**：走的是與物品、屍體同一個流水號
+（`GameState.nextEntitySerial`，本身在可序列化狀態裡），
+不得使用時間戳或 `crypto.randomUUID()`。否則
+「相同種子 + 相同指令序列 ⇒ 相同結果」這條硬性要求（§3.1）就破了。
+
+### A.3 詞條與來歷（只有形狀）
+
+`affixes` 與 `provenance` 一律為空，v0.15 不實作任何產生、掉落或顯示邏輯。
+
+有效數值的計算路徑必須經過套用點：
+
+```
+基礎型號數值 → 套用詞條 → 得到實際數值
+```
+
+實作在 `core/weapon.ts` 的 `resolveStats()`，是唯一的套用點；
+改動詞條請走 `withAffixes()`，它會重新套用一次，所以實例上的數值不會與詞條脫節。
+
+> 因為詞條為空，**實際數值必然等於型號數值** ——
+> `tests/weapon-instance.test.ts` 有一條專門守這件事。
+> 這樣日後真的填入詞條時，就知道套用點確實在生效而不是被繞過去了。
+
+`provenance.actor` **只存公司或勢力名稱，不得存放帳號或使用者識別。**
+這是日後開放多人時的隱私邊界，現在先立下來。
+
+### A.4 設定上的依據
+
+**精密製造隨企業撤走了。因此這顆星球上的每一把槍，都是撤離之前製造的。
+總數固定，而且只會減少。**
+
+- 槍不會被生產，只會流通。拾荒者把死者身上的東西撿走、重新洗回市場，
+  不是遊戲機制，是這個世界唯一的物流方式。
+- 稀有度自我解釋：好槍稀有不是因為掉落率，是因為世界上就剩那幾把。
+- 天然的消耗閥：被摧毀的槍永遠沒了，全世界的總數緩慢減少。
+  這比人為的耐久度更符合調性，而且發生在**世界層級**而非玩家層級。
+
+**對日後經濟層的硬性約束**：玩家永遠不能「製造」武器，只能取得、交易、修復。
+合成系統可以長士兵（生物可以複製），但**不能長槍**。
+這條線讓武器自動成為經濟中最保值的資產，而複製人是最不保值的：
+**人可以再長，槍不行。**
+
+（同一份內容記於 `docs/setting-bible.md` 與 `docs/game-design.md`。）
+
+### A.5 明確不做
+
+- 不實作任何詞條效果、產生或掉落
+- 不實作來歷的填寫或顯示
+- 不實作伺服器、物品池、跨玩家流通
+- 不改變任何武器數值或玩法
+- 不改變「離開任務後遺落的東西即永久失去」的現行規則

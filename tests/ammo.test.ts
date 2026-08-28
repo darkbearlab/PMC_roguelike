@@ -8,8 +8,8 @@ import { describe, it, expect } from 'vitest';
 import { checkLegal, nextFireMode } from '../src/core/commands';
 import { effectiveMode, shotsFor } from '../src/core/combat';
 import { countAmmo } from '../src/core/inventory';
-import { RULES, WEAPONS, weaponById } from '../src/core/content';
-import { advanceToPlayer, run, testState, player, unit } from './helpers';
+import { RULES, WEAPONS } from '../src/core/content';
+import { advanceToPlayer, player, run, testState, testWeapon, unit } from './helpers';
 
 const OPEN = [
   '##############',
@@ -122,17 +122,17 @@ describe('§2 射擊模式', () => {
     s = run(s, { type: 'CYCLE_FIRE_MODE' });
     expect(player(s).equipped!.mode).toBe('AUTO');
     s = run(s, { type: 'SWAP_WEAPON' });          // 換成 RR-4
-    expect(player(s).equipped!.id).toBe('rr4');
+    expect(player(s).equipped!.typeId).toBe('rr4');
     s = advanceToPlayer(s);
     s = run(s, { type: 'SWAP_WEAPON' });          // 換回 AR-9
-    expect(player(s).equipped!.id).toBe('ar9');
+    expect(player(s).equipped!.typeId).toBe('ar9');
     expect(player(s).equipped!.mode).toBe('AUTO');
   });
 
   it('重武器沒有模式，切換指令非法（§2.4）', () => {
     const s = testState(OPEN);
-    player(s).equipped = weaponById('rr4');
-    expect(weaponById('rr4').modes).toEqual(['SINGLE']);
+    player(s).equipped = testWeapon('rr4');
+    expect(testWeapon('rr4').modes).toEqual(['SINGLE']);
     expect(checkLegal(s, { type: 'CYCLE_FIRE_MODE' }).ok).toBe(false);
   });
 });
@@ -170,7 +170,7 @@ describe('§2.6 彈藥不足時自動降級', () => {
   });
 
   it('nextFireMode 只在這把槍支援的模式之間輪', () => {
-    const rr4 = weaponById('rr4');
+    const rr4 = testWeapon('rr4');
     expect(nextFireMode(rr4)).toBe('SINGLE');
   });
 });

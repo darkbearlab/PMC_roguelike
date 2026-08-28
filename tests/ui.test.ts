@@ -7,8 +7,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach, vi } 
 import { isPlayerTurn } from '../src/core/scheduler';
 import { readFileSync } from 'node:fs';
 import { resetToHitPolicy, setToHitPolicy } from '../src/core/combat';
-import { weaponById } from '../src/core/content';
-import { freezeCombat, thawCombat } from './helpers';
+import { freezeCombat, testWeapon, thawCombat } from './helpers';
 import type { Game as GameType } from '../src/ui/game';
 
 function stubCanvas(): void {
@@ -56,7 +55,7 @@ async function scene(foes: { at: [number, number]; archetype?: string; hp?: numb
   g.state.units = g.state.units.filter((u) => u.faction === 'PLAYER');
   g.state.units[0].pos = { x: 5, y: 9 };
   foes.forEach((f, i) => {
-    const e = makeEnemy(f.archetype ?? 'RUNNER', i, { x: f.at[0], y: f.at[1] });
+    const e = makeEnemy(g.state, f.archetype ?? 'RUNNER', i, { x: f.at[0], y: f.at[1] });
     if (f.hp !== undefined) { e.hp = f.hp; e.maxHp = f.hp; }   // 墊高血量，避免一發就死掩蓋掉要測的東西
     g.state.units.push(e);
   });
@@ -217,7 +216,7 @@ describe('§2/§3 統一點擊文法與射擊', () => {
 
   it('濺射會波及自己時跳出確認；取消則什麼都沒發生', async () => {
     const g = await scene([{ at: [6, 9] }]);
-    g.state.units[0].equipped = weaponById('rr4');   // 濺射半徑 1
+    g.state.units[0].equipped = testWeapon('rr4');   // 濺射半徑 1
     g.test.tap({ x: 6, y: 9 });
     const before = JSON.stringify(g.state);
     g.test.tap({ x: 6, y: 9 });

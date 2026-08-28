@@ -6,9 +6,9 @@ import { applyCommand } from '../src/core/commands';
 import {
   armorRange, damageRange, hitBreakdown, resetToHitPolicy, toHitChance,
 } from '../src/core/combat';
-import { RULES, WEAPONS, weaponById } from '../src/core/content';
+import { RULES, WEAPONS } from '../src/core/content';
 import { computeVision } from '../src/render/vision';
-import { advanceToPlayer, run, testState, player, unit } from './helpers';
+import { advanceToPlayer, player, run, testState, testWeapon, unit } from './helpers';
 
 afterEach(() => resetToHitPolicy());
 
@@ -130,7 +130,7 @@ describe('§8.2 浮動傷害與護甲', () => {
     const s = testState(OPEN, [{ archetype: 'HULK', pos: { x: 4, y: 1 } }]);
     const hulk = unit(s, 'E01');
     expect(armorRange(hulk)).toEqual({ min: 12, max: 28 });
-    const r = damageRange(weaponById('ar9'), hulk);
+    const r = damageRange(testWeapon('ar9'), hulk);
     expect(r.min).toBe(RULES.combat.minDamage);   // 25 - 28 觸底
     expect(r.max).toBe(23);                       // 35 - 12
   });
@@ -160,7 +160,7 @@ describe('§8.2 浮動傷害與護甲', () => {
     for (const w of WEAPONS) expect(w.penetration).toBe(0);
     const s = testState(OPEN, [{ archetype: 'HULK', pos: { x: 4, y: 1 } }]);
     const hulk = unit(s, 'E01');
-    const w = weaponById('ar9');
+    const w = testWeapon('ar9');
     const without = damageRange(w, hulk);
     w.penetration = 20;                       // 只在這個複本上試，不動資料檔
     const with20 = damageRange(w, hulk);

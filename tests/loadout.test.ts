@@ -17,6 +17,7 @@ import { carriedWeight, countAmmo, totalWeight } from '../src/core/inventory';
 import { createInitialState } from '../src/core/setup';
 import { mapById } from '../src/core/content';
 import { cheapestMode, effectiveMode, shotsFor } from '../src/core/combat';
+import { testWeapon } from './helpers';
 
 const W = (id: string) => WEAPONS.find((w) => w.id === id)!;
 
@@ -95,7 +96,7 @@ describe('§3 兩個新機制', () => {
   it('削短型有齊射，吃 2 發、2 次獨立判定', () => {
     expect(W('sg12s').modes).toContain('VOLLEY');
     expect(RULES.fireModes.VOLLEY.shots).toBe(2);
-    expect(shotsFor({ ...W('sg12s'), mode: 'VOLLEY', ammo: 2 })).toBe(2);
+    expect(shotsFor({ ...testWeapon('sg12s'), mode: 'VOLLEY', ammo: 2 })).toBe(2);
   });
 
   it('可用模式清單資料化：每把武器只循環自己有的', () => {
@@ -112,14 +113,14 @@ describe('§3 兩個新機制', () => {
   it('沒有單發的武器，降級不會退到它沒有的模式', () => {
     // LMG-5 只有點放與連發。剩一發時兩種都撐不住 ——
     // 這時不可以顯示「單發」，那是這把槍沒有的模式。
-    const lmg = { ...W('lmg5'), mode: 'AUTO' as const, ammo: 1 };
+    const lmg = { ...testWeapon('lmg5'), mode: 'AUTO' as const, ammo: 1 };
     expect(cheapestMode(lmg)).toBe('BURST');
     expect(W('lmg5').modes).toContain(effectiveMode(lmg));
   });
 
   it('齊射的降級路徑：只剩一發就退回單發', () => {
-    expect(effectiveMode({ ...W('sg12s'), mode: 'VOLLEY', ammo: 1 })).toBe('SINGLE');
-    expect(effectiveMode({ ...W('sg12s'), mode: 'VOLLEY', ammo: 2 })).toBe('VOLLEY');
+    expect(effectiveMode({ ...testWeapon('sg12s'), mode: 'VOLLEY', ammo: 1 })).toBe('SINGLE');
+    expect(effectiveMode({ ...testWeapon('sg12s'), mode: 'VOLLEY', ammo: 2 })).toBe('VOLLEY');
   });
 });
 
@@ -192,8 +193,8 @@ describe('§5 配裝', () => {
     };
     const s = createInitialState(1, mapById('mission_01')!, l);
     const p = s.units.find((u) => u.faction === 'PLAYER')!;
-    expect(p.equipped!.id).toBe('sg12s');
-    expect(p.stowed!.id).toBe('p9');
+    expect(p.equipped!.typeId).toBe('sg12s');
+    expect(p.stowed!.typeId).toBe('p9');
     expect(countAmmo(p.backpack, '12ga')).toBe(12);
     expect(countAmmo(p.backpack, '9mm')).toBe(30);
     expect(countAmmo(p.backpack, '5.56')).toBe(0);

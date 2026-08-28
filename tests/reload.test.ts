@@ -8,9 +8,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import { checkLegal, commandTime } from '../src/core/commands';
-import { weaponById, RULES } from '../src/core/content';
+import { RULES } from '../src/core/content';
 import { countAmmo } from '../src/core/inventory';
-import { player, run, testState } from './helpers';
+import { player, run, testState, testWeapon } from './helpers';
 import type { GameState } from '../src/core/state';
 import { makeItem } from '../src/core/inventory';
 
@@ -26,7 +26,7 @@ const OPEN = [
 function withWeapon(id: string, ammoQty = 40): GameState {
   const s = testState(OPEN);
   const p = player(s);
-  const w = weaponById(id);
+  const w = testWeapon(id);
   p.equipped = w;
   p.stowed = null;
   p.backpack!.items = [];

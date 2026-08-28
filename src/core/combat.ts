@@ -325,7 +325,7 @@ export function resolveAttack(
     from: { x: attacker.pos.x, y: attacker.pos.y },
     to: { x: targetPos.x, y: targetPos.y },
     hit,
-    weaponId: weapon.id,
+    weaponId: weapon.typeId,
     splash: weapon.splash,
   });
 

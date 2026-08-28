@@ -9,7 +9,8 @@
  * 配裝的單位是**一對**，不是單一武器（§6）：玩家在選的是組合。
  */
 import type { Calibre, Weapon } from './state';
-import { ITEMS, RULES, weaponById } from './content';
+import { ITEMS, RULES } from './content';
+import { makeWeapon, weaponType } from './weapon';
 import { addItem, emptyBackpack, makeItem } from './inventory';
 
 export interface Loadout {
@@ -75,10 +76,11 @@ function ammoWeight(c: Calibre, qty: number): number {
 
 export function loadoutWeight(l: Loadout): number {
   let w = 0;
-  if (l.primary) w += weaponById(l.primary).weight;
-  if (l.stowed) w += weaponById(l.stowed).weight;
-  for (const [c, n] of Object.entries(l.ammo)) {
-    if (n && n > 0) w += ammoWeight(c as Calibre, n);
+  if (l.primary) w += weaponType(l.primary).weight;
+  if (l.stowed) w += weaponType(l.stowed).weight;
+  for (const c of allCalibres()) {
+    const n = l.ammo[c] ?? 0;
+    if (n > 0) w += ammoWeight(c, n);
   }
   for (const [id, n] of Object.entries(l.consumables)) {
     const def = ITEMS[id];
@@ -103,7 +105,7 @@ export function checkLoadout(l: Loadout): LoadoutCheck {
   const warnings: string[] = [];
   for (const id of [l.primary, l.stowed]) {
     if (!id) continue;
-    const w = weaponById(id);
+    const w = weaponType(id);
     if (w.magazine >= 99) continue;
     if ((l.ammo[w.calibre] ?? 0) <= 0) {
       warnings.push(w.name + ' 沒有備用彈藥（' + RULES.calibres[w.calibre].name
@@ -137,8 +139,8 @@ export function equipFromLoadout(
     if (n > 0 && ITEMS[id]) addItem(bag, makeItem(serial as never, id, n));
   }
   return {
-    equipped: l.primary ? weaponById(l.primary) : null,
-    stowed: l.stowed ? weaponById(l.stowed) : null,
+    equipped: l.primary ? makeWeapon(serial, l.primary) : null,
+    stowed: l.stowed ? makeWeapon(serial, l.stowed) : null,
     backpack: bag,
   };
 }
@@ -146,8 +148,8 @@ export function equipFromLoadout(
 /** 一份配裝裡每一項的重量明細，供介面列出來。 */
 export function loadoutBreakdown(l: Loadout): { label: string; weight: number }[] {
   const out: { label: string; weight: number }[] = [];
-  if (l.primary) { const w = weaponById(l.primary); out.push({ label: w.name, weight: w.weight }); }
-  if (l.stowed) { const w = weaponById(l.stowed); out.push({ label: w.name, weight: w.weight }); }
+  if (l.primary) { const w = weaponType(l.primary); out.push({ label: w.name, weight: w.weight }); }
+  if (l.stowed) { const w = weaponType(l.stowed); out.push({ label: w.name, weight: w.weight }); }
   for (const c of allCalibres()) {
     const n = l.ammo[c] ?? 0;
     if (n > 0) out.push({ label: RULES.calibres[c].name + ' ×' + n, weight: ammoWeight(c, n) });

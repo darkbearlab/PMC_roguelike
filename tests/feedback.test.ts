@@ -4,9 +4,8 @@
 import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
 import { applyCommand } from '../src/core/commands';
 import { resetToHitPolicy, setToHitPolicy } from '../src/core/combat';
-import { weaponById } from '../src/core/content';
 import type { CombatEvent } from '../src/core/events';
-import { advanceToPlayer, run, testState, player, unit, freezeCombat, thawCombat } from './helpers';
+import { advanceToPlayer, freezeCombat, player, run, testState, testWeapon, thawCombat, unit } from './helpers';
 
 afterEach(() => resetToHitPolicy());
 
@@ -50,7 +49,7 @@ describe('§2.3 三種結果必須可區分', () => {
 
   it('重武器打同一個裝甲型就不是「被擋下大半」，玩家看得出換槍有效', () => {
     const s = testState(ROOM, [{ archetype: 'HULK', pos: { x: 4, y: 1 } }]);
-    player(s).equipped = weaponById('rr4');
+    player(s).equipped = testWeapon('rr4');
     const { events } = applyCommand(s, { type: 'FIRE', target: { x: 4, y: 1 } });
     const hit = pick(events, 'IMPACT')[0];
     expect(hit.amount).toBe(100);

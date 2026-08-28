@@ -5,8 +5,8 @@
 import { describe, it, expect } from 'vitest';
 import { hitBreakdown, toHitChance } from '../src/core/combat';
 import { isBackstab } from '../src/core/sight';
-import { RULES, weaponById } from '../src/core/content';
-import { advanceOnce, player, testState, unit } from './helpers';
+import { RULES } from '../src/core/content';
+import { advanceOnce, player, testState, testWeapon, unit } from './helpers';
 
 const OPEN = [
   '################',
@@ -109,7 +109,7 @@ describe('§8.8 與 AI 的互動', () => {
   /** 敵人先看到玩家、轉入警戒。回傳已經 ALERT 的狀態。 */
   const alerted = () => {
     let s = testState(OPEN, [{ archetype: 'SHOOTER', pos: at(9, 3), facing: 'W' }]);
-    player(s).equipped = weaponById('ar9');
+    player(s).equipped = testWeapon('ar9');
     s.units[0].nextActAt = 1000;          // 把行動權讓給敵人
     s = advanceOnce(s);
     expect(unit(s, 'E01').aiState).toBe('ALERT');

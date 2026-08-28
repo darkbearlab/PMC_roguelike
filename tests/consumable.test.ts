@@ -234,7 +234,7 @@ describe('§5.6 兩種中斷行為', () => {
     player(s).equipped = null;
     s = advanceToPlayer(s);
     s = run(s, { type: 'SWAP_WEAPON' });
-    expect(player(s).equipped!.id).toBe('rr4');
+    expect(player(s).equipped!.typeId).toBe('rr4');
     expect(player(s).equipped!.reloadProgress).toBe(1);   // 換來換去進度都還在
   });
 });

@@ -1,11 +1,14 @@
 /**
  * 初始狀態建立。所有數值來自 data/ 的 JSON，這裡不寫死任何平衡數字。
  */
-import type { Backpack, Facing, GameState, Item, LootPile, Objective, Unit, Vec2, Weapon } from './state';
+import type {
+  Backpack, Facing, GameState, Item, LootPile, Objective, Unit, Vec2, WeaponInstance,
+} from './state';
 import type { RawMap } from './map';
 import { parseMap, findTiles } from './map';
 import { createRng, nextFloat } from './rng';
-import { ACTORS, MAPS, RULES, archetype, cloneWeapon, weaponById } from './content';
+import { ACTORS, MAPS, RULES, archetype } from './content';
+import { makeWeapon, makeWeaponFrom } from './weapon';
 import { addItem, emptyBackpack, makeItem } from './inventory';
 import type { Loadout } from './loadout';
 import { defaultLoadout, equipFromLoadout } from './loadout';
@@ -15,7 +18,7 @@ function makeUnit(
   id: string,
   name: string,
   pos: Vec2,
-  weapons: { equipped: Weapon | null; stowed: Weapon | null },
+  weapons: { equipped: WeaponInstance | null; stowed: WeaponInstance | null },
   facing: Facing = 'S',
   backpack: Backpack | null = null,
 ): Unit {
@@ -90,20 +93,27 @@ export function makeReinforcementSoldier(
   state: { nextEntitySerial: number }, id: string, pos: Vec2,
 ): Unit {
   return makeUnit('SOLDIER', id, id, pos, {
-    equipped: weaponById('ar9'),
+    equipped: makeWeapon(state, 'ar9'),
     stowed: null,
   }, 'S', fillBackpack(state, RULES.backpack.reinforcementItems));
   // nextActAt 由 deployReinforcement 依 clock 設定
 }
 
-/** @param facing 初始面向（§13.3）。未指定時預設為南。 */
-export function makeEnemy(archetypeId: string, index: number, pos: Vec2, facing: Facing = 'S'): Unit {
+/**
+ * @param facing 初始面向（§13.3）。未指定時預設為南。
+ * @param serial 實例流水號。敵人的攻擊也是一把有 instanceId 的槍（附錄 A）——
+ *               衝擊爪不會流通，但「所有持有處都持有實例」這條不留例外。
+ */
+export function makeEnemy(
+  serial: { nextEntitySerial: number },
+  archetypeId: string, index: number, pos: Vec2, facing: Facing = 'S',
+): Unit {
   const a = archetype(archetypeId);
   if (!a.attack) throw new Error('敵人原型 ' + archetypeId + ' 缺少 attack 資料');
   const id = 'E' + String(index + 1).padStart(2, '0');
   const name = a.name + '-' + String(index + 1).padStart(2, '0');
   return makeUnit(archetypeId, id, name, pos, {
-    equipped: cloneWeapon(a.attack),
+    equipped: makeWeaponFrom(serial, a.attack),
     stowed: null,
   }, facing);
 }
@@ -147,7 +157,7 @@ export function createInitialState(seed: number, rawMap?: RawMap, loadout?: Load
   const units: Unit[] = [makeStartingSoldier(serial, firstId, map.startDropPoint, loadout)];
   picked.enemies.forEach((e, i) => {
     if (!ACTORS[e.archetype]) throw new Error('地圖引用了未知的敵人原型 ' + e.archetype);
-    units.push(makeEnemy(e.archetype, i, e.pos, e.facing));
+    units.push(makeEnemy(serial, e.archetype, i, e.pos, e.facing));
   });
 
   // 地圖搜刮點（§4.1）。地形是 LOOT，內容寫在地圖檔的 caches。

@@ -74,8 +74,37 @@ export interface Backpack {
 
 export type WeaponClass = 'LIGHT' | 'HEAVY';
 
-export interface Weapon {
+/**
+ * 詞條（v0.15 附錄 A）。**v0.15 一律為空，不實作任何效果。**
+ *
+ * 現在加欄位幾乎零成本；等背包、屍體、戰利品、配裝、存檔全部長好之後再改，
+ * 會動到每一處。這與命中率鉤子、`penetration` 欄位、`CombatEvent` 事件流
+ * 是同一種作法：先留形狀、後填內容。
+ */
+export interface Affix {
   id: string;
+  name: string;
+  /** 對型號數值的修正，例如 `{ accuracy: 0.05, reloadTime: -2 }`。 */
+  modifiers: Record<string, number>;
+}
+
+/**
+ * 來歷（v0.15 附錄 A）。**v0.15 一律為空。**
+ *
+ * `actor` **只存公司或勢力名稱，不得存放帳號或使用者識別** ——
+ * 這是日後開放多人時的隱私邊界，現在先立下來。
+ */
+export interface Provenance {
+  event: string;      // 'MANUFACTURED' | 'RECOVERED' | 'SALVAGED' …
+  actor: string;      // 公司或勢力名稱
+  note?: string;      // 自由文字，日後由文案填寫
+}
+
+/**
+ * 一把槍的**數值**。型號與實例都用同一組欄位描述，差別在來源：
+ * 型號的是資料檔寫死的，實例的是「型號數值套用詞條之後」的結果（見 core/weapon.ts）。
+ */
+export interface WeaponStats {
   name: string;
   class: WeaponClass;
   damage: number;
@@ -85,15 +114,12 @@ export interface Weapon {
   penetration: number;
   range: number;          // 最大射程（格）
   magazine: number;       // 彈匣容量
-  ammo: number;           // 槍內剩餘子彈（背包裡的總量另外算，§1.1）
-  /** 這把槍吃哪一種口徑（v0.15 §1.2）。 */
+  /** 這把槍吃哪一種口徑（v0.15 §19.1）。 */
   calibre: Calibre;
-  /** 放進背包時佔的重量（§3）。手持與收納中不佔背包。 */
+  /** 計入負重（v0.15）。手持與收納中的武器不佔背包欄位，但仍然要背。 */
   weight: number;
-  /** 可用的射擊模式（§2）。重武器只有 SINGLE。 */
+  /** 可用的射擊模式（§8.9）。每把武器自己列出，程式不得寫死。 */
   modes: FireMode[];
-  /** 目前選定的模式。**記在武器上**，換槍再換回來時維持（§2.5）。 */
-  mode: FireMode;
   /** 開火的時間花費（§5 排程器）。 */
   fireTime: number;
   /**
@@ -102,27 +128,63 @@ export interface Weapon {
    * 若 reloadSequence 非 null，這個值等於序列各步的總和。
    */
   reloadTime: number;
-  /** 裝填方式（v0.15）。省略時視為 FULL。 */
+  /** 裝填方式（v0.15）。 */
   reloadMode: ReloadMode;
-  /** 換到手上要花多久。省略時退回 `rules.json` 的 `time.swap[class]`。 */
-  swapTime?: number;
   /** 裝填要走的系列動作 id；null = 單一動作即可完成（§5.5）。 */
   reloadSequence: string | null;
+  /** 換到手上要花多久。省略時退回 `rules.json` 的 `time.swap[class]`。 */
+  swapTime?: number;
+  noiseRadius: number;    // 開火噪音半徑（格）
+  splash: number;         // 濺射半徑，0 = 無
+  accuracy: number;       // 基礎命中率 0..1
+  optimalRange: number;   // 此距離內不衰減
+  falloffPerTile: number; // 超出 optimalRange 每格扣除的命中率
+}
+
+/**
+ * 武器**型號**：`data/weapons.json` 的一筆。不可變，全世界共用一份。
+ * `ammo` 與 `mode` 在型號上是「出廠預設值」。
+ */
+export interface WeaponType extends WeaponStats {
+  id: string;
+  ammo: number;
+  mode: FireMode;
+}
+
+/**
+ * 武器**實例**：世界上實際存在的那一把槍（v0.15 附錄 A）。
+ *
+ * 玩家持有、掉落、拾取、遺落的都是實例。**兩把同型號的槍是兩個不同的實例**，
+ * 可以分別追蹤 —— 這是日後詞條與跨玩家流通的最低前提：
+ * 若武器只是「型號引用」，那就沒有任何東西可以被標記或被賦予來歷。
+ *
+ * 數值欄位是「型號數值套用 `affixes` 之後」的結果，由 core/weapon.ts 的
+ * `resolveStats()` 這個唯一的套用點產生。**不要直接改 `affixes`** ——
+ * 要改請走 `withAffixes()`，它會重新套用一次。
+ */
+export interface WeaponInstance extends WeaponStats {
+  /** 這一把槍的唯一識別。來源必須是決定性的（狀態流水號），不得用時間或 UUID。 */
+  instanceId: string;
+  typeId: string;
+  /** 槍內剩餘子彈（背包裡的總量另外算，§1.1）。 */
+  ammo: number;
+  /** 目前選定的模式。**記在實例上**，換槍再換回來時維持（§8.9）。 */
+  mode: FireMode;
   /**
    * 可續行序列（`RESUMABLE`）的進度：已經完成幾個步驟（§5.6）。
    *
    * **進度存在武器上，不是存在單位上。** 退殼退了就是退了 ——
    * 收起來、換另一把、之後再換回來，那顆彈殼也不會自己跳回去。
-   * 這產生一個很好的戰術狀態：開始裝填、挨了一輪、退回掩體、接著裝完。
    */
   reloadProgress: number;
-  noiseRadius: number;    // 開火噪音半徑（格）
-  splash: number;         // 濺射半徑，0 = 無
-  // --- 命中相關：MVP 不生效，但欄位與管線必須存在，見 §8.1 ---
-  accuracy: number;       // 基礎命中率 0..1
-  optimalRange: number;   // 此距離內不衰減
-  falloffPerTile: number; // 超出 optimalRange 每格扣除的命中率
+  /** v0.15 一律為空。見 Affix。 */
+  affixes: Affix[];
+  /** v0.15 一律為空。見 Provenance。 */
+  provenance: Provenance[];
 }
+
+/** 舊名。程式碼一律用 WeaponInstance，這個別名只是為了讓引用逐步遷移。 */
+export type Weapon = WeaponInstance;
 
 export type AiState = 'IDLE' | 'ALERT' | 'SEARCH';
 

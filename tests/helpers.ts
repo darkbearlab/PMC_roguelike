@@ -1,10 +1,11 @@
-import type { Facing, GameState, Unit, Vec2 } from '../src/core/state';
+import type { Facing, GameState, Unit, Vec2, WeaponInstance } from '../src/core/state';
 import { activePlayerUnit, findUnit } from '../src/core/state';
 import type { RawMap } from '../src/core/map';
 import { createInitialState } from '../src/core/setup';
 import type { Command } from '../src/core/commands';
 import { applyCommand } from '../src/core/commands';
 import { isPlayerTurn } from '../src/core/scheduler';
+import { makeWeapon } from '../src/core/weapon';
 import { facingToward } from '../src/core/grid';
 import type { CombatEvent } from '../src/core/events';
 
@@ -162,12 +163,12 @@ import type { LootPile } from '../src/core/state';
 /** 這一堆裡的武器 id（依序）。 */
 export function weaponIds(pile: LootPile | null | undefined): string[] {
   if (!pile) return [];
-  return pile.items.filter((it) => it.kind === 'WEAPON').map((it) => it.weapon!.id);
+  return pile.items.filter((it) => it.kind === 'WEAPON').map((it) => it.weapon!.typeId);
 }
 
 /** 指定武器在這一堆裡的 index，找不到回傳 -1。 */
 export function weaponIndexIn(pile: LootPile, weaponId: string): number {
-  return pile.items.findIndex((it) => it.kind === 'WEAPON' && it.weapon!.id === weaponId);
+  return pile.items.findIndex((it) => it.kind === 'WEAPON' && it.weapon!.typeId === weaponId);
 }
 
 /** 這一堆裡某種物品的總數（彈藥用）。 */
@@ -188,4 +189,14 @@ export function unburden(s: GameState): GameState {
   const u = activePlayerUnit(s);
   if (u && u.backpack) u.backpack.items = [];
   return s;
+}
+
+/**
+ * 測試用：造一把獨立的槍實例（v0.15 附錄 A）。
+ * 正式流程一律從 `createInitialState` 的流水號取號；這裡用一個獨立計數器，
+ * 只是為了讓測試能隨手拿一把槍來擺弄。
+ */
+const probeSerial = { nextEntitySerial: 900001 };
+export function testWeapon(typeId: string): WeaponInstance {
+  return makeWeapon(probeSerial, typeId);
 }

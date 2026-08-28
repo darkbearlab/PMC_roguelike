@@ -3,8 +3,7 @@ import { isPlayerTurn } from '../src/core/scheduler';
 import { checkLegal } from '../src/core/commands';
 import { damageAfterArmor, resetToHitPolicy } from '../src/core/combat';
 import { commandTime } from '../src/core/commands';
-import { weaponById } from '../src/core/content';
-import { run, testState, player, unit, freezeCombat, thawCombat } from './helpers';
+import { freezeCombat, player, run, testState, testWeapon, thawCombat, unit } from './helpers';
 
 afterEach(() => resetToHitPolicy());
 
@@ -40,7 +39,7 @@ describe('§8.2 傷害與護甲', () => {
   it('重武器對裝甲型一發就打掉 100 點，90 血直接死', () => {
     let s = testState(ROOM, [{ archetype: 'HULK', pos: { x: 5, y: 1 } }]);
     s = run(s, { type: 'SWAP_WEAPON' });          // 換重武器 2 AP
-    expect(player(s).equipped!.id).toBe('rr4');
+    expect(player(s).equipped!.typeId).toBe('rr4');
     // 換重武器花 20 —— 等於走兩格的時間，敵人會先動
     expect(player(s).nextActAt).toBe(20);
     expect(isPlayerTurn(s)).toBe(false);                          // 換完就沒 AP 開火了
@@ -56,7 +55,7 @@ describe('§8.2 傷害與護甲', () => {
       { archetype: 'RUNNER', pos: { x: 9, y: 1 } },
     ]);
     const p = player(s);
-    p.equipped = weaponById('rr4');
+    p.equipped = testWeapon('rr4');
     p.stowed = null;
     p.pos = { x: 7, y: 1 };   // 與主目標相鄰 → 自己也在濺射半徑內
     p.hp = 100;
@@ -104,7 +103,7 @@ describe('§5 武器節奏（時間表達）', () => {
   it('重武器開一槍花 20 —— 是輕武器的兩倍，這就是它的代價', () => {
     const s = testState(ROOM, [{ archetype: 'HULK', pos: { x: 5, y: 1 } }]);
     const p = player(s);
-    p.equipped = weaponById('rr4');
+    p.equipped = testWeapon('rr4');
     const after = run(s, { type: 'FIRE', target: { x: 5, y: 1 } });
     expect(after.units[0].nextActAt).toBe(20);
   });

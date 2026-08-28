@@ -53,7 +53,7 @@ describe('§10 死亡、增援與屍體', () => {
     s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: next });
     const fresh = unit(s, next);
     expect(fresh.pos).toEqual({ x: 6, y: 1 });      // 最近的空投點，不是起點
-    expect(fresh.equipped!.id).toBe('ar9');
+    expect(fresh.equipped!.typeId).toBe('ar9');
     expect(fresh.equipped!.ammo).toBe(8);
     expect(fresh.stowed).toBeNull();                 // 重武器留在屍體上
     expect(s.deployed).toBe(2);
@@ -78,7 +78,7 @@ describe('§10 死亡、增援與屍體', () => {
     s = run(s, {
       type: 'PICKUP', lootId: corpse.id, itemIndex: rrIndex, slot: 'STOWED',
     });
-    expect(player(s).stowed!.id).toBe('rr4');
+    expect(player(s).stowed!.typeId).toBe('rr4');
     expect(player(s).nextActAt).toBeGreaterThan(before);   // 拾取花了時間
     expect(weaponIds(lootAt(s, { x: 6, y: 1 }))).toEqual(['ar9']);
   });
@@ -96,7 +96,7 @@ describe('§10 死亡、增援與屍體', () => {
     s = run(s, {
       type: 'PICKUP', lootId: corpse.id, itemIndex: rrIndex, slot: 'EQUIPPED',
     });
-    expect(player(s).equipped!.id).toBe('rr4');
+    expect(player(s).equipped!.typeId).toBe('rr4');
     expect(weaponIds(lootAt(s, { x: 6, y: 1 })).sort()).toEqual(['ar9', 'ar9']);
   });
 

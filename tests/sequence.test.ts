@@ -3,8 +3,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { describe as describeSequence, sequenceDef } from '../src/core/sequence';
-import { weaponById } from '../src/core/content';
-import { advanceToPlayer, run, testState, player, freezeCombat, thawCombat } from './helpers';
+import { advanceToPlayer, freezeCombat, player, run, testState, testWeapon, thawCombat } from './helpers';
 
 const OPEN = [
   '##############',
@@ -20,7 +19,7 @@ afterAll(() => thawCombat());
 const withRR4 = () => {
   const s = testState(OPEN);
   const p = player(s);
-  p.equipped = weaponById('rr4');
+  p.equipped = testWeapon('rr4');
   p.equipped.ammo = 0;
   p.stowed = null;
   return s;
@@ -31,7 +30,7 @@ describe('RR-4 裝填是兩步序列', () => {
     const def = sequenceDef('RR4_RELOAD')!;
     expect(def.steps).toHaveLength(2);
     expect(def.steps.reduce((a, b) => a + b.time, 0)).toBe(20);
-    expect(weaponById('rr4').reloadTime).toBe(20);
+    expect(testWeapon('rr4').reloadTime).toBe(20);
   });
 
   it('效果只在整套走完時發生', () => {
@@ -94,7 +93,7 @@ describe('RR-4 裝填是兩步序列', () => {
     // 相鄰的衝鋒兵，士兵血量剛好一擊致命
     let s = testState(OPEN, [{ archetype: 'RUNNER', pos: { x: 2, y: 1 } }]);
     const p = player(s);
-    p.equipped = weaponById('rr4');
+    p.equipped = testWeapon('rr4');
     p.equipped.ammo = 0;
     p.stowed = null;
     p.hp = 20;
@@ -114,7 +113,7 @@ describe('RR-4 裝填是兩步序列', () => {
     expect(s.units.some((u) => u.pendingSequence !== null)).toBe(false);
     // 裝填沒有完成，那把 RR-4 是空的躺在屍體上
     expect(s.loot[0].items.some(
-      (it) => it.kind === 'WEAPON' && it.weapon!.id === 'rr4' && it.weapon!.ammo === 0,
+      (it) => it.kind === 'WEAPON' && it.weapon!.typeId === 'rr4' && it.weapon!.ammo === 0,
     )).toBe(true);
   });
 
