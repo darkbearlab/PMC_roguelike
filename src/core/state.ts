@@ -29,6 +29,17 @@ export type TileType =
  */
 export type Calibre = '5.56' | '7.62' | '12ga' | '9mm' | '84mm';
 
+/**
+ * 機構型式（v0.15 附錄 B §2.3）。**本版不參與任何判斷。**
+ *
+ * 存在的目的是日後的彈藥相容性規則：彈藥能不能用**不只看口徑，還要看機構**。
+ * 破爛的中折式沒有複雜機構可以被打壞，所以能塞任何東西進去；
+ * 泵動槍的抽殼機構會被鋼索切段毀掉。
+ *
+ * **這讓「粗糙」成為一種能力，而不只是比較爛** —— 那是土製武器存在的意義。
+ */
+export type WeaponAction = 'BREAK' | 'PUMP' | 'BOLT' | 'SEMI' | 'AUTO' | 'BREECH';
+
 /** 射擊模式（§2）。時間花費相同，差別只在耗彈與命中。 */
 export type FireMode = 'SINGLE' | 'BURST' | 'VOLLEY' | 'AUTO';
 
@@ -59,8 +70,12 @@ export interface Item {
   /** 每一個的重量。整堆的重量 = weight × qty。 */
   weight: number;
   qty: number;
-  /** kind 為 'AMMO' 時，這堆是哪一種口徑。 */
-  calibre?: Calibre;
+  /**
+   * kind 為 'AMMO' 時，這堆是哪一種**彈藥型別**（v0.15 附錄 B）。
+   * 型別引用口徑，而不是拿口徑當彈藥 —— 同一種口徑日後會有多種彈種。
+   * 對彈藥而言 `defId === ammoTypeId`。
+   */
+  ammoTypeId?: string;
   /** kind 為 'VALUABLE' 時的價值。局外層還不存在，本版只列在結算畫面上。 */
   value?: number;
   /** kind 為 'WEAPON' 時的完整武器狀態（含槍內剩餘子彈與射擊模式）。 */
@@ -114,8 +129,10 @@ export interface WeaponStats {
   penetration: number;
   range: number;          // 最大射程（格）
   magazine: number;       // 彈匣容量
-  /** 這把槍吃哪一種口徑（v0.15 §19.1）。 */
+  /** 這把槍吃哪一種口徑（v0.15 §19.1）。實際能不能用還要看彈藥型別與機構。 */
   calibre: Calibre;
+  /** 機構型式（附錄 B §2.3）。v0.15 不參與任何判斷。 */
+  action: WeaponAction;
   /** 計入負重（v0.15）。手持與收納中的武器不佔背包欄位，但仍然要背。 */
   weight: number;
   /** 可用的射擊模式（§8.9）。每把武器自己列出，程式不得寫死。 */

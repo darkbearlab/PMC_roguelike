@@ -133,11 +133,11 @@
       "label": "棧板上的補給",
       "items": [
         {
-          "defId": "AMMO_556",
+          "defId": "standard_5.56",
           "qty": 10
         },
         {
-          "defId": "AMMO_12GA",
+          "defId": "buckshot_12ga",
           "qty": 12
         }
       ]
@@ -154,11 +154,11 @@
           "qty": 2
         },
         {
-          "defId": "AMMO_556",
+          "defId": "standard_5.56",
           "qty": 6
         },
         {
-          "defId": "AMMO_9MM",
+          "defId": "standard_9mm",
           "qty": 20
         }
       ]
@@ -179,7 +179,7 @@
           "qty": 1
         },
         {
-          "defId": "AMMO_762",
+          "defId": "standard_7.62",
           "qty": 8
         }
       ]

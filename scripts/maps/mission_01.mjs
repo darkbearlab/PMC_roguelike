@@ -85,10 +85,10 @@ S_(20, 17, 'L');  // G 南側翼，離主路線兩三步
 S_(30, 19, 'L');  // H 終端室外，守衛的背後
 
 const caches = [
-  { pos: { x: 9, y: 4 },   label: '彈藥箱', items: [{ defId: 'AMMO_556', qty: 12 }, { defId: 'AMMO_9MM', qty: 15 }] },
-  { pos: { x: 27, y: 4 },  label: '器材櫃', items: [{ defId: 'OPTICS', qty: 2 }, { defId: 'AMMO_556', qty: 8 }, { defId: 'AMMO_762', qty: 6 }] },
+  { pos: { x: 9, y: 4 },   label: '彈藥箱', items: [{ defId: 'standard_5.56', qty: 12 }, { defId: 'standard_9mm', qty: 15 }] },
+  { pos: { x: 27, y: 4 },  label: '器材櫃', items: [{ defId: 'OPTICS', qty: 2 }, { defId: 'standard_5.56', qty: 8 }, { defId: 'standard_7.62', qty: 6 }] },
   { pos: { x: 20, y: 17 }, label: '廢料堆', items: [{ defId: 'SCRAP', qty: 3 }] },
-  { pos: { x: 30, y: 19 }, label: '軍械箱', items: [{ defId: 'AMMO_84MM', qty: 2 }, { defId: 'AMMO_12GA', qty: 8 }, { defId: 'CORE', qty: 1 }] },
+  { pos: { x: 30, y: 19 }, label: '軍械箱', items: [{ defId: 'heat_84mm', qty: 2 }, { defId: 'buckshot_12ga', qty: 8 }, { defId: 'CORE', qty: 1 }] },
 ];
 
 // v0.8：facing 是初始面向（§13.2）。敵人一律只看得見面向的前方半平面，

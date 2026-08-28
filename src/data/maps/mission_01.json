@@ -133,11 +133,11 @@
       "label": "彈藥箱",
       "items": [
         {
-          "defId": "AMMO_556",
+          "defId": "standard_5.56",
           "qty": 12
         },
         {
-          "defId": "AMMO_9MM",
+          "defId": "standard_9mm",
           "qty": 15
         }
       ]
@@ -154,11 +154,11 @@
           "qty": 2
         },
         {
-          "defId": "AMMO_556",
+          "defId": "standard_5.56",
           "qty": 8
         },
         {
-          "defId": "AMMO_762",
+          "defId": "standard_7.62",
           "qty": 6
         }
       ]
@@ -184,11 +184,11 @@
       "label": "軍械箱",
       "items": [
         {
-          "defId": "AMMO_84MM",
+          "defId": "heat_84mm",
           "qty": 2
         },
         {
-          "defId": "AMMO_12GA",
+          "defId": "buckshot_12ga",
           "qty": 8
         },
         {

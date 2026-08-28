@@ -107,7 +107,7 @@ describe('§4.2 敵人死亡留下可搜刮的屍體', () => {
   it('掉落表照序抽值，必掉的一定在', () => {
     const s = killRunner();
     const pile = lootAt(s, { x: 5, y: 1 })!;
-    expect(pile.items.some((it) => it.defId === 'AMMO_556')).toBe(true);
+    expect(pile.items.some((it) => it.defId === 'standard_5.56')).toBe(true);
   });
 });
 
@@ -122,8 +122,8 @@ describe('§3.3 / §4.4 己方屍體帶著全部家當與一份 DNA', () => {
     const s = die();
     const pile = s.loot.find((c) => c.kind === 'PLAYER_BODY')!;
     expect(weaponIds(pile).sort()).toEqual(['ar9', 'rr4']);
-    expect(pile.items.some((it) => it.defId === 'AMMO_556')).toBe(true);
-    expect(pile.items.some((it) => it.defId === 'AMMO_84MM')).toBe(true);
+    expect(pile.items.some((it) => it.defId === 'standard_5.56')).toBe(true);
+    expect(pile.items.some((it) => it.defId === 'heat_84mm')).toBe(true);
     expect(pile.items.filter((it) => it.kind === 'DNA')).toHaveLength(1);
   });
 });
@@ -134,7 +134,7 @@ describe('§4.3 搜刮操作', () => {
     s.loot.push({
       id: 'LX', kind: 'CACHE', pos: { x: 2, y: 1 }, label: '測試箱',
       items: [
-        { id: 'A', kind: 'AMMO', defId: 'AMMO_556', name: '5.56 步槍彈', weight: 0.024, qty: 8, calibre: '5.56' },
+        { id: 'A', kind: 'AMMO', defId: 'standard_5.56', name: '5.56 步槍彈', weight: 0.024, qty: 8, ammoTypeId: 'standard_5.56' },
         { id: 'B', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 1, value: 5 },
       ],
     });
@@ -143,9 +143,9 @@ describe('§4.3 搜刮操作', () => {
 
   it('拿一項花 10 時間，東西進背包、離開那一堆', () => {
     let s = withCache();
-    const before = countAmmo(bagOf(s), '5.56');
+    const before = countAmmo(bagOf(s), 'standard_5.56');
     s = run(s, { type: 'PICKUP', lootId: 'LX', itemIndex: 0 });
-    expect(countAmmo(bagOf(s), '5.56')).toBe(before + 8);
+    expect(countAmmo(bagOf(s), 'standard_5.56')).toBe(before + 8);
     expect(lootAt(s, { x: 2, y: 1 })!.items).toHaveLength(1);
     expect(player(s).nextActAt).toBe(RULES.loot.takeTime);
   });
@@ -195,7 +195,7 @@ describe('§4.3 搜刮操作', () => {
     // 動力核心（6）拿不動，5.56（每發 0.024）八發只有 0.192，全部拿得走
     const left = lootAt(s, { x: 2, y: 1 })!;
     expect(left.items.some((it) => it.defId === 'CORE')).toBe(true);
-    expect(left.items.some((it) => it.defId === 'AMMO_556')).toBe(false);
+    expect(left.items.some((it) => it.defId === 'standard_5.56')).toBe(false);
   });
 });
 

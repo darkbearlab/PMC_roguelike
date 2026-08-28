@@ -8,17 +8,20 @@
  *
  * 配裝的單位是**一對**，不是單一武器（§6）：玩家在選的是組合。
  */
-import type { Calibre, Weapon } from './state';
-import { ITEMS, RULES } from './content';
+import type { Weapon } from './state';
+import { AMMO_TYPES, ITEMS, RULES, ammoTypesForCalibre } from './content';
 import { makeWeapon, weaponType } from './weapon';
 import { addItem, emptyBackpack, makeItem } from './inventory';
 
 export interface Loadout {
-  /** 武器 id；null = 空手。兩欄都可以留空。 */
+  /** 武器型號 id；null = 空手。兩欄都可以留空。 */
   primary: string | null;
   stowed: string | null;
-  /** 各口徑要帶幾發。 */
-  ammo: Partial<Record<Calibre, number>>;
+  /**
+   * **彈藥型別 id → 發數**（v0.15 附錄 B §2.2）。
+   * 鍵不是口徑 —— 同一種口徑日後會有多種彈種，那時這裡不必再改一次。
+   */
+  ammo: Record<string, number>;
   /** 消耗品 defId → 數量。 */
   consumables: Record<string, number>;
 }
@@ -55,9 +58,16 @@ export function cloneLoadout(l: Loadout): Loadout {
   };
 }
 
-/** 可以選的口徑就是 `calibres` 裡有的那些 —— 新增口徑不用改程式。 */
-export function allCalibres(): Calibre[] {
-  return Object.keys(RULES.calibres) as Calibre[];
+/**
+ * 可以選的彈藥就是 `ammo.json` 裡有的那些 —— 新增彈種不用改程式。
+ * 依口徑在 `calibres` 中的順序排，同口徑的彈種排在一起。
+ */
+export function allAmmoTypes(): string[] {
+  const order = Object.keys(RULES.calibres);
+  return Object.keys(AMMO_TYPES)
+    .map((id, i) => ({ id, k: order.indexOf(AMMO_TYPES[id].calibreId) * 1000 + i }))
+    .sort((a, b) => a.k - b.k)
+    .map((x) => x.id);
 }
 
 /** 可以選的消耗品就是 items.json 裡有 `use` 的東西。 */
@@ -65,22 +75,30 @@ export function selectableConsumables(): string[] {
   return Object.entries(ITEMS).filter(([, def]) => !!def.use).map(([id]) => id);
 }
 
-function ammoItemId(c: Calibre): string {
-  return RULES.calibres[c].itemId;
+/**
+ * 介面上這一列叫什麼。
+ *
+ * 一個口徑只有一種彈種時，顯示口徑名（與 v0.14 以前完全一樣）；
+ * 有多種時才把彈種名接上去 —— **玩家不必為了還不存在的東西多讀一行字。**
+ */
+export function ammoLabel(ammoTypeId: string): string {
+  const a = AMMO_TYPES[ammoTypeId];
+  const cal = RULES.calibres[a.calibreId].name;
+  return ammoTypesForCalibre(a.calibreId).length > 1 ? cal + '　' + a.name : cal;
 }
 
-function ammoWeight(c: Calibre, qty: number): number {
-  const def = ITEMS[ammoItemId(c)];
-  return (def ? def.weight : RULES.calibres[c].weightPerRound) * qty;
+/** 彈藥型別 id 同時就是它在背包裡的 defId。 */
+function ammoWeight(ammoTypeId: string, qty: number): number {
+  return AMMO_TYPES[ammoTypeId].weightPerRound * qty;
 }
 
 export function loadoutWeight(l: Loadout): number {
   let w = 0;
   if (l.primary) w += weaponType(l.primary).weight;
   if (l.stowed) w += weaponType(l.stowed).weight;
-  for (const c of allCalibres()) {
-    const n = l.ammo[c] ?? 0;
-    if (n > 0) w += ammoWeight(c, n);
+  for (const id of allAmmoTypes()) {
+    const n = l.ammo[id] ?? 0;
+    if (n > 0) w += ammoWeight(id, n);
   }
   for (const [id, n] of Object.entries(l.consumables)) {
     const def = ITEMS[id];
@@ -107,7 +125,10 @@ export function checkLoadout(l: Loadout): LoadoutCheck {
     if (!id) continue;
     const w = weaponType(id);
     if (w.magazine >= 99) continue;
-    if ((l.ammo[w.calibre] ?? 0) <= 0) {
+    // 餵得到的型別加起來都是 0 才算「沒帶彈」—— 日後同口徑有多種彈種時這一句不必改
+    const fed = ammoTypesForCalibre(w.calibre)
+      .reduce((a, t) => a + (l.ammo[t.id] ?? 0), 0);
+    if (fed <= 0) {
       warnings.push(w.name + ' 沒有備用彈藥（' + RULES.calibres[w.calibre].name
         + '）—— 打完槍內的 ' + w.magazine + ' 發就沒有了');
     }
@@ -131,9 +152,9 @@ export function equipFromLoadout(
   l: Loadout,
 ): { equipped: Weapon | null; stowed: Weapon | null; backpack: ReturnType<typeof emptyBackpack> } {
   const bag = emptyBackpack();
-  for (const c of allCalibres()) {
-    const n = l.ammo[c] ?? 0;
-    if (n > 0) addItem(bag, makeItem(serial as never, ammoItemId(c), n));
+  for (const id of allAmmoTypes()) {
+    const n = l.ammo[id] ?? 0;
+    if (n > 0) addItem(bag, makeItem(serial as never, id, n));
   }
   for (const [id, n] of Object.entries(l.consumables)) {
     if (n > 0 && ITEMS[id]) addItem(bag, makeItem(serial as never, id, n));
@@ -150,9 +171,9 @@ export function loadoutBreakdown(l: Loadout): { label: string; weight: number }[
   const out: { label: string; weight: number }[] = [];
   if (l.primary) { const w = weaponType(l.primary); out.push({ label: w.name, weight: w.weight }); }
   if (l.stowed) { const w = weaponType(l.stowed); out.push({ label: w.name, weight: w.weight }); }
-  for (const c of allCalibres()) {
-    const n = l.ammo[c] ?? 0;
-    if (n > 0) out.push({ label: RULES.calibres[c].name + ' ×' + n, weight: ammoWeight(c, n) });
+  for (const id of allAmmoTypes()) {
+    const n = l.ammo[id] ?? 0;
+    if (n > 0) out.push({ label: ammoLabel(id) + ' ×' + n, weight: ammoWeight(id, n) });
   }
   for (const [id, n] of Object.entries(l.consumables)) {
     const def = ITEMS[id];

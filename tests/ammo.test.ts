@@ -23,32 +23,32 @@ describe('§1.1 只有兩層彈藥：槍內與背包', () => {
   it('初始背包帶 24 發步槍彈與 2 發火箭彈（§1.2）', () => {
     const s = testState(OPEN);
     const bag = player(s).backpack!;
-    expect(countAmmo(bag, '5.56')).toBe(24);
-    expect(countAmmo(bag, '84mm')).toBe(2);
+    expect(countAmmo(bag, 'standard_5.56')).toBe(24);
+    expect(countAmmo(bag, 'heat_84mm')).toBe(2);
   });
 
   it('裝填從背包扣除差額', () => {
     let s = testState(OPEN);
     const w = player(s).equipped!;
     w.ammo = 3;
-    const before = countAmmo(player(s).backpack, '5.56');
+    const before = countAmmo(player(s).backpack, 'standard_5.56');
     s = run(s, { type: 'RELOAD' });
     expect(player(s).equipped!.ammo).toBe(w.magazine);
-    expect(countAmmo(player(s).backpack, '5.56')).toBe(before - (w.magazine - 3));
+    expect(countAmmo(player(s).backpack, 'standard_5.56')).toBe(before - (w.magazine - 3));
   });
 
   it('背包不足時只補部分', () => {
     let s = testState(OPEN);
     const p = player(s);
     p.equipped!.ammo = 0;
-    p.backpack!.items = p.backpack!.items.filter((it) => it.calibre !== '5.56');
+    p.backpack!.items = p.backpack!.items.filter((it) => it.ammoTypeId !== 'standard_5.56');
     p.backpack!.items.push({
-      id: 'X', kind: 'AMMO', defId: 'AMMO_556', name: '5.56 步槍彈',
-      weight: 0.024, qty: 3, calibre: '5.56',
+      id: 'X', kind: 'AMMO', defId: 'standard_5.56', name: '5.56 步槍彈',
+      weight: 0.024, qty: 3, ammoTypeId: 'standard_5.56',
     });
     s = run(s, { type: 'RELOAD' });
     expect(player(s).equipped!.ammo).toBe(3);
-    expect(countAmmo(player(s).backpack, '5.56')).toBe(0);
+    expect(countAmmo(player(s).backpack, 'standard_5.56')).toBe(0);
   });
 
   it('背包彈藥耗盡後無法裝填', () => {

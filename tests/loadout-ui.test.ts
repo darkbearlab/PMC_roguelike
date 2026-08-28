@@ -61,21 +61,21 @@ describe('配裝畫面（§5）', () => {
   it('彈藥以增量調整，不是逐發（§5.6）', () => {
     let got: Loadout | null = null;
     showLoadout(null, defaultLoadout(), (l) => { got = l; }, null);
-    const inc = RULES.loadout.ammoStep['5.56'];
+    const inc = RULES.loadout.ammoStep['standard_5.56'];
     expect(inc).toBeGreaterThan(1);
-    step('ammo', '5.56', 1);
+    step('ammo', 'standard_5.56', 1);
     q<HTMLButtonElement>('button[data-go]')!.click();
-    expect(got!.ammo['5.56']).toBe(24 + inc);
+    expect(got!.ammo['standard_5.56']).toBe(24 + inc);
   });
 
   it('數量不會被減成負的', () => {
     let got: Loadout | null = null;
     showLoadout(null, { primary: 'p9', stowed: null, ammo: {}, consumables: {} },
       (l) => { got = l; }, null);
-    step('ammo', '9mm', -1);
+    step('ammo', 'standard_9mm', -1);
     step('item', 'SEALANT', -1);
     q<HTMLButtonElement>('button[data-go]')!.click();
-    expect(got!.ammo['9mm']).toBe(0);
+    expect(got!.ammo['standard_9mm']).toBe(0);
     expect(got!.consumables.SEALANT).toBe(0);
   });
 
@@ -88,7 +88,7 @@ describe('配裝畫面（§5）', () => {
 
   it('超重則阻擋出擊（§5.4）', () => {
     showLoadout(null, {
-      primary: 'rr4', stowed: 'lmg5', ammo: { '84mm': 12 }, consumables: {},
+      primary: 'rr4', stowed: 'lmg5', ammo: { 'heat_84mm': 12 }, consumables: {},
     }, () => {}, null);
     expect(q<HTMLButtonElement>('button[data-go]')!.disabled).toBe(true);
     expect(txt()).toContain('超過攜行上限');
@@ -98,10 +98,10 @@ describe('配裝畫面（§5）', () => {
     let got: Loadout | null = null;
     showLoadout(null, defaultLoadout(), (l) => { got = l; }, null);
     pick('primary', 'sg12s');
-    step('ammo', '12ga', 1);
+    step('ammo', 'buckshot_12ga', 1);
     q<HTMLButtonElement>('button[data-go]')!.click();
     expect(got!.primary).toBe('sg12s');
-    expect(got!.ammo['12ga']).toBe(RULES.loadout.ammoStep['12ga']);
+    expect(got!.ammo['buckshot_12ga']).toBe(RULES.loadout.ammoStep['buckshot_12ga']);
   });
 
   it('「回到預設配裝」真的回到預設', () => {

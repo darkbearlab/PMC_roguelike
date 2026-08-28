@@ -20,8 +20,8 @@ import { stepEnemy } from './ai';
 import { RULES, archetype, fireModeOrder } from './content';
 import { nextFloat } from './rng';
 import {
-  addItem, affordableQty, canCarry, carriedWeight, countAmmo, effectiveMoveTime, makeItem,
-  maxWeight, takeAmmo, weaponItem,
+  addItem, affordableQty, canCarry, carriedWeight, countAmmoFor, effectiveMoveTime, makeItem,
+  maxWeight, takeAmmoFor, weaponItem,
 } from './inventory';
 import { makeReinforcementSoldier } from './setup';
 import { activeUnit, isMissionOver, isPlayerTurn, spend, syncClock } from './scheduler';
@@ -202,7 +202,7 @@ function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
       // 已經退殼、還沒裝完的槍，這一步是「接著裝」而不是「彈匣已滿」
       if (w.ammo >= w.magazine && w.reloadProgress === 0) return no('彈匣已滿');
       // v0.9：彈藥是背包裡的資源（§1.1）。背包空了就裝不了。
-      if (w.magazine < 99 && countAmmo(u.backpack, w.calibre) <= 0) return no('沒有備用彈藥');
+      if (w.magazine < 99 && countAmmoFor(u.backpack, w) <= 0) return no('沒有備用彈藥');
       return OK;
     }
     case 'CYCLE_FIRE_MODE': {
@@ -530,7 +530,7 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
 export function refillFromBackpack(u: Unit, w: Weapon, limit?: number): number {
   if (w.magazine >= 99) { w.ammo = w.magazine; return 0; }   // 敵人的攻擊不吃彈藥
   const need = Math.min(w.magazine - w.ammo, limit ?? Number.POSITIVE_INFINITY);
-  const got = takeAmmo(u.backpack, w.calibre, need);
+  const got = takeAmmoFor(u.backpack, w, need);
   w.ammo += got;
   return got;
 }

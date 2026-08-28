@@ -128,11 +128,12 @@ function runOne(seed: number, map?: RawMap): {
   }
   const foes = s.units.filter((u) => u.faction === 'ENEMY').length;
   // 耗彈量：投入的總攜行量減去還在身上的（背包 + 槍內）
-  const start = RULES.backpack.startingItems.find((i) => i.defId === 'AMMO_556');
+  const start = RULES.backpack.startingItems.find((i) => i.defId === 'standard_5.56');
   const issued = (start ? start.qty : 0) * s.deployed;
   const me = s.units.find((u) => u.faction === 'PLAYER');
   const left = me
-    ? countAmmo(me.backpack, '5.56') + (me.equipped && me.equipped.calibre === '5.56' ? me.equipped.ammo : 0)
+    ? countAmmo(me.backpack, 'standard_5.56')
+      + (me.equipped && me.equipped.calibre === '5.56' ? me.equipped.ammo : 0)
     : 0;
   return {
     seed,

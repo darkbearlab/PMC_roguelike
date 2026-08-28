@@ -6,6 +6,7 @@ import rulesJson from '../data/rules.json';
 import weaponsJson from '../data/weapons.json';
 import actorsJson from '../data/actors.json';
 import itemsJson from '../data/items.json';
+import ammoJson from '../data/ammo.json';
 import calloutsJson from '../data/callouts.json';
 import contractsJson from '../data/contracts.json';
 import contractRulesJson from '../data/contract-rules.json';
@@ -14,7 +15,7 @@ import mission02Json from '../data/maps/mission_02.json';
 import mission03Json from '../data/maps/mission_03.json';
 import mission04Json from '../data/maps/mission_04.json';
 
-import type { Calibre, FireMode, WeaponClass, WeaponType } from './state';
+import type { Calibre, FireMode, WeaponAction, WeaponClass, WeaponType } from './state';
 import type { MapStats, RawMap } from './map';
 import type { ContractBrief } from './contracts';
 
@@ -46,7 +47,12 @@ export interface Rules {
    * §1 口徑（v0.15）。口徑是獨立的資料實體，武器以 `calibre` 引用它 ——
    * 新增武器只要指定口徑，就自動與既有彈藥相容。
    */
-  calibres: Record<Calibre, { name: string; weightPerRound: number; itemId: string }>;
+  calibres: Record<Calibre, {
+    name: string;
+    weightPerRound: number;
+    /** 本地生產難度（附錄 B §1.3）。設定用，v0.15 不參與任何判斷。 */
+    localProduction: 'EASY' | 'HARD' | 'NONE';
+  }>;
   /** §2 射擊模式。時間花費相同，差別在耗彈與命中。 */
   fireModes: Record<FireMode, { label: string; full: string; shots: number; accuracy: number }>
     & { order: FireMode[] };
@@ -55,10 +61,11 @@ export interface Rules {
     default: {
       primary: string | null;
       stowed: string | null;
-      ammo: Partial<Record<Calibre, number>>;
+      ammo: Record<string, number>;
       consumables: Record<string, number>;
     };
-    ammoStep: Record<Calibre, number>;
+    /** 鍵是**彈藥型別 id**，不是口徑（附錄 B §2.2）。 */
+    ammoStep: Record<string, number>;
     ammoMax: number;
     consumableMax: number;
   };
@@ -128,12 +135,29 @@ export interface ActorArchetype {
   };
 }
 
+/**
+ * 一種彈藥（v0.15 附錄 B §2）。修正欄位是預留的，v0.15 一律為預設值。
+ */
+export interface AmmoType {
+  name: string;
+  calibreId: Calibre;
+  weightPerRound: number;
+  /** 傷害倍率。v0.15 一律 1.0。 */
+  damageModifier: number;
+  /** 衰減倍率。v0.15 一律 1.0。 */
+  falloffModifier: number;
+  /** 濺射半徑。v0.15 一律 0。 */
+  splashRadius: number;
+  /** 只有這些機構型式打得出來；空陣列 = 不限制。v0.15 一律為空。 */
+  allowedActions: WeaponAction[];
+}
+
 /** data/items.json 的一筆定義。 */
 export interface ItemDef {
   name: string;
   kind: string;
   weight: number;
-  calibre?: string;
+  ammoTypeId?: string;
   value?: number;
   /**
    * 消耗品的使用方式（§4）。資料驅動：新增品項只要改 items.json。
@@ -182,11 +206,6 @@ export const MISSION_01: RawMap = MAPS[0];
 export function mapById(id: string): RawMap | null {
   return MAPS.find((m) => m.id === id) ?? null;
 }
-export const ITEMS: Record<string, ItemDef> = Object.fromEntries(
-  Object.entries(itemsJson as Record<string, unknown>)
-    .filter(([k]) => !k.startsWith('_')),
-) as Record<string, ItemDef>;
-
 /** 敵人口令的文字（§9.5）。理由碼 → 文字，全部在資料檔。 */
 export const CALLOUTS: Record<string, string> = Object.fromEntries(
   Object.entries(calloutsJson as Record<string, string>).filter(([k]) => !k.startsWith('_')),
@@ -201,6 +220,51 @@ export const CONTRACTS: Record<string, ContractBrief> = Object.fromEntries(
 ) as Record<string, ContractBrief>;
 
 export const CONTRACT_RULES: ContractRules = contractRulesJson as unknown as ContractRules;
+
+/**
+ * 彈藥型別（v0.15 附錄 B §2）。**彈藥的識別單位是型別，型別引用口徑。**
+ *
+ * 未來同一種口徑會有多種彈種（12 號徑的鋼珠／獨頭／鋼索切段、5.56 的穿甲彈…），
+ * 所以背包、配裝、裝填、搜刮、屍體、結算清單一律以型別 id 為鍵。
+ * 現在多一層間接幾乎零成本；等那些全部長好之後再改，會動到每一處。
+ */
+export const AMMO_TYPES: Record<string, AmmoType> = Object.fromEntries(
+  Object.entries(ammoJson as Record<string, unknown>).filter(([k]) => !k.startsWith('_')),
+) as Record<string, AmmoType>;
+
+export function ammoType(id: string): AmmoType {
+  const a = AMMO_TYPES[id];
+  if (!a) throw new Error('未知的彈藥型別 ' + id);
+  return a;
+}
+
+/** 這個口徑目前有哪些彈藥型別。v0.15 每個口徑剛好一種。 */
+export function ammoTypesForCalibre(c: Calibre): { id: string; def: AmmoType }[] {
+  return Object.entries(AMMO_TYPES)
+    .filter(([, a]) => a.calibreId === c)
+    .map(([id, def]) => ({ id, def }));
+}
+
+/**
+ * 背包裡看得到的東西。
+ *
+ * 彈藥不寫在 items.json，而是由**彈藥型別**（ammo.json）合成進來 ——
+ * 型別 id 同時就是它的 defId，所以搜刮表、地圖補給箱、初始配裝
+ * 一律引用型別 id，`makeItem()` 不必知道彈藥是特別的。
+ */
+export const ITEMS: Record<string, ItemDef> = {
+  ...Object.fromEntries(
+    Object.entries(itemsJson as Record<string, unknown>).filter(([k]) => !k.startsWith('_')),
+  ) as Record<string, ItemDef>,
+  ...Object.fromEntries(
+    Object.entries(AMMO_TYPES).map(([id, a]) => [id, {
+      name: a.name,
+      kind: 'AMMO',
+      weight: a.weightPerRound,
+      ammoTypeId: id,
+    } as ItemDef]),
+  ),
+};
 
 /** 射擊模式的循環順序（§2.5：點一下循環切換）。 */
 export function fireModeOrder(): FireMode[] {

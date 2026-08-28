@@ -7,8 +7,8 @@
  * 背包是「你死掉會留在戰場上的東西」（§3.3），所以它同時是負重系統
  * 與死亡懲罰的載體：背得越多走得越慢，走得越慢越容易死，死了全部留在原地。
  */
-import type { Backpack, Calibre, GameState, Item, ItemKind, Unit, Weapon } from './state';
-import { ITEMS, RULES } from './content';
+import type { Backpack, GameState, Item, ItemKind, Unit, WeaponInstance } from './state';
+import { ITEMS, RULES, ammoTypesForCalibre } from './content';
 
 export function emptyBackpack(): Backpack {
   return { items: [] };
@@ -91,13 +91,13 @@ export function makeItem(state: GameState, defId: string, qty = 1): Item {
     weight: def.weight,
     qty,
   };
-  if (def.calibre) it.calibre = def.calibre as Calibre;
+  if (def.ammoTypeId) it.ammoTypeId = def.ammoTypeId;
   if (def.value !== undefined) it.value = def.value;
   return it;
 }
 
 /** 把一把槍包成背包物品。武器的重量寫在 weapons.json。 */
-export function weaponItem(state: GameState, w: Weapon): Item {
+export function weaponItem(state: GameState, w: WeaponInstance): Item {
   return {
     id: 'I' + state.nextEntitySerial++,
     kind: 'WEAPON',
@@ -144,27 +144,55 @@ export function affordableQty(u: Unit | null, item: Item): number {
 // 彈藥
 // ============================================================================
 
-export function countAmmo(bag: Backpack | null, calibre: Calibre): number {
+/** 背包裡某一種**彈藥型別**有幾發（v0.15 附錄 B：型別才是識別單位）。 */
+export function countAmmo(bag: Backpack | null, ammoTypeId: string): number {
   if (!bag) return 0;
   return bag.items
-    .filter((it) => it.kind === 'AMMO' && it.calibre === calibre)
+    .filter((it) => it.kind === 'AMMO' && it.ammoTypeId === ammoTypeId)
     .reduce((a, it) => a + it.qty, 0);
+}
+
+/**
+ * 這把槍餵得到的彈藥型別。v0.15 就是「同口徑的全部」——
+ * 日後還要看機構型式（`AmmoType.allowedActions`），所以判斷集中在這裡一處。
+ */
+export function feedableTypes(w: WeaponInstance): string[] {
+  return ammoTypesForCalibre(w.calibre).map((t) => t.id);
+}
+
+/** 這把槍在背包裡總共還有幾發可用。 */
+export function countAmmoFor(bag: Backpack | null, w: WeaponInstance): number {
+  return feedableTypes(w).reduce((a, id) => a + countAmmo(bag, id), 0);
 }
 
 /**
  * 從背包扣彈藥，回傳**實際扣掉的數量**。
  * 背包不足時就扣多少算多少（§1.1：裝填時補多少算多少）。
  */
-export function takeAmmo(bag: Backpack | null, calibre: Calibre, want: number): number {
+export function takeAmmo(bag: Backpack | null, ammoTypeId: string, want: number): number {
   if (!bag || want <= 0) return 0;
   let left = want;
   for (const it of bag.items) {
     if (left <= 0) break;
-    if (it.kind !== 'AMMO' || it.calibre !== calibre) continue;
+    if (it.kind !== 'AMMO' || it.ammoTypeId !== ammoTypeId) continue;
     const n = Math.min(it.qty, left);
     it.qty -= n;
     left -= n;
   }
   bag.items = bag.items.filter((it) => it.qty > 0);
   return want - left;
+}
+
+/**
+ * 從背包扣這把槍餵得到的彈藥，回傳實際扣掉的數量。
+ * v0.15 只有一種型別餵得到，所以順序不影響結果；
+ * 日後有多種彈種時，**「裝哪一種」會是玩家的決定**，那時這裡要吃一個型別參數。
+ */
+export function takeAmmoFor(bag: Backpack | null, w: WeaponInstance, want: number): number {
+  let got = 0;
+  for (const id of feedableTypes(w)) {
+    if (got >= want) break;
+    got += takeAmmo(bag, id, want - got);
+  }
+  return got;
 }

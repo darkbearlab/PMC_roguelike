@@ -9,12 +9,12 @@
  * 玩家調整配裝的時候，必須同時看得見他是為了什麼在調。
  */
 import type { Contract } from '../core/contracts';
-import type { Calibre } from '../core/state';
 import type { Loadout } from '../core/loadout';
 import {
-  allCalibres, checkLoadout, cloneLoadout, defaultLoadout, loadoutBreakdown, selectableConsumables,
+  allAmmoTypes, ammoLabel, checkLoadout, cloneLoadout, defaultLoadout,
+  loadoutBreakdown, selectableConsumables,
 } from '../core/loadout';
-import { ITEMS, RULES, WEAPONS } from '../core/content';
+import { AMMO_TYPES, ITEMS, RULES, WEAPONS, ammoTypesForCalibre } from '../core/content';
 import { fmtWeight } from './hud';
 import { $, esc, show } from './dom';
 
@@ -57,12 +57,13 @@ function stepper(kind: 'ammo' | 'item', key: string, label: string, qty: number,
     + '</div>';
 }
 
-/** 玩家目前帶的兩把槍分別吃什麼口徑 —— 那幾種排在前面，而且標出來。 */
-function neededCalibres(l: Loadout): Set<Calibre> {
-  const out = new Set<Calibre>();
+/** 玩家目前帶的兩把槍餵得到哪些彈藥型別 —— 那幾種排在前面，而且標出來。 */
+function neededAmmo(l: Loadout): Set<string> {
+  const out = new Set<string>();
   for (const id of [l.primary, l.stowed]) {
     const w = id ? WEAPONS.find((x) => x.id === id) : null;
-    if (w) out.add(w.calibre);
+    if (!w) continue;
+    for (const t of ammoTypesForCalibre(w.calibre)) out.add(t.id);
   }
   return out;
 }
@@ -108,8 +109,11 @@ export function showLoadout(
 
   const draw = (): void => {
     const chk = checkLoadout(l);
-    const need = neededCalibres(l);
-    const cals = allCalibres().sort((a, b) => Number(need.has(b)) - Number(need.has(a)));
+    const need = neededAmmo(l);
+    const ammo = allAmmoTypes()
+      .map((id, i) => ({ id, k: (need.has(id) ? 0 : 1000) + i }))
+      .sort((a, b) => a.k - b.k)
+      .map((x) => x.id);
     const ids: (string | null)[] = [null, ...WEAPONS.map((w) => w.id)];
 
     r.innerHTML = '<div class="loadout-screen">'
@@ -127,13 +131,13 @@ export function showLoadout(
         .map((id) => weaponRow('stowed', id, l.stowed)).join('')
       + '</div>'
       + '<h3 class="l-h">攜行彈藥</h3><div class="l-list">'
-      + cals.map((c) => {
-        const def = RULES.calibres[c];
-        const n = l.ammo[c] ?? 0;
-        const note = (need.has(c) ? '● 你的槍吃這個　' : '')
+      + ammo.map((id) => {
+        const def = AMMO_TYPES[id];
+        const n = l.ammo[id] ?? 0;
+        const note = (need.has(id) ? '● 你的槍吃這個　' : '')
           + '每發 ' + def.weightPerRound
           + '　小計 ' + fmtWeight(Math.round(def.weightPerRound * n * 1000) / 1000);
-        return stepper('ammo', c, def.name + ' ×' + RULES.loadout.ammoStep[c], n, note);
+        return stepper('ammo', id, ammoLabel(id) + ' ×' + RULES.loadout.ammoStep[id], n, note);
       }).join('')
       + '</div>'
       + '<h3 class="l-h">消耗品</h3><div class="l-list">'
@@ -168,9 +172,9 @@ export function showLoadout(
         const d = Number(b.dataset.d);
         const key = b.dataset.key as string;
         if (b.dataset.step === 'ammo') {
-          const c = key as Calibre;
-          const step = RULES.loadout.ammoStep[c];
-          l.ammo[c] = Math.max(0, Math.min(RULES.loadout.ammoMax, (l.ammo[c] ?? 0) + d * step));
+          const step = RULES.loadout.ammoStep[key];
+          l.ammo[key] = Math.max(0,
+            Math.min(RULES.loadout.ammoMax, (l.ammo[key] ?? 0) + d * step));
         } else {
           l.consumables[key] = Math.max(0,
             Math.min(RULES.loadout.consumableMax, (l.consumables[key] ?? 0) + d));

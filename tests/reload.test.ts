@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { checkLegal, commandTime } from '../src/core/commands';
-import { RULES } from '../src/core/content';
+import { RULES, ammoTypesForCalibre } from '../src/core/content';
 import { countAmmo } from '../src/core/inventory';
 import { player, run, testState, testWeapon } from './helpers';
 import type { GameState } from '../src/core/state';
@@ -30,7 +30,7 @@ function withWeapon(id: string, ammoQty = 40): GameState {
   p.equipped = w;
   p.stowed = null;
   p.backpack!.items = [];
-  const item = makeItem(s, RULES.calibres[w.calibre].itemId, ammoQty);
+  const item = makeItem(s, ammoTypesForCalibre(w.calibre)[0].id, ammoQty);
   p.backpack!.items.push(item);
   return s;
 }
@@ -44,7 +44,7 @@ describe('§3.1 增量裝填', () => {
     s = run(s, { type: 'RELOAD' });
     expect(player(s).equipped!.ammo).toBe(1);
     expect(player(s).nextActAt).toBe(6);
-    expect(countAmmo(player(s).backpack, '12ga')).toBe(39);
+    expect(countAmmo(player(s).backpack, 'buckshot_12ga')).toBe(39);
   });
 
   it('填一發之後可以直接開槍 —— 不是系列動作，沒有承諾', () => {

@@ -14,7 +14,7 @@ import { manhattan } from '../core/grid';
 import { describe as describeSequence } from '../core/sequence';
 import { RULES } from '../core/content';
 import {
-  carriedWeight, countAmmo, maxWeight, moveCostForWeight, nextTierAt, stackWeight, weightTierIndex,
+  carriedWeight, countAmmoFor, maxWeight, moveCostForWeight, nextTierAt, stackWeight, weightTierIndex,
 } from '../core/inventory';
 import { esc } from './dom';
 import { fmtWeight, itemText } from './hud';
@@ -47,7 +47,7 @@ type PlayerUnit = NonNullable<ReturnType<typeof activePlayerUnit>>;
 function weaponLine(state: GameState, w: PlayerUnit['equipped']): string {
   if (!w) return '無';
   const u = activePlayerUnit(state);
-  const spare = w.magazine < 99 ? '　備彈 ' + countAmmo(u ? u.backpack : null, w.calibre) : '';
+  const spare = w.magazine < 99 ? '　備彈 ' + countAmmoFor(u ? u.backpack : null, w) : '';
   const mode = w.modes.length > 1 ? '　' + RULES.fireModes[w.mode].full : '';
   return w.name + ' ' + w.ammo + '/' + w.magazine + spare + mode;
 }

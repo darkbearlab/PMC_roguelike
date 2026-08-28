@@ -7,13 +7,14 @@
  *  3. 換算尺（1 單位 = 0.5 公斤）真的被遵守
  */
 import { describe, expect, it } from 'vitest';
-import { RULES, WEAPONS, ITEMS } from '../src/core/content';
+import { AMMO_TYPES, ITEMS, RULES, WEAPONS, ammoTypesForCalibre } from '../src/core/content';
+import type { Calibre } from '../src/core/state';
 import {
-  allCalibres, checkLoadout, cloneLoadout, defaultLoadout, equipFromLoadout,
+  allAmmoTypes, checkLoadout, cloneLoadout, defaultLoadout, equipFromLoadout,
   loadoutBreakdown, loadoutWeight, selectableConsumables,
 } from '../src/core/loadout';
 import type { Loadout } from '../src/core/loadout';
-import { carriedWeight, countAmmo, totalWeight } from '../src/core/inventory';
+import { carriedWeight, countAmmo, countAmmoFor, totalWeight } from '../src/core/inventory';
 import { createInitialState } from '../src/core/setup';
 import { mapById } from '../src/core/content';
 import { cheapestMode, effectiveMode, shotsFor } from '../src/core/combat';
@@ -35,20 +36,47 @@ describe('§1 口徑系統', () => {
     expect(W('sg12s').calibre).toBe('12ga');
   });
 
-  it('每個口徑都有對應的彈藥物品，重量與 calibres 一致', () => {
-    for (const c of allCalibres()) {
-      const item = ITEMS[RULES.calibres[c].itemId];
-      expect(item, c + ' 沒有對應的彈藥物品').toBeTruthy();
-      expect(item.calibre).toBe(c);
-      expect(item.weight).toBe(RULES.calibres[c].weightPerRound);
+  it('彈藥的識別單位是型別，型別引用口徑（附錄 B §2.2）', () => {
+    for (const id of allAmmoTypes()) {
+      const a = AMMO_TYPES[id];
+      expect(RULES.calibres[a.calibreId], id + ' 的口徑不存在').toBeTruthy();
+      // 型別 id 同時就是它在背包裡的 defId
+      expect(ITEMS[id], id + ' 沒有對應的背包物品').toBeTruthy();
+      expect(ITEMS[id].kind).toBe('AMMO');
+      expect(ITEMS[id].weight).toBe(a.weightPerRound);
+      expect(ITEMS[id].ammoTypeId).toBe(id);
+    }
+    // v0.15：每個口徑剛好一種型別，數值與附錄前相同
+    for (const c of Object.keys(RULES.calibres) as Calibre[]) {
+      const types = ammoTypesForCalibre(c);
+      expect(types, c).toHaveLength(1);
+      expect(types[0].def.weightPerRound).toBe(RULES.calibres[c].weightPerRound);
     }
   });
 
+  it('預留欄位存在且是預設值 —— 本版不實作任何效果', () => {
+    for (const id of allAmmoTypes()) {
+      const a = AMMO_TYPES[id];
+      expect(a.damageModifier, id).toBe(1.0);
+      expect(a.falloffModifier, id).toBe(1.0);
+      expect(a.splashRadius, id).toBe(0);
+      expect(a.allowedActions, id).toEqual([]);
+    }
+  });
+
+  it('七把武器都填了機構型式，而且本版不參與任何判斷', () => {
+    const want: Record<string, string> = {
+      ar9: 'AUTO', rr4: 'BREECH', sg12p: 'PUMP', sg12s: 'BREAK',
+      dmr7: 'SEMI', lmg5: 'AUTO', p9: 'SEMI',
+    };
+    for (const w of WEAPONS) expect(w.action, w.id).toBe(want[w.id]);
+  });
+
   it('新增一把槍只要指定既有口徑就能吃既有彈藥', () => {
-    const l: Loadout = { primary: 'lmg5', stowed: null, ammo: { '5.56': 30 }, consumables: {} };
+    const l: Loadout = { primary: 'lmg5', stowed: null, ammo: { 'standard_5.56': 30 }, consumables: {} };
     const kit = equipFromLoadout({ nextEntitySerial: 1 }, l);
     // LMG-5 與 AR-9 不同型號，但同口徑 —— 背包裡那堆 5.56 兩把都吃得到
-    expect(countAmmo(kit.backpack, kit.equipped!.calibre)).toBe(30);
+    expect(countAmmoFor(kit.backpack, kit.equipped!)).toBe(30);
   });
 });
 
@@ -163,7 +191,7 @@ describe('§4 換算尺與負重', () => {
 
 describe('§5 配裝', () => {
   it('可選內容全部由資料推導，不寫死', () => {
-    expect(allCalibres()).toEqual(Object.keys(RULES.calibres));
+    expect(allAmmoTypes()).toEqual(Object.keys(AMMO_TYPES));
     expect(selectableConsumables()).toContain('SEALANT');
     for (const id of selectableConsumables()) expect(ITEMS[id].use).toBeTruthy();
   });
@@ -181,7 +209,7 @@ describe('§5 配裝', () => {
   });
 
   it('超重是硬限制', () => {
-    const c = checkLoadout({ primary: 'rr4', stowed: 'lmg5', ammo: { '84mm': 12 }, consumables: {} });
+    const c = checkLoadout({ primary: 'rr4', stowed: 'lmg5', ammo: { 'heat_84mm': 12 }, consumables: {} });
     expect(c.weight).toBeGreaterThan(RULES.backpack.maxWeight);
     expect(c.overweight).toBe(true);
   });
@@ -189,20 +217,20 @@ describe('§5 配裝', () => {
   it('配裝真的變成士兵身上的東西', () => {
     const l: Loadout = {
       primary: 'sg12s', stowed: 'p9',
-      ammo: { '12ga': 12, '9mm': 30 }, consumables: { SEALANT: 2 },
+      ammo: { 'buckshot_12ga': 12, 'standard_9mm': 30 }, consumables: { SEALANT: 2 },
     };
     const s = createInitialState(1, mapById('mission_01')!, l);
     const p = s.units.find((u) => u.faction === 'PLAYER')!;
     expect(p.equipped!.typeId).toBe('sg12s');
     expect(p.stowed!.typeId).toBe('p9');
-    expect(countAmmo(p.backpack, '12ga')).toBe(12);
-    expect(countAmmo(p.backpack, '9mm')).toBe(30);
-    expect(countAmmo(p.backpack, '5.56')).toBe(0);
+    expect(countAmmo(p.backpack, 'buckshot_12ga')).toBe(12);
+    expect(countAmmo(p.backpack, 'standard_9mm')).toBe(30);
+    expect(countAmmo(p.backpack, 'standard_5.56')).toBe(0);
     expect(carriedWeight(p)).toBeCloseTo(loadoutWeight(l), 3);
   });
 
   it('可以只帶一把，另一欄留空', () => {
-    const l: Loadout = { primary: 'p9', stowed: null, ammo: { '9mm': 20 }, consumables: {} };
+    const l: Loadout = { primary: 'p9', stowed: null, ammo: { 'standard_9mm': 20 }, consumables: {} };
     const s = createInitialState(1, mapById('mission_01')!, l);
     const p = s.units.find((u) => u.faction === 'PLAYER')!;
     expect(p.stowed).toBeNull();
@@ -210,7 +238,7 @@ describe('§5 配裝', () => {
   });
 
   it('決定論不受影響：相同種子 + 相同配裝 → 相同狀態', () => {
-    const l: Loadout = { primary: 'dmr7', stowed: 'p9', ammo: { '7.62': 20 }, consumables: {} };
+    const l: Loadout = { primary: 'dmr7', stowed: 'p9', ammo: { 'standard_7.62': 20 }, consumables: {} };
     const a = createInitialState(4242, mapById('mission_02')!, cloneLoadout(l));
     const b = createInitialState(4242, mapById('mission_02')!, cloneLoadout(l));
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));
@@ -225,10 +253,10 @@ describe('§5 配裝', () => {
 
 describe('§6 至少三種明顯不同、各有適用場合的組合', () => {
   const combos: [string, Loadout][] = [
-    ['近遠互補', { primary: 'sg12s', stowed: 'dmr7', ammo: { '12ga': 12, '7.62': 20 }, consumables: { SEALANT: 1 } }],
+    ['近遠互補', { primary: 'sg12s', stowed: 'dmr7', ammo: { 'buckshot_12ga': 12, 'standard_7.62': 20 }, consumables: { SEALANT: 1 } }],
     ['通用＋反裝甲', defaultLoadout()],
-    ['火力＋應急', { primary: 'lmg5', stowed: 'p9', ammo: { '5.56': 90, '9mm': 30 }, consumables: { SEALANT: 1 } }],
-    ['狹窄空間', { primary: 'sg12p', stowed: 'ar9', ammo: { '12ga': 20, '5.56': 32 }, consumables: { SEALANT: 1 } }],
+    ['火力＋應急', { primary: 'lmg5', stowed: 'p9', ammo: { 'standard_5.56': 90, 'standard_9mm': 30 }, consumables: { SEALANT: 1 } }],
+    ['狹窄空間', { primary: 'sg12p', stowed: 'ar9', ammo: { 'buckshot_12ga': 20, 'standard_5.56': 32 }, consumables: { SEALANT: 1 } }],
   ];
 
   it('四種組合都出得了門，而且重量差得出來', () => {

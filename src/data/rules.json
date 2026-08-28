@@ -7,13 +7,14 @@
   },
 
   "_calibres": "§1 口徑系統。口徑是獨立的資料實體，武器以 calibre 欄位引用它 —— 這樣新增武器只要指定口徑，就自動與既有彈藥相容。命名參考現實中的 NATO 制式，讓玩家憑常識就能推測相容性。共用是刻意的：AR-9 與 LMG-5 同吃 5.56，兩把霰彈槍同吃 12 號徑。六把槍若各吃各的，配裝就沒有取捨 —— 分開之後取捨才會落在「餵幾種彈藥」而不是「哪把槍比較強」。",
-  "_calibreWeight": "weightPerRound 由現實單發重量除以 500 g 換算（§4.1）。實際放進背包的是 items.json 裡的彈藥物品，這裡的數字是它的來源與對照。",
+  "_calibreWeight": "weightPerRound 由現實單發重量除以 500 g 換算（§4.1）。**實際放進背包的是彈藥型別**（ammo.json），一個口徑可以有多種型別；這裡的重量是該口徑的典型值與對照基準。",
+  "_ammoTier": "彈藥同樣分兩層（附錄 B §1.3）：12 號徑與粗製手槍彈容易本地生產；5.56 與 7.62 需要穩定膛壓，困難但可行；**84mm 不可能生產，屬遺產彈藥** —— 每開一砲，世界上就永遠少一發。本版不為此加任何機制。",
   "calibres": {
-    "5.56": { "name": "5.56×45mm", "weightPerRound": 0.024, "itemId": "AMMO_556" },
-    "7.62": { "name": "7.62×51mm", "weightPerRound": 0.048, "itemId": "AMMO_762" },
-    "12ga": { "name": "12 號徑", "weightPerRound": 0.09, "itemId": "AMMO_12GA" },
-    "9mm": { "name": "9×19mm", "weightPerRound": 0.024, "itemId": "AMMO_9MM" },
-    "84mm": { "name": "84mm 無後座力", "weightPerRound": 6.0, "itemId": "AMMO_84MM" }
+    "5.56": { "name": "5.56×45mm", "weightPerRound": 0.024, "localProduction": "HARD" },
+    "7.62": { "name": "7.62×51mm", "weightPerRound": 0.048, "localProduction": "HARD" },
+    "12ga": { "name": "12 號徑", "weightPerRound": 0.09, "localProduction": "EASY" },
+    "9mm": { "name": "9×19mm", "weightPerRound": 0.024, "localProduction": "EASY" },
+    "84mm": { "name": "84mm 無後座力", "weightPerRound": 6.0, "localProduction": "NONE" }
   },
 
   "time": {
@@ -51,13 +52,13 @@
     "_sealant": "士兵初始帶一個封合劑（§4.1）。其餘靠搜刮 —— 恢復必須稀有，不是標準配備。",
     "_startingItems": "v0.15 起這只是**預設配裝**的內容（§5.5）；玩家可以在出擊前改。機器人基準一律用它。",
     "startingItems": [
-      { "defId": "AMMO_556", "qty": 24 },
-      { "defId": "AMMO_84MM", "qty": 2 },
+      { "defId": "standard_5.56", "qty": 24 },
+      { "defId": "heat_84mm", "qty": 2 },
       { "defId": "SEALANT", "qty": 1 }
     ],
     "_reinforcement": "增援只配步槍彈，跟他只配 AR-9 是同一個道理（§10.1）。火箭彈在前一個人的屍體上。",
     "reinforcementItems": [
-      { "defId": "AMMO_556", "qty": 24 },
+      { "defId": "standard_5.56", "qty": 24 },
       { "defId": "SEALANT", "qty": 1 }
     ]
   },
@@ -76,14 +77,18 @@
 
   "_loadout": "§5 出擊前配裝。這裡只放預設值與介面參數 —— 可選的武器來自 weapons.json，可選的彈藥口徑來自 calibres，可選的消耗品是 items.json 裡有 use 欄位的東西。新增一把槍不需要改這個區塊。",
   "loadout": {
+    "_keys": "ammo 與 ammoStep 的鍵是**彈藥型別 id**（ammo.json），不是口徑 —— 附錄 B §2.2。",
     "default": {
       "primary": "ar9",
       "stowed": "rr4",
-      "ammo": { "5.56": 24, "84mm": 2 },
+      "ammo": { "standard_5.56": 24, "heat_84mm": 2 },
       "consumables": { "SEALANT": 1 }
     },
     "_ammoStep": "彈藥以合理的增量調整，不要逐發點擊（§5.6）。84mm 每發 6 重，所以它自己一發一發加。",
-    "ammoStep": { "5.56": 6, "7.62": 5, "12ga": 4, "9mm": 5, "84mm": 1 },
+    "ammoStep": {
+      "standard_5.56": 6, "standard_7.62": 5, "buckshot_12ga": 4,
+      "standard_9mm": 5, "heat_84mm": 1
+    },
     "_ammoMax": "上限只是介面的防呆，真正的約束是重量。",
     "ammoMax": 120,
     "consumableMax": 4

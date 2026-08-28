@@ -1,0 +1,52 @@
+{
+  "_comment": "彈藥型別（v0.15 附錄 B §2）。**彈藥的識別單位是型別，型別引用口徑** —— 不是拿口徑當彈藥。",
+  "_why": "未來同一種口徑會有多種彈種：12 號徑的鋼珠／獨頭／鋼索切段，5.56 的穿甲彈，7.62 的精密比賽彈。若把背包彈藥實作成「口徑 → 數量」，那麼日後背包、配裝、裝填、搜刮、屍體、結算清單每一處都要改。現在多一層間接幾乎零成本，之後回頭改會動到每一處 —— 與附錄 A 的武器實例是同一類問題。",
+  "_reserved": "damageModifier / falloffModifier / splashRadius / allowedActions 是預留欄位，v0.15 一律為預設值，不參與任何判斷。allowedActions 為空陣列代表不限制機構型式；日後鋼索切段會填 [\"BREAK\"] —— 中折式沒有複雜機構可以被打壞，泵動槍的抽殼機構會被它毀掉。**那才是土製武器存在的意義：讓粗糙成為一種能力，而不只是比較爛。**",
+  "_v015": "本版每個口徑只有一種型別，數值與附錄前完全相同。玩家看得到的東西不變，只有內部結構多了一層。",
+
+  "standard_5.56": {
+    "name": "5.56 步槍彈",
+    "calibreId": "5.56",
+    "weightPerRound": 0.024,
+    "damageModifier": 1.0,
+    "falloffModifier": 1.0,
+    "splashRadius": 0,
+    "allowedActions": []
+  },
+  "standard_7.62": {
+    "name": "7.62 步槍彈",
+    "calibreId": "7.62",
+    "weightPerRound": 0.048,
+    "damageModifier": 1.0,
+    "falloffModifier": 1.0,
+    "splashRadius": 0,
+    "allowedActions": []
+  },
+  "buckshot_12ga": {
+    "name": "12 號徑霰彈",
+    "calibreId": "12ga",
+    "weightPerRound": 0.09,
+    "damageModifier": 1.0,
+    "falloffModifier": 1.0,
+    "splashRadius": 0,
+    "allowedActions": []
+  },
+  "standard_9mm": {
+    "name": "9mm 手槍彈",
+    "calibreId": "9mm",
+    "weightPerRound": 0.024,
+    "damageModifier": 1.0,
+    "falloffModifier": 1.0,
+    "splashRadius": 0,
+    "allowedActions": []
+  },
+  "heat_84mm": {
+    "name": "84mm 火箭彈",
+    "calibreId": "84mm",
+    "weightPerRound": 6.0,
+    "damageModifier": 1.0,
+    "falloffModifier": 1.0,
+    "splashRadius": 0,
+    "allowedActions": []
+  }
+}

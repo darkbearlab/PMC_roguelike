@@ -133,11 +133,11 @@
       "label": "管線工具箱",
       "items": [
         {
-          "defId": "AMMO_556",
+          "defId": "standard_5.56",
           "qty": 10
         },
         {
-          "defId": "AMMO_12GA",
+          "defId": "buckshot_12ga",
           "qty": 10
         }
       ]
@@ -158,7 +158,7 @@
           "qty": 1
         },
         {
-          "defId": "AMMO_9MM",
+          "defId": "standard_9mm",
           "qty": 20
         }
       ]

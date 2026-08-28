@@ -3,7 +3,7 @@ import type { GameState, Item } from '../core/state';
 import { abandonedItems, activePlayerUnit, enemies } from '../core/state';
 import { COVER_LABEL, playerDefence } from '../core/cover';
 import {
-  carriedWeight, countAmmo, maxWeight, moveCostForWeight, weightTierIndex,
+  carriedWeight, countAmmoFor, maxWeight, moveCostForWeight, weightTierIndex,
 } from '../core/inventory';
 import { $, esc } from './dom';
 
@@ -40,7 +40,7 @@ export function renderHud(state: GameState): void {
   // 斜線後面是**背包裡的備彈**（§1.1）—— 槍內剩幾發只是一半的資訊。
   $('#hud-weapon').textContent = w
     ? `${shortName(w.name)} ${w.ammo}/${w.magazine}`
-      + (w.magazine < 99 ? `｜備 ${countAmmo(u!.backpack, w.calibre)}` : '')
+      + (w.magazine < 99 ? `｜備 ${countAmmoFor(u!.backpack, w)}` : '')
     : '空手';
 
   // 負重（§3.2）：玩家要看得出「再撿就會變慢」

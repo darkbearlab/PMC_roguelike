@@ -141,7 +141,7 @@
           "qty": 2
         },
         {
-          "defId": "AMMO_84MM",
+          "defId": "heat_84mm",
           "qty": 1
         }
       ]
@@ -154,11 +154,11 @@
       "label": "棄置的彈藥箱",
       "items": [
         {
-          "defId": "AMMO_556",
+          "defId": "standard_5.56",
           "qty": 12
         },
         {
-          "defId": "AMMO_762",
+          "defId": "standard_7.62",
           "qty": 10
         },
         {
