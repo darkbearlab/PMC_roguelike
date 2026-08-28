@@ -15,8 +15,13 @@
 import type { Item, WeaponInstance } from './state';
 import type { CarriedKit } from './loadout';
 import { kitWeight } from './loadout';
-import { AMMO_TYPES, ITEMS, RULES, ammoTypesForCalibre } from './content';
+import { AMMO_TYPES, ECONOMY, ITEMS, RULES, ammoTypesForCalibre } from './content';
 import { makeWeapon } from './weapon';
+import { createRng, nextInt } from './rng';
+import {
+  ammoPrice, consumablePrice, contractReward, debtTier, isLegacy, itemPrice, rollLegacyStock,
+  secondaryReward, sellValue, soldierPrice, weaponPrice,
+} from './economy';
 import type { Serial } from './weapon';
 
 /**
@@ -63,6 +68,8 @@ export interface MissionRecord {
   clock: number;
   deployed: number;
   casualties: number;
+  /** v0.20：這一趟的損益（只計入實際入帳的報酬，見 MissionLedger）。 */
+  net?: number;
 }
 
 export interface MetaState {
@@ -83,6 +90,21 @@ export interface MetaState {
   /** 帶回來的值錢物品與 DNA。本階段沒有用途，只是列著。 */
   salvage: Record<string, number>;
   missionLog: MissionRecord[];
+
+  // ---- v0.20 經濟層 ----
+  /**
+   * 信用點。**可以為負** —— 沒有破產結束遊戲（§4.2）。
+   * 發行機構已經不存在了，但所有帳目仍以它計價。
+   */
+  credits: number;
+  /** 完成的合約數。遺產武器的現貨綁定它，**不綁定真實時間**（§2.4）。 */
+  contractsCompleted: number;
+  /** 補給站現在有的遺產武器（型號 id）。不是型錄，是現貨。 */
+  legacyStock: string[];
+  /** 抽現貨用的種子。存進來才能在重新載入之後接得下去。 */
+  stockSeed: number;
+  /** 待閱讀的董事會信件（級距 id）。 */
+  mail: string[];
 }
 
 // ============================================================================
@@ -309,6 +331,16 @@ export interface MissionResult {
   deployedIds: string[];
   /** 陣亡的士兵。永久移除。 */
   deadIds: string[];
+  /** 難度評級（報酬倍率用）。 */
+  rating: string;
+  /** 主目標完成了嗎 —— **完成才給主要報酬**（§3.1）。 */
+  mainDone: boolean;
+  /** 完成了幾個次要目標。止損撤離時仍然拿得到這一份。 */
+  secondaryDone: number;
+  /** 這一趟帶出去的物資規格（彈藥與消耗品），用來算消耗。 */
+  issued: { defId: string; qty: number }[];
+  /** 這一趟帶出去的武器實例 id，用來算遺留損失。 */
+  issuedWeaponIds: string[];
   /** 走出撤離點的那一位（止損與全滅都是 null）。 */
   survivorId: string | null;
   /**
@@ -425,7 +457,13 @@ export function newCompany(): MetaState {
     consumableStock: {},
     salvage: {},
     missionLog: [],
+    credits: RULES.meta.start.credits,
+    contractsCompleted: 0,
+    legacyStock: [],
+    stockSeed: RULES.meta.start.stockSeed,
+    mail: [],
   };
+  meta.legacyStock = rollLegacyStock(createRng(meta.stockSeed));
   for (let i = 0; i < start.soldiers; i++) grantSoldier(meta);
   for (const t of start.weapons) grantWeapon(meta, t);
   for (const [id, n] of Object.entries(start.ammo)) grantAmmo(meta, id, n as number);
@@ -458,7 +496,7 @@ export function supplyBatch(ammoTypeId: string): number {
  */
 export function missionResultOf(
   state: import('./state').GameState,
-  meta: { mapName: string; contractCode: string },
+  meta: { mapName: string; contractCode: string; rating: string },
 ): MissionResult {
   const kills: Record<string, number> = {};
   const damageTaken: Record<string, number> = {};
@@ -474,9 +512,17 @@ export function missionResultOf(
   const deployedIds = state.deployment
     .map((d) => d.id)
     .filter((id) => !notDeployed.has(id));
+  const wentOut = new Set(deployedIds);
+  const out = state.deployment.filter((d) => wentOut.has(d.id));
   return {
     mapName: meta.mapName,
     contractCode: meta.contractCode,
+    rating: meta.rating,
+    mainDone: state.objectives.main.done,
+    secondaryDone: state.objectives.secondary.filter((o) => o.done).length,
+    issued: out.flatMap((d) => d.items.map((e) => ({ ...e }))),
+    issuedWeaponIds: out.flatMap((d) =>
+      [d.equipped, d.stowed].filter(Boolean).map((w) => w!.instanceId)),
     outcome: state.result === 'ONGOING' ? 'ABORTED' : state.result,
     clock: state.clock,
     deployedIds,
@@ -491,7 +537,7 @@ export function missionResultOf(
 }
 
 // ============================================================================
-// 自動補給（v0.19）
+// 自動補給（v0.18 附錄）
 // ============================================================================
 
 /**
@@ -514,7 +560,7 @@ export function resupplyTarget(meta: MetaState, s: Soldier): Record<string, numb
 }
 
 /**
- * 把一名士兵補到基準（v0.19）。回傳實際補了幾發。
+ * 把一名士兵補到基準（v0.18 附錄）。回傳實際補了幾發。
  *
  * 為什麼需要這個：撤離帶回來的彈藥會併回**共用庫存**，而士兵的攜行量歸零 ——
  * 那個模型是對的（v0.16 §3.2：配裝是分配資源，不是選裝備），
@@ -560,7 +606,7 @@ export function resupplySoldier(meta: MetaState, soldierId: string): number {
 }
 
 /**
- * 全員補給（v0.19）。**依名冊順序**，所以庫存不夠時誰先拿到是決定性的。
+ * 全員補給（v0.18 附錄）。**依名冊順序**，所以庫存不夠時誰先拿到是決定性的。
  * 沒有配槍的人不補 —— 沒有槍就沒有要餵的東西。
  */
 export function resupplyAll(meta: MetaState): number {
@@ -570,4 +616,179 @@ export function resupplyAll(meta: MetaState): number {
     added += resupplySoldier(meta, s.id);
   }
   return added;
+}
+
+// ============================================================================
+// 結算損益（v0.20 §5.4）
+// ============================================================================
+
+/**
+ * 一趟任務的損益表。**這張表就是 v0.20 的重點** ——
+ * 玩家必須看得出自己這一趟是賺是賠，以及**賠在哪裡**。
+ *
+ * 注意兩者的差別：
+ *  - `creditsEarned` 是**真的入帳**的錢（合約報酬與次要目標獎金）
+ *  - 其餘各欄是**估值** —— 帶出來的戰利品要拿去補給站賣才變成錢，
+ *    而遺留的裝備與陣亡的士兵是「這一趟實際上花掉了多少」
+ */
+export interface MissionLedger {
+  reward: number;
+  secondary: number;
+  salvage: number;
+  soldiersLost: number;
+  weaponsLost: number;
+  suppliesLost: number;
+  /** 真的入帳的金額（reward + secondary）。 */
+  creditsEarned: number;
+  /** 這一趟的淨損益（含估值）。 */
+  net: number;
+}
+
+const itemValue = (defId: string, qty: number): number =>
+  sellValue(itemPrice(defId, qty));
+
+/**
+ * 算一趟任務的帳。**必須在 `applyMissionResult` 之前呼叫** ——
+ * 遺留的武器要在它們從軍械庫被移除之前估值。
+ */
+export function missionLedger(meta: MetaState, r: MissionResult): MissionLedger {
+  const reward = r.mainDone ? contractReward(r.rating) : 0;
+  const secondary = secondaryReward(r.rating, r.secondaryDone);
+
+  let salvage = 0;
+  const broughtBack = new Set<string>();
+  for (const it of r.extracted) {
+    if (it.kind === 'WEAPON' && it.weapon) {
+      broughtBack.add(it.weapon.instanceId);
+      continue;                                  // 槍不算「賣掉的戰利品」，它回到軍械庫
+    }
+    salvage += itemValue(it.defId, it.qty);
+  }
+
+  // 帶出去卻沒帶回來的槍 = 永久損失
+  let weaponsLost = 0;
+  for (const id of r.issuedWeaponIds) {
+    if (broughtBack.has(id)) continue;
+    const w = meta.armoury.find((x) => x.instanceId === id);
+    if (w) weaponsLost += sellValue(weaponPrice(w.typeId));
+  }
+
+  // 帶出去的物資，扣掉帶回來的
+  const back = new Map<string, number>();
+  for (const it of r.extracted) {
+    if (it.kind === 'WEAPON') continue;
+    back.set(it.defId, (back.get(it.defId) ?? 0) + it.qty);
+  }
+  let suppliesLost = 0;
+  for (const e of r.issued) {
+    const left = Math.max(0, e.qty - (back.get(e.defId) ?? 0));
+    if (left > 0) suppliesLost += itemValue(e.defId, left);
+  }
+
+  const soldiersLost = r.deadIds.length * soldierPrice();
+  const creditsEarned = reward + secondary;
+  return {
+    reward,
+    secondary,
+    salvage,
+    soldiersLost,
+    weaponsLost,
+    suppliesLost,
+    creditsEarned,
+    net: creditsEarned + salvage - soldiersLost - weaponsLost - suppliesLost,
+  };
+}
+
+/**
+ * 結算一趟任務：算帳 → 套用結果 → 入帳 → 推進現貨 → 該來的信件。
+ *
+ * **只有合約報酬與獎金真的入帳。**帶回來的戰利品要拿去補給站賣才變成錢 ——
+ * 那是玩家的下一個決定，不是自動發生的事。
+ */
+export function settleMission(
+  meta: MetaState, r: MissionResult,
+): { meta: MetaState; ledger: MissionLedger } {
+  const ledger = missionLedger(meta, r);
+  const m = applyMissionResult(meta, r);
+  m.credits += ledger.creditsEarned;
+  m.contractsCompleted += 1;
+  if (m.missionLog[0]) m.missionLog[0].net = ledger.net;
+
+  // 遺產武器的現貨綁定**完成的合約數**，不綁定真實時間（§2.4）
+  const every = Math.max(1, ECONOMY.legacyStock.refreshEvery);
+  if (m.contractsCompleted % every === 0) {
+    const rng = createRng(m.stockSeed);
+    m.legacyStock = rollLegacyStock(rng);
+    m.stockSeed = nextInt(rng, 0x7fffffff);
+  }
+
+  pushMail(m);
+  return { meta: m, ledger };
+}
+
+/**
+ * 該不該寄信（§4.3）。同一級只寄一次 —— 惡化到下一級才會再來一封。
+ * **這一版信件本身就是後果，不附帶任何實際懲罰。**
+ */
+export function pushMail(m: MetaState): void {
+  const tier = debtTier(m.credits);
+  if (!tier) return;
+  if (m.mail.includes(tier)) return;
+  m.mail.push(tier);
+}
+
+// ============================================================================
+// 買賣（v0.20 §3.2 / §4.1）
+// ============================================================================
+
+/** 買一名複製人。**信用點可以變成負的** —— 系統不禁止，只標價。 */
+export function buySoldier(meta: MetaState): Soldier {
+  meta.credits -= soldierPrice();
+  return grantSoldier(meta);
+}
+
+/** 買一把槍。遺產武器買走之後就從現貨清單上消失 —— 那是現貨，不是型錄。 */
+export function buyWeapon(meta: MetaState, typeId: string): WeaponInstance | null {
+  if (isLegacy(typeId)) {
+    const i = meta.legacyStock.indexOf(typeId);
+    if (i < 0) return null;                      // 沒有現貨就是買不到
+    meta.legacyStock.splice(i, 1);
+  }
+  meta.credits -= weaponPrice(typeId);
+  return grantWeapon(meta, typeId);
+}
+
+export function buyAmmo(meta: MetaState, ammoTypeId: string, qty: number): void {
+  meta.credits -= ammoPrice(ammoTypeId, qty);
+  grantAmmo(meta, ammoTypeId, qty);
+}
+
+export function buyConsumable(meta: MetaState, defId: string, qty: number): void {
+  meta.credits -= consumablePrice(defId, qty);
+  grantConsumable(meta, defId, qty);
+}
+
+/** 賣掉一把**沒有人拿著**的槍。有人拿著的不能賣 —— 先在配裝畫面收回來。 */
+export function sellWeapon(meta: MetaState, instanceId: string): number {
+  const i = meta.armoury.findIndex((w) => w.instanceId === instanceId);
+  if (i < 0) return 0;
+  if (holderOf(meta, instanceId)) return 0;
+  const got = sellValue(weaponPrice(meta.armoury[i].typeId));
+  meta.armoury.splice(i, 1);
+  meta.credits += got;
+  return got;
+}
+
+/** 賣掉未分配的彈藥、消耗品或雜物。回傳實際賣到多少。 */
+export function sellStock(meta: MetaState, defId: string, qty: number): number {
+  const pools: Record<string, number>[] = [meta.ammoStock, meta.consumableStock, meta.salvage];
+  const pool = pools.find((x) => (x[defId] ?? 0) > 0);
+  if (!pool) return 0;
+  const n = Math.min(qty, pool[defId]);
+  if (n <= 0) return 0;
+  pool[defId] -= n;
+  if (pool[defId] <= 0) delete pool[defId];
+  const got = sellValue(itemPrice(defId, n));
+  meta.credits += got;
+  return got;
 }

@@ -30,7 +30,7 @@ export interface UiConfig {
     followActingUnit: 'OFF' | 'SNAP' | 'PAN';
   };
   /**
-   * 任務結束回到公司時自動補給（v0.19）。
+   * 任務結束回到公司時自動補給（v0.18 附錄）。
    * 放在介面設定而不是存檔裡 —— 改它不會讓既有存檔失效。
    */
   autoResupplyOnReturn: boolean;

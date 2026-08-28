@@ -10,6 +10,8 @@ import ammoJson from '../data/ammo.json';
 import calloutsJson from '../data/callouts.json';
 import contractsJson from '../data/contracts.json';
 import contractRulesJson from '../data/contract-rules.json';
+import economyJson from '../data/economy.json';
+import boardMailJson from '../data/board-mail.json';
 import mission01Json from '../data/maps/mission_01.json';
 import mission02Json from '../data/maps/mission_02.json';
 import mission03Json from '../data/maps/mission_03.json';
@@ -63,6 +65,9 @@ export interface Rules {
       stowed: string | null;
       ammo: Record<string, number>;
       consumables: Record<string, number>;
+      /** v0.20：起始資金與抽現貨的初始種子。 */
+      credits: number;
+      stockSeed: number;
     };
     /** 鍵是**彈藥型別 id**，不是口徑（附錄 B §2.2）。 */
     ammoStep: Record<string, number>;
@@ -98,13 +103,16 @@ export interface Rules {
       weapons: string[];
       ammo: Record<string, number>;
       consumables: Record<string, number>;
+      /** v0.20：起始資金與抽現貨的初始種子。 */
+      credits: number;
+      stockSeed: number;
     };
     supply: {
       weapons: string[];
       ammo: string[];
       ammoBatch: Record<string, number>;
     };
-    /** v0.19 自動補給：彈藥基準寫在武器上，這裡只有消耗品。 */
+    /** v0.18 附錄：自動補給：彈藥基準寫在武器上，這裡只有消耗品。 */
     resupply: { consumables: Record<string, number> };
   };
   sequences: Record<string, unknown>;
@@ -239,6 +247,44 @@ export const CONTRACTS: Record<string, ContractBrief> = Object.fromEntries(
 ) as Record<string, ContractBrief>;
 
 export const CONTRACT_RULES: ContractRules = contractRulesJson as unknown as ContractRules;
+
+/**
+ * 經濟層（v0.20）。**所有價格與報酬都在資料檔**，預期會反覆調整。
+ * 價格結構的一句話：**人可以再長，好槍不行。**
+ */
+export interface Economy {
+  currency: { name: string; short: string };
+  /** P：一份 C 級合約的報酬。整張價格表都是它的倍數。 */
+  baseReward: number;
+  rewardByRating: Record<string, number>;
+  /** 每個次要目標的獎金倍率。主目標未完成時**只拿得到這一份**。 */
+  secondaryBonus: number;
+  sellDiscount: number;
+  prices: {
+    soldier: number;
+    weaponLocal: Record<string, number>;
+    weaponLegacy: Record<string, number>;
+    ammo: Record<string, number>;
+    consumables: Record<string, number>;
+    salvage: Record<string, number>;
+  };
+  /** 遺產武器的現貨規則。更新綁定**完成的合約數**，不綁定真實時間。 */
+  legacyStock: { min: number; max: number; refreshEvery: number };
+  debtTiers: { id: string; below: number; label: string }[];
+}
+
+export const ECONOMY: Economy = economyJson as unknown as Economy;
+
+/** 董事會信件（§4.3）。信件本身就是後果，不附帶任何實際懲罰。 */
+export interface BoardLetter {
+  from: string;
+  subject: string;
+  body: string[];
+}
+
+export const BOARD_MAIL: Record<string, BoardLetter> = Object.fromEntries(
+  Object.entries(boardMailJson as Record<string, unknown>).filter(([k]) => !k.startsWith('_')),
+) as Record<string, BoardLetter>;
 
 /**
  * 彈藥型別（v0.15 附錄 B §2）。**彈藥的識別單位是型別，型別引用口徑。**

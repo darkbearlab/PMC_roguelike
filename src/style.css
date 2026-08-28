@@ -306,6 +306,7 @@ html, body {
   padding: 15px; width: 100%; max-width: 400px; max-height: 86dvh; overflow-y: auto;
 }
 .modal h2 { margin: 0 0 4px; font-size: 16px; }
+.modal h3 { margin: 10px 0 4px; font-size: 12.5px; font-weight: 700; color: var(--accent); }
 .modal h2.win { color: var(--ok); }
 .modal h2.lose { color: var(--danger); }
 .modal h2.abort { color: var(--warn); }
@@ -499,3 +500,31 @@ html, body {
 .co-kit b.warn { color: var(--warn); }
 .co-sub { font-size: 10.5px; color: var(--ink-dim); font-weight: 400; letter-spacing: 0; }
 .l-actions button.danger { background: rgba(78, 33, 27, 0.85); border-color: var(--danger); color: #ffd6d1; }
+
+/* ---------------- 經濟層（§24） ---------------- */
+.co-credits { margin: 0 0 5px; font-size: 12.5px; color: var(--ink-dim); }
+.co-credits b { color: var(--ok); font-size: 15px; font-weight: 700; }
+.co-credits.bad b { color: var(--danger); }
+.co-debt {
+  font-size: 11px; color: var(--danger); border: 1px solid var(--danger);
+  border-radius: 4px; padding: 2px 6px;
+}
+.co-mailbtn {
+  min-height: 48px; margin-left: 8px; padding: 0 11px; font-size: 12px;
+  background: rgba(60, 42, 12, 0.5); color: var(--warn);
+  border: 1px solid var(--warn); border-radius: 8px;
+}
+.c-reward { margin: 0; font-size: 12px; color: var(--ink-dim); }
+.c-reward b { color: var(--ok); font-size: 14px; }
+.c-reward span { display: block; font-size: 10.5px; margin-top: 2px; }
+
+/* 損益表：右欄對齊，正負分色。用會計語言講死人 —— 版面也要像一張表。 */
+.ledger { margin: 4px 0 8px; padding: 0; list-style: none; font-size: 12px; }
+.ledger li { display: flex; justify-content: space-between; gap: 10px; padding: 3px 2px; }
+.ledger li span { color: var(--ink-dim); }
+.ledger li b { font-variant-numeric: tabular-nums; }
+.ledger b.plus { color: var(--ok); }
+.ledger b.minus { color: var(--danger); }
+.ledger li.rule { border-top: 1px solid var(--glass-line); padding: 0; margin: 4px 0; }
+.ledger li.total { font-size: 14px; padding-top: 5px; }
+.ledger li.total span { color: var(--ink); font-weight: 600; }

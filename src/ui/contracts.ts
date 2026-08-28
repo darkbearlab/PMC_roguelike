@@ -12,6 +12,8 @@
  */
 import type { Contract } from '../core/contracts';
 import { $, esc, show } from './dom';
+import { ECONOMY } from '../core/content';
+import { contractReward, secondaryReward } from '../core/economy';
 
 function root(): HTMLElement {
   return $('#contract-root');
@@ -27,6 +29,18 @@ function objectiveLine(c: Contract): string {
   return '主目標 ' + c.objectives.main
     + '　次要目標 ' + c.objectives.secondary
     + '　已知物資點 ' + c.objectives.caches;
+}
+
+/**
+ * 報酬（v0.20 §5.3）。**與難度評級並列，讓「風險 vs 報酬」一眼可讀。**
+ *
+ * v0.14 刻意不顯示金額（沒有貨幣系統，顯示金額等於說謊）；現在有了。
+ */
+function rewardLine(c: Contract): string {
+  const main = contractReward(c.difficulty.rating);
+  const each = secondaryReward(c.difficulty.rating, 1);
+  return '<p class="c-reward">報酬 <b>' + main + ' ' + esc(ECONOMY.currency.short) + '</b>'
+    + '<span>次要目標每項 +' + each + '　主目標未完成即撤離只拿得到次要獎金</span></p>';
 }
 
 function briefHtml(c: Contract): string {
@@ -61,6 +75,7 @@ function cardHtml(c: Contract, i: number, openIdx: number): string {
     + '<p class="c-where">作業地點　' + esc(c.mapName) + '</p>'
     + tagChips(c)
     + '<p class="c-obj">' + esc(objectiveLine(c)) + '</p>'
+    + rewardLine(c)
     + (open ? briefHtml(c) : '')
     + '<div class="c-actions">'
     + (open
@@ -85,7 +100,7 @@ export function showContracts(list: Contract[], onAccept: (c: Contract) => void)
       + '<header class="c-top">'
       + '<h2>可承接合約</h2>'
       + '<p class="c-note">本期可承接案件 ' + list.length + ' 件。'
-      + '本清單不揭露對價，相關條件另以口頭議定。'
+      + '對價如各案所載，作業完成並經驗收後撥付。'
       + '承接後之人員與裝備損耗，均由承接方自行認列。</p>'
       + '</header>'
       + list.map((c, i) => cardHtml(c, i, openIdx)).join('')

@@ -4,6 +4,8 @@ import { activePlayerUnit, unitAt } from '../core/state';
 import { damageAfterArmor } from '../core/combat';
 import { $, esc, show } from './dom';
 import { abandonedList, extractedList, ledgerText } from './hud';
+import type { MissionLedger } from '../core/meta';
+import { ECONOMY } from '../core/content';
 
 function root(): HTMLElement {
   return $('#modal-root');
@@ -138,15 +140,49 @@ function resultTitle(state: GameState): [string, string] {
  *   與「重新開始」是兩件事 —— 後者重打同一份合約、同一個種子，
  *   前者換一批合約。`?map=` 的除錯流程沒有清單可回，所以可以是 null。
  */
+/**
+ * 損益表（v0.20 §5.4）。**這張表就是那一版的重點** ——
+ * 玩家必須看得出自己這一趟是賺是賠，以及**賠在哪裡**。
+ *
+ * 用會計語言講死人：陣亡的士兵在這裡是一列重置成本，
+ * 遺留的槍是一列永久性減損。不加註解，不解釋。
+ */
+function ledgerHtml2(l: MissionLedger): string {
+  const cur = ECONOMY.currency.short;
+  const row = (label: string, n: number, sign: 1 | -1): string =>
+    '<li><span>' + esc(label) + '</span><b class="' + (sign > 0 ? 'plus' : 'minus') + '">'
+    + (n === 0 ? '—' : (sign > 0 ? '+' : '−') + n) + '</b></li>';
+  return '<h3 class="sub">本次合約損益（' + esc(cur) + '）</h3>'
+    + '<ul class="ledger">'
+    + row('合約報酬', l.reward, 1)
+    + row('次要目標獎金', l.secondary, 1)
+    + row('帶出的戰利品（估值）', l.salvage, 1)
+    + '<li class="rule"></li>'
+    + row('陣亡士兵（重置成本）', l.soldiersLost, -1)
+    + row('遺留的武器（永久性減損）', l.weaponsLost, -1)
+    + row('消耗的彈藥與物資', l.suppliesLost, -1)
+    + '<li class="rule"></li>'
+    + '<li class="total"><span>本次合約損益</span><b class="'
+    + (l.net >= 0 ? 'plus' : 'minus') + '">' + (l.net >= 0 ? '+' : '−') + Math.abs(l.net)
+    + '</b></li>'
+    + '</ul>'
+    + '<p class="note">實際入帳 <b>' + l.creditsEarned + '</b> —— '
+    + '戰利品要在補給站賣掉才變成錢，遺留與陣亡是已經發生的支出。</p>';
+}
+
 export function showSummary(
   state: GameState,
   onRestart: () => void,
   onReturnToList: (() => void) | null = null,
+  ledger: MissionLedger | null = null,
 ): void {
   const [title, cls] = resultTitle(state);
   const sec = state.objectives.secondary;
   const r = open(
     '<h2 class="' + cls + '">' + esc(title) + '</h2>'
+    // 損益表擺在最上面：**這張表就是玩家最想知道的事** ——
+    // 這一趟是賺是賠，以及賠在哪裡。搜刮清單擺它後面。
+    + (ledger ? ledgerHtml2(ledger) : '')
     + '<div class="stat-grid">'
     + '<div class="stat"><span>總耗時</span><b>' + state.clock + '</b></div>'
     + '<div class="stat"><span>地圖</span><b>' + esc(state.map.name) + '</b></div>'
@@ -158,7 +194,7 @@ export function showSummary(
       : '')
     + '<p>主目標：<b>' + (state.objectives.main.done ? '已完成' : '未完成') + '</b>'
     + '　次要目標：<b>' + sec.filter((o) => o.done).length + '/' + sec.length + '</b></p>'
-    + '<p><b>帶出去的東西</b>（§6，將來是局外層的輸入）：</p>'
+    + '<p><b>帶出去的東西</b>（要在補給站賣掉才變成錢）：</p>'
     + '<ul>' + extractedList(state) + '</ul>'
     + '<p><b>遺留在戰場上</b>（未回收的損失）：</p>'
     + '<ul>' + abandonedList(state) + '</ul>'

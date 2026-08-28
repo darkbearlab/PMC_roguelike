@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { contractsFromSeed } from '../src/core/contracts';
+import { contractReward } from '../src/core/economy';
 import { hideContracts, showContracts } from '../src/ui/contracts';
 import { showSummary } from '../src/ui/modals';
 import { createInitialState } from '../src/core/setup';
@@ -74,11 +75,26 @@ describe('合約清單畫面（§18.5）', () => {
     expect(text).toContain(list[0].brief.methods[0]);
   });
 
-  it('畫面上不出現任何報酬金額（§18 明確不做經濟）', () => {
-    showContracts(contractsFromSeed(7), () => {});
-    cards().forEach((_, i) => q<HTMLButtonElement>(`button[data-toggle="${i}"]`)!.click());
+  it('v0.20：合約清單顯示報酬，與難度評級並列（§24.3）', () => {
+    const list = contractsFromSeed(7);
+    showContracts(list, () => {});
     const text = q('#contract-root')!.textContent ?? '';
-    expect(/(報酬|酬金|價金|新台幣|信用點|\$|元整)/.test(text)).toBe(false);
+    expect(text).toContain('報酬');
+    for (const c of list) {
+      expect(text, c.mapId).toContain(String(contractReward(c.difficulty.rating)));
+    }
+    // 評級與報酬要在同一張卡上 —— 「風險 vs 報酬」一眼可讀
+    const card = cards()[0].textContent ?? '';
+    expect(card).toContain(list[0].difficulty.label);
+    expect(card).toContain('報酬');
+  });
+
+  it('簡報本身仍然不談錢 —— 委託方不會在公文裡寫價目', () => {
+    const list = contractsFromSeed(7);
+    showContracts(list, () => {});
+    q<HTMLButtonElement>('button[data-toggle="0"]')!.click();
+    const brief = q('.c-brief')!.textContent ?? '';
+    expect(/(報酬|酬金|價金|新台幣|元整)/.test(brief)).toBe(false);
   });
 
   it('關掉之後畫面清空，不留殘骸', () => {

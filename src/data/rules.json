@@ -96,7 +96,7 @@
 
   "_meta": "局外層（v0.16 §7.4）。新公司的起始狀態刻意**不讓四個人都配得滿** —— 第一次進入配裝畫面就應該遇到「東西不夠分」的處境。schemaVersion 由 §7.2 使用：載入時版本不符就提示重置，不要遷移。",
   "meta": {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "soldierHp": 60,
     "missionLogSize": 20,
     "start": {
@@ -104,9 +104,12 @@
       "soldiers": 4,
       "weapons": ["ar9", "rr4", "sg12p", "p9"],
       "ammo": { "standard_5.56": 48, "heat_84mm": 3, "buckshot_12ga": 20, "standard_9mm": 30 },
-      "consumables": { "SEALANT": 2 }
+      "consumables": { "SEALANT": 2 },
+      "_credits": "起始資金。約一份 C 級合約的報酬 —— 夠買一個人或補一輪彈藥，不夠買一把遺產武器。",
+      "credits": 400,
+      "stockSeed": 20200401
     },
-    "_resupply": "回到公司時的自動補給基準（v0.19）。彈藥的基準寫在武器上（resupplyMagazines），這裡只有消耗品。補給**只從公司既有的庫存拿**，不會無中生有 —— 共用庫存仍然是有限的，這只是省掉每場之後手動重新分配的工。",
+    "_resupply": "回到公司時的自動補給基準（v0.18 附錄）。彈藥的基準寫在武器上（resupplyMagazines），這裡只有消耗品。補給**只從公司既有的庫存拿**，不會無中生有 —— 共用庫存仍然是有限的，這只是省掉每場之後手動重新分配的工。",
     "resupply": {
       "consumables": { "SEALANT": 1 }
     },

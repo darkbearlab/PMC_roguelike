@@ -36,7 +36,7 @@ import { fmtWeight, missionPanelHtml, renderHud, shortName } from './hud';
 import { carriedWeight } from '../core/inventory';
 import { MotionLayer, PanLayer } from '../render/motion';
 import { UI } from './config';
-import type { Deployment } from '../core/meta';
+import type { Deployment, MissionLedger } from '../core/meta';
 import { backpackHtml, lootPanelHtml, selfPanelHtml, wireMenu } from './menus';
 import {
   hideModal, showAbortConfirm, showReinforcement, showSplashConfirm, showSummary,
@@ -149,6 +149,8 @@ export class Game {
     private forcedMap: RawMap | null = null,
     private onMissionEnd: (() => void) | null = null,
     private deployment: Deployment | null = null,
+    /** v0.20：結算畫面要顯示的損益表。局外層在任務結束時才算得出來。 */
+    private ledgerFor: (() => MissionLedger | null) | null = null,
   ) {
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('取不到 Canvas 2D context');
@@ -698,7 +700,7 @@ export class Game {
     if (this.modal === 'SPLASH') return;
     if (s.result !== 'ONGOING' && this.modal !== 'SUMMARY') {
       this.modal = 'SUMMARY';
-      showSummary(s, () => this.restart(), this.onMissionEnd);
+      showSummary(s, () => this.restart(), this.onMissionEnd, this.ledgerFor?.() ?? null);
       return;
     }
     if (this.modal === 'SUMMARY' || this.modal === 'ABORT') return;

@@ -9,9 +9,10 @@ import type { Contract } from './core/contracts';
 import type { RawMap } from './core/map';
 import type { MetaState } from './core/meta';
 import {
-  applyMissionResult, assignWeapon, makeDeployment, missionResultOf, moveAmmo, newCompany,
-  resupplyAll,
+  assignWeapon, makeDeployment, missionLedger, missionResultOf, moveAmmo, newCompany,
+  resupplyAll, settleMission,
 } from './core/meta';
+import type { MissionLedger, MissionResult } from './core/meta';
 import { hideContracts, showContracts } from './ui/contracts';
 import { hideCompany, showCompany } from './ui/company';
 import { clearCompany, loadCompany, saveCompany } from './ui/persist';
@@ -57,6 +58,25 @@ let versionProblem: { found: number; expected: number } | null = null;
 /** 目前正在接的那一份合約。結算之後要把它寫進服役紀錄。 */
 let current: Contract | null = null;
 
+/**
+ * 這一趟的結果（v0.20）。結算畫面在任務一結束就要顯示損益，
+ * 但實際入帳要等玩家按「返回合約清單」—— 所以算帳與套用分開。
+ */
+function resultNow(): MissionResult | null {
+  if (!game || !current) return null;
+  return missionResultOf(game.state, {
+    mapName: game.state.map.name,
+    contractCode: current.brief.code,
+    rating: current.difficulty.rating,
+  });
+}
+
+/** 結算畫面用的損益表。**純計算，不動 MetaState。** */
+function ledgerNow(): MissionLedger | null {
+  const r = resultNow();
+  return r ? missionLedger(meta, r) : null;
+}
+
 function save(): void {
   saveCompany(meta);
 }
@@ -97,7 +117,7 @@ function launch(soldierId: string): void {
   hideCompany();
   hideContracts();
   if (game) game.loadMission(c.missionSeed, map, plan);
-  else game = new Game(c.missionSeed, map, finish, plan);
+  else game = new Game(c.missionSeed, map, finish, plan, ledgerNow);
   publish(game);
   console.info('[PMC] 出擊 =', c.mapId, '/ 任務種子 =', c.missionSeed, '/ 首發 =', soldierId);
 }
@@ -105,16 +125,15 @@ function launch(soldierId: string): void {
 /** 任務結束：把結果套用回公司，存檔，回到公司畫面（§4.1）。 */
 function finish(): void {
   if (game && current) {
-    const r = missionResultOf(game.state, {
-      mapName: game.state.map.name,
-      contractCode: current.brief.code,
-    });
-    meta = applyMissionResult(meta, r);
-    // v0.19：撤離帶回來的彈藥併回共用庫存、士兵的攜行量歸零 —— 那個模型是對的，
+    const r = resultNow()!;
+    const settled = settleMission(meta, r);
+    meta = settled.meta;
+    // v0.18 附錄：撤離帶回來的彈藥併回共用庫存、士兵的攜行量歸零 —— 那個模型是對的，
     // 但副作用是每一場之後都要手動把彈藥一發一發按回去。**要省掉的是那個手工。**
     const topped = UI.autoResupplyOnReturn ? resupplyAll(meta) : 0;
-    console.info('[PMC] 結算 =', r.outcome, '陣亡', r.deadIds.length, '帶出', r.extracted.length,
-      topped ? '／自動補給 ' + topped + ' 件' : '');
+    console.info('[PMC] 結算 =', r.outcome, '陣亡', r.deadIds.length,
+      '入帳', settled.ledger.creditsEarned, '損益', settled.ledger.net,
+      '餘額', meta.credits, topped ? '／自動補給 ' + topped + ' 件' : '');
   }
   current = null;
   openCompany();

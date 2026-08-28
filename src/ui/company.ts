@@ -11,12 +11,17 @@
  */
 import type { MetaState, Soldier } from '../core/meta';
 import {
-  assignWeapon, freeAmmo, freeConsumable, grantAmmo, grantConsumable, grantSoldier,
-  grantWeapon, holderOf, moveAmmo, moveConsumable, resolveLoadout, resupplyAll,
-  resupplySoldier, resupplyTarget, supplyBatch, supplyCatalogue, unassignSlot,
+  assignWeapon, freeAmmo, freeConsumable,
+  holderOf, moveAmmo, moveConsumable, resolveLoadout, resupplyAll,
+  resupplySoldier, resupplyTarget, supplyBatch, unassignSlot,
+  buyAmmo, buyConsumable, buySoldier, buyWeapon, sellStock, sellWeapon,
 } from '../core/meta';
 import { allAmmoTypes, ammoLabel, checkKit, kitBreakdown, selectableConsumables } from '../core/loadout';
-import { ITEMS, RULES, WEAPONS } from '../core/content';
+import { BOARD_MAIL, ECONOMY, ITEMS, RULES, WEAPONS } from '../core/content';
+import {
+  ammoPrice, consumablePrice, debtLabel, debtTier, isLegacy, itemPrice, localCatalogue,
+  sellValue, soldierPrice, weaponPrice,
+} from '../core/economy';
 import { fmtWeight } from './hud';
 import { $, esc, show } from './dom';
 
@@ -25,7 +30,10 @@ type View =
   | { kind: 'ARMOURY' }
   | { kind: 'SUPPLY' }
   | { kind: 'KIT'; soldierId: string }
+  | { kind: 'MAIL' }
   | { kind: 'PICK' };
+
+const CR = (n: number): string => (n < 0 ? '−' : '') + Math.abs(n) + ' ' + ECONOMY.currency.short;
 
 export interface CompanyHandlers {
   /** 存檔。每次動到 MetaState 就呼叫（§7.1：只在公司畫面存）。 */
@@ -49,7 +57,7 @@ const weaponName = (meta: MetaState, id: string | null): string => {
 };
 
 /**
- * 補給鍵上的說明（v0.19）：告訴玩家「基準是多少、現在差多少」。
+ * 補給鍵上的說明（v0.18 附錄）：告訴玩家「基準是多少、現在差多少」。
  * 按鈕不會憑空變出東西 —— 不夠就是不夠，那時候要去補給站。
  */
 function resupplyNote(meta: MetaState, s: Soldier): string {
@@ -149,30 +157,105 @@ function stockHtml(meta: MetaState): string {
       : '');
 }
 
-function supplyHtml(): string {
-  const cat = supplyCatalogue();
-  const row = (kind: string, key: string, label: string, note: string): string =>
-    '<button class="l-pick" data-buy="' + kind + '" data-key="' + esc(key) + '">'
-    + '<span class="l-pick-head"><b>' + esc(label) + '</b><i>0</i></span>'
+function supplyHtml(meta: MetaState): string {
+  const row = (kind: string, key: string, label: string, price: number, note: string,
+    disabled = false): string =>
+    '<button class="l-pick" data-buy="' + kind + '" data-key="' + esc(key) + '"'
+    + (disabled ? ' disabled' : '') + '>'
+    + '<span class="l-pick-head"><b>' + esc(label) + '</b><i>' + CR(price) + '</i></span>'
     + '<em>' + esc(note) + '</em></button>';
-  return '<div class="l-warn"><b>暫時性的測試機能。</b>'
-    + '所有價格為 0，因為經濟層還不存在。'
-    + '這個畫面之後會被「合成（長士兵、做土製槍）＋交易（取得遺產武器）」整段取代。</div>'
-    + '<h3 class="l-h">複製人</h3><div class="l-list">'
-    + row('soldier', '-', '徵召一名複製人', '加入名冊，Gen.1，沒有配裝')
-    + '</div>'
-    + '<h3 class="l-h">武器</h3><div class="l-list">'
-    + cat.weapons.map((id) => {
+
+  // ---- 遺產武器：**不是型錄，是現貨** ----
+  const stock = meta.legacyStock.length
+    ? meta.legacyStock.map((id, i) => {
       const w = WEAPONS.find((x) => x.id === id)!;
-      return row('weapon', id, w.name,
-        RULES.calibres[w.calibre].name + '　' + w.action + '　' + fmtWeight(w.weight)
-        + '　每次領取都是一把新的實例');
+      return row('weapon', id, w.name, weaponPrice(id),
+        '現貨 1 件　' + RULES.calibres[w.calibre].name + '　' + w.action
+        + (i === 0 ? '　—— 賣掉就沒了，下一批不保證有同一型' : ''));
     }).join('')
-    + '</div><h3 class="l-h">彈藥</h3><div class="l-list">'
-    + cat.ammo.map((id) => row('ammo', id, ammoLabel(id) + ' ×' + supplyBatch(id),
+    : '<p class="note">本期沒有遺產武器現貨。下一份合約完成後重新調度。</p>';
+
+  const legacyOwned = meta.armoury.filter((w) => !holderOf(meta, w.instanceId));
+  const sellRow = (kind: string, key: string, label: string, price: number, note: string): string =>
+    '<button class="l-pick" data-sell="' + kind + '" data-key="' + esc(key) + '">'
+    + '<span class="l-pick-head"><b>' + esc(label) + '</b><i>+' + CR(price) + '</i></span>'
+    + '<em>' + esc(note) + '</em></button>';
+
+  const sellStockRows = [
+    ...Object.entries(meta.salvage),
+    ...Object.entries(meta.consumableStock),
+    ...Object.entries(meta.ammoStock),
+  ].filter(([, n]) => n > 0).map(([id, n]) => sellRow('stock', id,
+    (ITEMS[id]?.name ?? id) + ' ×' + n, sellValue(itemPrice(id, n)),
+    id === 'DNA' ? '可以賣。**日後另有用途** —— 賣掉之前想清楚。' : '整批賣出'));
+
+  return '<h3 class="l-h">遺產武器（現貨）</h3>'
+    + '<p class="note">撤離前製造的東西**只有流通、沒有生產**。'
+    + '這裡列的是本期調度得到的，不是型錄 —— 買走就沒了。</p>'
+    + '<div class="l-list">' + stock + '</div>'
+
+    + '<h3 class="l-h">土製武器</h3>'
+    + '<p class="note">現在還做得出來的東西，隨時有貨。</p>'
+    + '<div class="l-list">'
+    + localCatalogue().map((id) => {
+      const w = WEAPONS.find((x) => x.id === id)!;
+      return row('weapon', id, w.name, weaponPrice(id),
+        RULES.calibres[w.calibre].name + '　' + w.action + '　' + fmtWeight(w.weight));
+    }).join('')
+    + '</div>'
+
+    + '<h3 class="l-h">複製人</h3>'
+    + '<div class="l-list">'
+    + row('soldier', '-', '徵召一名複製人（B 系）', soldierPrice(),
+      '加入名冊，Gen.1，沒有配裝。這條血脈的樣本庫龐大，隨時有貨。')
+    + '</div>'
+
+    + '<h3 class="l-h">彈藥</h3>'
+    + '<div class="l-list">'
+    + RULES.meta.supply.ammo.map((id) => row('ammo', id,
+      ammoLabel(id) + ' ×' + supplyBatch(id), ammoPrice(id, supplyBatch(id)),
       '進共用庫存')).join('')
-    + '</div><h3 class="l-h">消耗品</h3><div class="l-list">'
-    + cat.consumables.map((id) => row('item', id, ITEMS[id].name, '進共用庫存')).join('')
+    + '</div>'
+
+    + '<h3 class="l-h">消耗品</h3>'
+    + '<div class="l-list">'
+    + selectableConsumables().map((id) => row('item', id, ITEMS[id].name,
+      consumablePrice(id), '進共用庫存')).join('')
+    + '</div>'
+
+    + '<h3 class="l-h">出售</h3>'
+    + '<p class="note">售價是買價的 ' + Math.round(ECONOMY.sellDiscount * 100) + '%。'
+    + '有人拿著的槍不能賣 —— 先在配裝畫面收回來。</p>'
+    + '<div class="l-list">'
+    + (legacyOwned.length
+      ? legacyOwned.map((w) => sellRow('weapon', w.instanceId,
+        w.name + '（' + w.instanceId + '）', sellValue(weaponPrice(w.typeId)),
+        isLegacy(w.typeId) ? '遺產武器 —— 賣掉之後未必買得回來' : '土製，隨時再買得到')).join('')
+      : '<p class="note">沒有未指派的武器。</p>')
+    + (sellStockRows.length ? sellStockRows.join('') : '<p class="note">沒有多餘的物資。</p>')
+    + '</div>';
+}
+
+/**
+ * 董事會信件（v0.20 §4.3）。**信件本身就是後果** —— 這一版不附帶任何實際懲罰。
+ * 文體依世界觀 §12：用最無趣的公文語言，講最荒謬的事。
+ */
+function mailHtml(meta: MetaState): string {
+  const id = meta.mail[0];
+  const letter = id ? BOARD_MAIL[id] : null;
+  if (!letter) {
+    return '<header class="l-top"><h2>信箱</h2></header>'
+      + '<p class="note">沒有待閱讀的信件。</p>'
+      + '<div class="l-actions"><button class="primary" data-back="1">回名冊</button></div>';
+  }
+  return '<header class="l-top"><h2>' + esc(letter.subject) + '</h2>'
+    + '<p class="co-service">' + esc(letter.from) + '</p></header>'
+    + '<div class="c-brief">'
+    + letter.body.map((line) => '<p class="c-field">' + esc(line) + '</p>').join('')
+    + '</div>'
+    + '<div class="l-actions">'
+    + '<button class="primary" data-readmail="' + esc(id) + '">已閱<em>'
+    + (meta.mail.length > 1 ? '還有 ' + (meta.mail.length - 1) + ' 封' : '歸檔') + '</em></button>'
     + '</div>';
 }
 
@@ -299,16 +382,26 @@ export function showCompany(meta: MetaState, h: CompanyHandlers, pick = false): 
         + rosterHtml(meta, true)
         + '<div class="l-actions"><button data-cancel="1">回合約清單</button></div>';
     } else if (v.kind === 'ARMOURY') body = armouryHtml(meta) + stockHtml(meta);
-    else if (v.kind === 'SUPPLY') body = supplyHtml();
+    else if (v.kind === 'SUPPLY') body = supplyHtml(meta);
+    else if (v.kind === 'MAIL') body = mailHtml(meta);
     else body = rosterHtml(meta, false) + stockHtml(meta);
 
-    const tabs = v.kind === 'KIT' || v.kind === 'PICK' ? '' :
+    const tabs = v.kind === 'KIT' || v.kind === 'PICK' || v.kind === 'MAIL' ? '' :
       '<nav class="co-tabs">' + TABS.map((t) =>
         '<button class="' + (t.kind === v.kind ? 'on' : '') + '" data-tab="' + t.kind + '">'
         + t.label + '</button>').join('') + '</nav>';
 
-    const head = v.kind === 'KIT' || v.kind === 'PICK' ? '' :
+    const head = v.kind === 'KIT' || v.kind === 'PICK' || v.kind === 'MAIL' ? '' :
       '<header class="l-top"><h2>公司</h2>'
+      + '<p class="co-credits' + (meta.credits < 0 ? ' bad' : '') + '">'
+      + esc(ECONOMY.currency.name) + '　<b>' + CR(meta.credits) + '</b>'
+      + (meta.credits < 0
+        ? '　<span class="co-debt">' + esc(debtLabel(debtTier(meta.credits) ?? '')) + '</span>'
+        : '')
+      + (meta.mail.length
+        ? '<button class="co-mailbtn" data-mail="1">董事會來信 ' + meta.mail.length + '</button>'
+        : '')
+      + '</p>'
       + '<p class="note">名冊 ' + meta.roster.length + ' 人　軍械庫 ' + meta.armoury.length + ' 把'
       + (meta.missionLog.length
         ? '　上一場：' + esc(meta.missionLog[0].mapName) + ' ' + esc(meta.missionLog[0].outcome)
@@ -316,7 +409,7 @@ export function showCompany(meta: MetaState, h: CompanyHandlers, pick = false): 
         : '　尚未出過勤')
       + '</p></header>';
 
-    const foot = v.kind === 'KIT' || v.kind === 'PICK' ? '' :
+    const foot = v.kind === 'KIT' || v.kind === 'PICK' || v.kind === 'MAIL' ? '' :
       '<div class="l-actions">'
       + '<button class="primary" data-go="1"' + (meta.roster.length === 0 ? ' disabled' : '') + '>'
       + '接合約<em>' + (meta.roster.length === 0 ? '名冊已空' : '進入合約清單') + '</em></button>'
@@ -342,6 +435,12 @@ export function showCompany(meta: MetaState, h: CompanyHandlers, pick = false): 
         });
       });
     };
+    on('button[data-mail]', () => { view = { kind: 'MAIL' }; draw(); });
+    on('button[data-readmail]', (b) => {
+      meta.mail = meta.mail.filter((x) => x !== b.dataset.readmail);
+      view = { kind: 'ROSTER' };
+      dirty();
+    });
     on('button[data-tab]', (b) => {
       view = { kind: b.dataset.tab as 'ROSTER' | 'ARMOURY' | 'SUPPLY' };
       draw();
@@ -394,14 +493,23 @@ export function showCompany(meta: MetaState, h: CompanyHandlers, pick = false): 
       for (const id of Object.keys(sol.loadout.consumables)) moveConsumable(meta, sol.id, id, -99999);
       dirty();
     });
-    // 補給站（全部 0 元）
+    // 補給站（v0.20：真的要錢了）
     on('button[data-buy]', (b) => {
       const key = b.dataset.key!;
       switch (b.dataset.buy) {
-        case 'soldier': grantSoldier(meta); break;
-        case 'weapon': grantWeapon(meta, key); break;
-        case 'ammo': grantAmmo(meta, key, supplyBatch(key)); break;
-        default: grantConsumable(meta, key, 1); break;
+        case 'soldier': buySoldier(meta); break;
+        case 'weapon': buyWeapon(meta, key); break;
+        case 'ammo': buyAmmo(meta, key, supplyBatch(key)); break;
+        default: buyConsumable(meta, key, 1); break;
+      }
+      dirty();
+    });
+    on('button[data-sell]', (b) => {
+      const key = b.dataset.key!;
+      if (b.dataset.sell === 'weapon') sellWeapon(meta, key);
+      else {
+        const n = (meta.salvage[key] ?? meta.consumableStock[key] ?? meta.ammoStock[key]) ?? 0;
+        sellStock(meta, key, n);
       }
       dirty();
     });

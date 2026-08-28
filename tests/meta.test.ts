@@ -213,6 +213,7 @@ describe('§5 把任務結果套用回公司', () => {
   };
   const result = (over: Partial<MissionResult>): MissionResult => ({
     mapName: '測試場', contractCode: '委-TEST', outcome: 'ABORTED', clock: 100,
+    rating: 'C', mainDone: false, secondaryDone: 0, issued: [], issuedWeaponIds: [],
     deployedIds: [], deadIds: [], survivorId: null,
     survivorEquippedId: null, survivorStowedId: null, extracted: [],
     kills: {}, damageTaken: {}, ...over,
@@ -308,7 +309,7 @@ describe('§5 把任務結果套用回公司', () => {
     const plan = makeDeployment(m, m.roster[0].id);
     let st = createInitialState(1, mapById('mission_01')!, plan);
     st = applyCommand(st, { type: 'WAIT' }).state;
-    const r = missionResultOf(st, { mapName: st.map.name, contractCode: '委-X' });
+    const r = missionResultOf(st, { mapName: st.map.name, contractCode: '委-X', rating: 'C' });
     expect(r.deployedIds).toEqual([m.roster[0].id]);
     expect(r.deadIds).toEqual([]);
     expect(r.survivorId).toBeNull();
@@ -343,7 +344,7 @@ describe('§6 暫時補給站（全部 0 元）', () => {
   });
 });
 
-describe('v0.19 自動補給', () => {
+describe('v0.18 附錄：自動補給', () => {
   const armedWith = (typeId: string): { m: MetaState; id: string } => {
     const m = co();
     const s = m.roster[0];
@@ -429,6 +430,7 @@ describe('v0.19 自動補給', () => {
     // 打完一場，帶回來 5 發
     const after = applyMissionResult(m, {
       mapName: '測試場', contractCode: '委-TEST', outcome: 'SUCCESS', clock: 100,
+      rating: 'C', mainDone: true, secondaryDone: 0, issued: [], issuedWeaponIds: [],
       deployedIds: [id], deadIds: [], survivorId: id,
       survivorEquippedId: plan.soldiers.find((d) => d.id === id)!.equipped!.instanceId,
       survivorStowedId: null,

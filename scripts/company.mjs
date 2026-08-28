@@ -81,7 +81,7 @@ const m4 = await meta();
 ok(m4.missionLog.length === 1, '任務紀錄寫進公司：' + JSON.stringify(m4.missionLog[0]));
 ok(m4.armoury.some((w) => w.instanceId === who.gun), '帶出來的槍回到軍械庫，instanceId 不變');
 ok(m4.roster.find((s) => s.id === who.id).serviceRecord.missions === 1, '服役紀錄 +1 次出勤');
-// v0.19：撤離之後彈藥回到共用庫存、士兵身上歸零 —— 自動補給要把他補回去
+// v0.18 附錄：撤離之後彈藥回到共用庫存、士兵身上歸零 —— 自動補給要把他補回去
 const resup = await p.evaluate(() => {
   const m = window.__meta();
   const s = m.roster.find((x) => x.loadout.equippedWeaponId);
