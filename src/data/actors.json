@@ -33,7 +33,7 @@
       "crouchInCover": false
     },
     "loot": [
-      { "defId": "AMMO_RIFLE", "qty": 4, "chance": 1 },
+      { "defId": "AMMO_556", "qty": 4, "chance": 1 },
       { "defId": "SCRAP", "qty": 1, "chance": 0.35 }
     ],
     "attack": {
@@ -46,7 +46,7 @@
       "range": 1,
       "magazine": 99,
       "ammo": 99,
-      "ammoType": "RIFLE",
+      "calibre": "5.56",
       "weight": 0,
       "modes": ["SINGLE"],
       "mode": "SINGLE",
@@ -81,8 +81,8 @@
       "crouchInCover": false
     },
     "loot": [
-      { "defId": "AMMO_RIFLE", "qty": 6, "chance": 1 },
-      { "defId": "AMMO_ROCKET", "qty": 1, "chance": 0.4 },
+      { "defId": "AMMO_556", "qty": 6, "chance": 1 },
+      { "defId": "AMMO_84MM", "qty": 1, "chance": 0.4 },
       { "defId": "CORE", "qty": 1, "chance": 0.5 },
       { "defId": "SEALANT", "qty": 1, "chance": 0.25 }
     ],
@@ -96,7 +96,7 @@
       "range": 1,
       "magazine": 99,
       "ammo": 99,
-      "ammoType": "RIFLE",
+      "calibre": "5.56",
       "weight": 0,
       "modes": ["SINGLE"],
       "mode": "SINGLE",
@@ -131,7 +131,7 @@
       "crouchInCover": true
     },
     "loot": [
-      { "defId": "AMMO_RIFLE", "qty": 6, "chance": 1 },
+      { "defId": "AMMO_556", "qty": 6, "chance": 1 },
       { "defId": "OPTICS", "qty": 1, "chance": 0.3 },
       { "defId": "SEALANT", "qty": 1, "chance": 0.2 }
     ],
@@ -145,7 +145,7 @@
       "range": 7,
       "magazine": 99,
       "ammo": 99,
-      "ammoType": "RIFLE",
+      "calibre": "5.56",
       "weight": 0,
       "modes": ["SINGLE"],
       "mode": "SINGLE",

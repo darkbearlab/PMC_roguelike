@@ -133,8 +133,12 @@
       "label": "棧板上的補給",
       "items": [
         {
-          "defId": "AMMO_RIFLE",
+          "defId": "AMMO_556",
           "qty": 10
+        },
+        {
+          "defId": "AMMO_12GA",
+          "qty": 12
         }
       ]
     },
@@ -150,8 +154,12 @@
           "qty": 2
         },
         {
-          "defId": "AMMO_RIFLE",
+          "defId": "AMMO_556",
           "qty": 6
+        },
+        {
+          "defId": "AMMO_9MM",
+          "qty": 20
         }
       ]
     },
@@ -169,6 +177,10 @@
         {
           "defId": "OPTICS",
           "qty": 1
+        },
+        {
+          "defId": "AMMO_762",
+          "qty": 8
         }
       ]
     }

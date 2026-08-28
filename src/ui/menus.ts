@@ -14,7 +14,7 @@ import { manhattan } from '../core/grid';
 import { describe as describeSequence } from '../core/sequence';
 import { RULES } from '../core/content';
 import {
-  countAmmo, maxWeight, moveCostForWeight, nextTierAt, stackWeight, totalWeight, weightTierIndex,
+  carriedWeight, countAmmo, maxWeight, moveCostForWeight, nextTierAt, stackWeight, weightTierIndex,
 } from '../core/inventory';
 import { esc } from './dom';
 import { fmtWeight, itemText } from './hud';
@@ -47,8 +47,8 @@ type PlayerUnit = NonNullable<ReturnType<typeof activePlayerUnit>>;
 function weaponLine(state: GameState, w: PlayerUnit['equipped']): string {
   if (!w) return '無';
   const u = activePlayerUnit(state);
-  const spare = w.magazine < 99 ? '　備彈 ' + countAmmo(u ? u.backpack : null, w.ammoType) : '';
-  const mode = w.modes.length > 1 ? '　' + RULES.fireModes[w.mode].label + '發' : '';
+  const spare = w.magazine < 99 ? '　備彈 ' + countAmmo(u ? u.backpack : null, w.calibre) : '';
+  const mode = w.modes.length > 1 ? '　' + RULES.fireModes[w.mode].full : '';
   return w.name + ' ' + w.ammo + '/' + w.magazine + spare + mode;
 }
 
@@ -69,7 +69,7 @@ export function selfPanelHtml(state: GameState): string {
     : kind === 'SUPPLY' ? '回收補給箱（次要目標）'
     : kind === 'EXTRACT' ? '撤離（帶著背包走人）' : null;
   const legal = checkLegal(state, { type: 'INTERACT', pos: u.pos });
-  const load = totalWeight(u.backpack);
+  const load = carriedWeight(u);
 
   return head(u.name + '　詳細狀態')
     + '<div class="stat-grid">'
@@ -140,7 +140,7 @@ export function lootPanelHtml(state: GameState, pos: Vec2): string {
   const pile = lootAt(state, pos);
   if (!u || !pile) return '';
   const inReach = manhattan(u.pos, pos) <= 1;
-  const room = maxWeight() - totalWeight(u.backpack);
+  const room = maxWeight() - carriedWeight(u);
 
   let html = head(pile.label);
   if (pile.items.length === 0) {
@@ -222,7 +222,8 @@ export function wireMenu(host: HTMLElement, at: Vec2, h: MenuHandlers): void {
 export function backpackHtml(state: GameState): string {
   const u = activePlayerUnit(state);
   if (!u || !u.backpack) return '';
-  const load = totalWeight(u.backpack);
+  // v0.15：手持與收納的武器也計重，所以背包畫面顯示的是**身上全部**的重量
+  const load = carriedWeight(u);
   const tier = weightTierIndex(load);
   const next = nextTierAt(load);
   const prepared = u.preparedId
@@ -246,6 +247,14 @@ export function backpackHtml(state: GameState): string {
         + moveCostForWeight(next + 1) + '）。'
       : '　已經是最重的級距。')
     + '</p>';
+
+  const guns = (u.equipped ? u.equipped.weight : 0) + (u.stowed ? u.stowed.weight : 0);
+  if (guns > 0) {
+    html += '<p class="note">其中 ' + fmtWeight(guns) + ' 是身上的槍'
+      + (u.equipped ? '（手持 ' + esc(u.equipped.name) + ' ' + fmtWeight(u.equipped.weight) + '）' : '')
+      + (u.stowed ? '（收納 ' + esc(u.stowed.name) + ' ' + fmtWeight(u.stowed.weight) + '）' : '')
+      + '　—— 丟不掉，只能換掉。</p>';
+  }
 
   if (u.backpack.items.length === 0) {
     return html + '<p class="note">背包是空的。</p><div class="menu-actions"></div>';

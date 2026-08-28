@@ -104,7 +104,15 @@ function nextStep(s: GameState, from: Vec2, goal: Vec2): Vec2 | null {
  * v0.10 §8.3：戰術 AI 的效果只能靠對照判斷。
  * 同一支笨機器人、同一組種子，開關關掉與打開各跑一次。
  */
-const SEEDS = [1, 42, 999, 20260826, 7777];
+/**
+ * 固定的五個種子。v0.15 學到的事：**五個種子不夠**。
+ * 同一份數值在這五個上是 4/5，換二十個種子卻是 16/20 ——
+ * 判斷一次改動有沒有造成系統性偏移時，用 `SEEDS=` 換一組大樣本再比。
+ *   SEEDS=1,138,275,412,... npx tsx scripts/botrun.ts
+ */
+const SEEDS = process.env.SEEDS
+  ? process.env.SEEDS.split(',').map(Number)
+  : [1, 42, 999, 20260826, 7777];
 
 function runOne(seed: number, map?: RawMap): {
   seed: number; result: string; clock: number; deployed: number; casualties: number;
@@ -120,11 +128,11 @@ function runOne(seed: number, map?: RawMap): {
   }
   const foes = s.units.filter((u) => u.faction === 'ENEMY').length;
   // 耗彈量：投入的總攜行量減去還在身上的（背包 + 槍內）
-  const start = RULES.backpack.startingItems.find((i) => i.defId === 'AMMO_RIFLE');
+  const start = RULES.backpack.startingItems.find((i) => i.defId === 'AMMO_556');
   const issued = (start ? start.qty : 0) * s.deployed;
   const me = s.units.find((u) => u.faction === 'PLAYER');
   const left = me
-    ? countAmmo(me.backpack, 'RIFLE') + (me.equipped && me.equipped.ammoType === 'RIFLE' ? me.equipped.ammo : 0)
+    ? countAmmo(me.backpack, '5.56') + (me.equipped && me.equipped.calibre === '5.56' ? me.equipped.ammo : 0)
     : 0;
   return {
     seed,

@@ -54,7 +54,16 @@ export function effectiveMode(w: Weapon): FireMode {
     if (!w.modes.includes(m)) continue;
     if (RULES.fireModes[m].shots <= w.ammo) return m;
   }
-  return 'SINGLE';
+  // 全部都撐不住的時候，退到這把槍**自己**最省彈的模式。
+  // v0.15 起有些武器根本沒有單發（LMG-5 只有點放與連發），
+  // 所以這裡不能寫死 SINGLE —— 那會顯示一個它沒有的模式。
+  return cheapestMode(w);
+}
+
+/** 這把槍最省彈的可用模式。order 由左而右耗彈遞增，所以取第一個命中的。 */
+export function cheapestMode(w: Weapon): FireMode {
+  for (const m of RULES.fireModes.order) if (w.modes.includes(m)) return m;
+  return w.mode;
 }
 
 /** 這次開火會打幾發（§2.1）。 */

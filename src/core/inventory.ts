@@ -7,7 +7,7 @@
  * 背包是「你死掉會留在戰場上的東西」（§3.3），所以它同時是負重系統
  * 與死亡懲罰的載體：背得越多走得越慢，走得越慢越容易死，死了全部留在原地。
  */
-import type { AmmoType, Backpack, GameState, Item, ItemKind, Unit, Weapon } from './state';
+import type { Backpack, Calibre, GameState, Item, ItemKind, Unit, Weapon } from './state';
 import { ITEMS, RULES } from './content';
 
 export function emptyBackpack(): Backpack {
@@ -24,7 +24,21 @@ export function totalWeight(bag: Backpack | null): number {
   return bag.items.reduce((a, it) => a + stackWeight(it), 0);
 }
 
-/** 背包重量上限（§3.2）。超過就撿不起來。 */
+/**
+ * 這個單位身上的**全部**重量：背包 + 手持 + 收納（v0.15 §4.3）。
+ *
+ * v0.14 以前手持與收納的武器不計重，於是「多帶一把槍」是完全免費的 ——
+ * 那樣的話出擊前配裝畫面就沒有取捨可言，只剩「全都帶」。
+ * 負重級距與背包上限現在都看這個數字。
+ */
+export function carriedWeight(u: Unit | null): number {
+  if (!u) return 0;
+  return totalWeight(u.backpack)
+    + (u.equipped ? u.equipped.weight : 0)
+    + (u.stowed ? u.stowed.weight : 0);
+}
+
+/** 攜行重量上限（§3.2）。超過就撿不起來。含手持與收納的武器（v0.15）。 */
 export function maxWeight(): number {
   return RULES.backpack.maxWeight;
 }
@@ -44,7 +58,7 @@ export function moveCostForWeight(w: number): number {
 /** 這個單位移動一格實際要花的時間。沒有背包（敵人）就用原型的值。 */
 export function effectiveMoveTime(u: Unit): number {
   if (!u.backpack) return u.moveTime;
-  return moveCostForWeight(totalWeight(u.backpack));
+  return moveCostForWeight(carriedWeight(u));
 }
 
 /** 目前落在第幾級（0 起算），供 UI 顯示「再撿多少就會變慢」。 */
@@ -77,7 +91,7 @@ export function makeItem(state: GameState, defId: string, qty = 1): Item {
     weight: def.weight,
     qty,
   };
-  if (def.ammoType) it.ammoType = def.ammoType as AmmoType;
+  if (def.calibre) it.calibre = def.calibre as Calibre;
   if (def.value !== undefined) it.value = def.value;
   return it;
 }
@@ -113,16 +127,16 @@ export function addItem(bag: Backpack, item: Item): void {
 }
 
 /** 撿得下嗎（§3.2）。超過上限就撿不起來，不是「撿起來但走不動」。 */
-export function canCarry(bag: Backpack | null, item: Item): boolean {
-  if (!bag) return false;
-  return totalWeight(bag) + stackWeight(item) <= maxWeight();
+export function canCarry(u: Unit | null, item: Item): boolean {
+  if (!u || !u.backpack) return false;
+  return carriedWeight(u) + stackWeight(item) <= maxWeight();
 }
 
 /** 在重量上限內最多能拿幾個。用於「全部拿走」的部分拾取（§4.3）。 */
-export function affordableQty(bag: Backpack | null, item: Item): number {
-  if (!bag) return 0;
+export function affordableQty(u: Unit | null, item: Item): number {
+  if (!u || !u.backpack) return 0;
   if (item.weight <= 0) return item.qty;
-  const room = maxWeight() - totalWeight(bag);
+  const room = maxWeight() - carriedWeight(u);
   return Math.max(0, Math.min(item.qty, Math.floor(room / item.weight)));
 }
 
@@ -130,10 +144,10 @@ export function affordableQty(bag: Backpack | null, item: Item): number {
 // 彈藥
 // ============================================================================
 
-export function countAmmo(bag: Backpack | null, type: AmmoType): number {
+export function countAmmo(bag: Backpack | null, calibre: Calibre): number {
   if (!bag) return 0;
   return bag.items
-    .filter((it) => it.kind === 'AMMO' && it.ammoType === type)
+    .filter((it) => it.kind === 'AMMO' && it.calibre === calibre)
     .reduce((a, it) => a + it.qty, 0);
 }
 
@@ -141,12 +155,12 @@ export function countAmmo(bag: Backpack | null, type: AmmoType): number {
  * 從背包扣彈藥，回傳**實際扣掉的數量**。
  * 背包不足時就扣多少算多少（§1.1：裝填時補多少算多少）。
  */
-export function takeAmmo(bag: Backpack | null, type: AmmoType, want: number): number {
+export function takeAmmo(bag: Backpack | null, calibre: Calibre, want: number): number {
   if (!bag || want <= 0) return 0;
   let left = want;
   for (const it of bag.items) {
     if (left <= 0) break;
-    if (it.kind !== 'AMMO' || it.ammoType !== type) continue;
+    if (it.kind !== 'AMMO' || it.calibre !== calibre) continue;
     const n = Math.min(it.qty, left);
     it.qty -= n;
     left -= n;

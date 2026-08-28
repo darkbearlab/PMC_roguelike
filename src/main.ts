@@ -8,6 +8,9 @@ import { generateContracts } from './core/contracts';
 import type { Contract } from './core/contracts';
 import type { RawMap } from './core/map';
 import { hideContracts, showContracts } from './ui/contracts';
+import type { Loadout } from './core/loadout';
+import { defaultLoadout } from './core/loadout';
+import { hideLoadout, showLoadout } from './ui/loadout';
 
 /**
  * §14：rngSeed 可從網址參數覆寫（?seed=12345），方便重現 bug。
@@ -27,7 +30,8 @@ function readSeed(): number {
 
 /**
  * `?map=<id>` 指定地圖，方便針對單張圖除錯（§13.2）。
- * **它同時略過合約清單**（§18.1）—— 除錯與機器人基準都走這條路。
+ * **它同時略過合約清單與配裝畫面**（§18.1 / §19.1）——
+ * 除錯與機器人基準都走這條路，配裝一律用預設值。
  */
 function readMap(): RawMap | null {
   const raw = new URLSearchParams(location.search).get('map');
@@ -53,25 +57,46 @@ const listRng = createRng(seed);
 
 let game: Game | null = null;
 
+/**
+ * 「沿用上次」（§19.5）。沒有持久化，所以它只在本次遊玩期間有效 ——
+ * 重新整理就回到預設配裝。
+ */
+let lastLoadout: Loadout = defaultLoadout();
+
 function backToList(): void {
   openList();
 }
 
-function startMission(mapId: string, missionSeed: number): void {
+function startMission(mapId: string, missionSeed: number, loadout: Loadout): void {
   const map = mapById(mapId);
   if (!map) throw new Error('合約指向不存在的地圖 ' + mapId);
+  lastLoadout = loadout;
   hideContracts();
-  if (game) game.loadMission(missionSeed, map);
-  else game = new Game(missionSeed, map, backToList);
+  hideLoadout();
+  if (game) game.loadMission(missionSeed, map, loadout);
+  else game = new Game(missionSeed, map, backToList, loadout);
   publish(game);
   console.info('[PMC] 出擊 =', mapId, '/ 任務種子 =', missionSeed,
-    '（用 ?seed=' + missionSeed + '&map=' + mapId + ' 直接重現這一場）');
+    '/ 配裝 =', loadout.primary, '+', loadout.stowed,
+    '（用 ?seed=' + missionSeed + '&map=' + mapId + ' 以預設配裝重現這張圖）');
+}
+
+/** 合約清單 → 配裝 → 任務（§19.1）。配裝畫面可以退回清單，選錯合約不必重開。 */
+function openLoadout(c: Contract): void {
+  hideContracts();
+  showLoadout(
+    c,
+    lastLoadout,
+    (l) => startMission(c.mapId, c.missionSeed, l),
+    () => { hideLoadout(); openList(); },
+  );
 }
 
 function openList(): void {
+  hideLoadout();
   const list = generateContracts(listRng);
   console.info('[PMC] 合約清單 =', list.map((c: Contract) => c.mapId).join(', '));
-  showContracts(list, (c) => startMission(c.mapId, c.missionSeed));
+  showContracts(list, openLoadout);
 }
 
 function publish(g: Game): void {
@@ -91,8 +116,8 @@ function publish(g: Game): void {
 }
 
 if (forcedMap) {
-  // 除錯／機器人：略過清單，行為與 v0.13 完全相同。
-  game = new Game(seed, forcedMap);
+  // 除錯／機器人：略過清單與配裝，配裝用預設值。
+  game = new Game(seed, forcedMap, null, defaultLoadout());
   publish(game);
 } else {
   openList();
@@ -105,4 +130,5 @@ Object.assign(window as unknown as Record<string, unknown>, {
   /** 測試與除錯用：直接開一份合約，不必點畫面。 */
   __openList: openList,
   __start: startMission,
+  __defaultLoadout: defaultLoadout,
 });

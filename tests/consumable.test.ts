@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { checkLegal, findBagItem } from '../src/core/commands';
 import { interruptOf, sequenceDef, totalTime } from '../src/core/sequence';
 import { ITEMS, RULES } from '../src/core/content';
-import { totalWeight } from '../src/core/inventory';
+import { carriedWeight, effectiveMoveTime, totalWeight } from '../src/core/inventory';
 import { lootAt } from '../src/core/state';
 import { advanceToPlayer, freezeCombat, player, run, testState, thawCombat } from './helpers';
 
@@ -43,7 +43,7 @@ describe('§4 戰地封合劑：慢、不完全、稀有', () => {
   it('資料驅動：定義全部在 items.json 裡', () => {
     const def = ITEMS.SEALANT;
     expect(def.kind).toBe('CONSUMABLE');
-    expect(def.weight).toBe(5);
+    expect(def.weight).toBe(2);   // v0.15：依 §4.1 的換算尺，急救包 1 kg = 2
     expect(def.use!.sequenceType).toBe('RESTART');
     expect(def.use!.steps).toHaveLength(2);
     expect(totalTime('SEALANT')).toBe(40);
@@ -113,7 +113,7 @@ describe('§12.19 準備欄', () => {
     let s = testState(OPEN);
     const bag = player(s).backpack!;
     bag.items.push({
-      id: 'SEC', kind: 'CONSUMABLE', defId: 'SEALANT', name: '戰地封合劑', weight: 5, qty: 1,
+      id: 'SEC', kind: 'CONSUMABLE', defId: 'SEALANT', name: '戰地封合劑', weight: 2, qty: 1,
     });
     s = run(s, { type: 'PREPARE', itemId: sealantOf(s).id });
     const first = player(s).preparedId;
@@ -246,7 +246,7 @@ describe('§12.20 丟棄', () => {
     const before = totalWeight(player(s).backpack);
     s = run(s, { type: 'DROP', itemId: it.id });
     expect(player(s).nextActAt).toBe(0);                 // 不花時間
-    expect(totalWeight(player(s).backpack)).toBe(before - 5);
+    expect(totalWeight(player(s).backpack)).toBeCloseTo(before - 2, 3);
     const pile = lootAt(s, player(s).pos);
     expect(pile).not.toBeNull();
     expect(pile!.items.some((x) => x.defId === 'SEALANT')).toBe(true);
@@ -254,9 +254,15 @@ describe('§12.20 丟棄', () => {
 
   it('丟掉負重就真的變輕：移動時間跟著回到基準', () => {
     let s = testState(OPEN);
-    expect(totalWeight(player(s).backpack)).toBe(23);
-    s = run(s, { type: 'DROP', itemId: sealantOf(s).id });
-    expect(totalWeight(player(s).backpack)).toBe(18);
+    // v0.15：門檻是 55，預設配裝只有 41.6 —— 光丟封合劑改變不了級距，
+    // 所以先壓上一塊壓艙物把自己壓到第二級，再丟掉它。
+    const p = player(s);
+    p.backpack!.items.push({
+      id: 'Z', kind: 'VALUABLE', defId: 'BALLAST', name: '壓艙物', weight: 20, qty: 1,
+    });
+    expect(effectiveMoveTime(player(s))).toBe(12);
+    s = run(s, { type: 'DROP', itemId: 'Z' });
+    expect(carriedWeight(player(s))).toBeCloseTo(41.576, 3);
     s = run(s, { type: 'MOVE', dir: 'E' });
     expect(player(s).nextActAt).toBe(10);                // 卸下之後回到基準速度
   });

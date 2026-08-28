@@ -67,8 +67,8 @@ set(m, 16, 11, 'L');     // 搜刮點：中央池底，進去要暴露
 set(m, 29, 11, 'L');     // 搜刮點：東側掩體線旁
 
 const caches = [
-  { pos: { x: 16, y: 11 }, label: '沉澱池底沉積物', items: [{ defId: 'CORE', qty: 1 }, { defId: 'SCRAP', qty: 2 }] },
-  { pos: { x: 29, y: 11 }, label: '棄置的彈藥箱', items: [{ defId: 'AMMO_RIFLE', qty: 12 }, { defId: 'SEALANT', qty: 1 }] },
+  { pos: { x: 16, y: 11 }, label: '沉澱池底沉積物', items: [{ defId: 'CORE', qty: 1 }, { defId: 'SCRAP', qty: 2 }, { defId: 'AMMO_84MM', qty: 1 }] },
+  { pos: { x: 29, y: 11 }, label: '棄置的彈藥箱', items: [{ defId: 'AMMO_556', qty: 12 }, { defId: 'AMMO_762', qty: 10 }, { defId: 'SEALANT', qty: 1 }] },
 ];
 
 // SHOOTER 為主（射程 7、視野 12）：開闊地讓它們在玩家還打不到的距離外開火。

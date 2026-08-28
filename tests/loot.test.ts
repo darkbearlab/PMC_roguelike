@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { checkLegal } from '../src/core/commands';
 import {
-  countAmmo, effectiveMoveTime, maxWeight, moveCostForWeight, nextTierAt, totalWeight,
+  carriedWeight, countAmmo, effectiveMoveTime, maxWeight, moveCostForWeight, nextTierAt, totalWeight,
 } from '../src/core/inventory';
 import { RULES } from '../src/core/content';
 import { lootAt } from '../src/core/state';
@@ -24,41 +24,50 @@ const ROOM = [
 const bagOf = (s: ReturnType<typeof testState>) => player(s).backpack!;
 
 describe('§3.2 負重分級', () => {
-  it('分級表來自資料檔，上限 50', () => {
-    expect(maxWeight()).toBe(50);
+  it('分級表來自資料檔，上限 100（v0.15 的換算尺）', () => {
+    expect(maxWeight()).toBe(100);
     expect(RULES.backpack.weightTiers.map((t) => [t.maxWeight, t.moveCost]))
-      .toEqual([[30, 10], [40, 12], [50, 14]]);
+      .toEqual([[55, 10], [78, 12], [100, 14]]);
   });
 
-  it('初始配備仍然落在基準速度內，但餘裕不多', () => {
+  it('v0.15：手持與收納的武器也計入負重', () => {
     const s = testState(ROOM);
-    const w = totalWeight(bagOf(s));
-    expect(w).toBe(23);                       // 24×0.5 + 2×3 + 封合劑 5
-    expect(moveCostForWeight(w)).toBe(10);    // 第一級放寬到 30 之後仍是基準速度
+    const p = player(s);
+    // 背包裡只有彈藥與封合劑
+    expect(totalWeight(p.backpack)).toBeCloseTo(24 * 0.024 + 2 * 6 + 2, 3);
+    // 身上的兩把槍（AR-9 7 + RR-4 20）以前是免費的，現在不是
+    expect(carriedWeight(p)).toBeCloseTo(totalWeight(p.backpack) + 27, 3);
+  });
+
+  it('預設配裝落在基準速度內，且留有餘裕（§4.3）', () => {
+    const s = testState(ROOM);
+    const w = carriedWeight(player(s));
+    expect(w).toBeCloseTo(41.576, 3);         // AR-9 7 + RR-4 20 + 5.56×24 + 84mm×2 + 封合劑 2
+    expect(moveCostForWeight(w)).toBe(10);
     expect(effectiveMoveTime(player(s))).toBe(10);
-    // 但只剩 7 的餘裕：撿一個動力核心（6）就快要掉級了
-    expect(nextTierAt(w)).toBe(30);
-    expect(moveCostForWeight(31)).toBe(12);
+    // 餘裕約 13：撿兩個動力核心（各 6）就會掉級
+    expect(nextTierAt(w)).toBe(55);
+    expect(moveCostForWeight(56)).toBe(12);
   });
 
   it('跨過門檻移動時間就變慢', () => {
     const s = testState(ROOM);
-    expect(moveCostForWeight(30)).toBe(10);
-    expect(moveCostForWeight(31)).toBe(12);
-    expect(moveCostForWeight(40)).toBe(12);
-    expect(moveCostForWeight(41)).toBe(14);
+    expect(moveCostForWeight(55)).toBe(10);
+    expect(moveCostForWeight(56)).toBe(12);
+    expect(moveCostForWeight(78)).toBe(12);
+    expect(moveCostForWeight(79)).toBe(14);
     const p = player(s);
     p.backpack!.items.push({
-      id: 'X', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 2,
+      id: 'X', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 3,
     });
-    expect(totalWeight(p.backpack)).toBe(35);
+    expect(carriedWeight(p)).toBeCloseTo(59.576, 3);
     expect(effectiveMoveTime(p)).toBe(12);
   });
 
   it('負重真的讓移動變慢，不只是顯示', () => {
     let s = testState(ROOM);
     player(s).backpack!.items.push({
-      id: 'X', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 2,
+      id: 'X', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 3,
     });
     s = run(s, { type: 'MOVE', dir: 'E' });
     expect(player(s).nextActAt).toBe(12);
@@ -98,7 +107,7 @@ describe('§4.2 敵人死亡留下可搜刮的屍體', () => {
   it('掉落表照序抽值，必掉的一定在', () => {
     const s = killRunner();
     const pile = lootAt(s, { x: 5, y: 1 })!;
-    expect(pile.items.some((it) => it.defId === 'AMMO_RIFLE')).toBe(true);
+    expect(pile.items.some((it) => it.defId === 'AMMO_556')).toBe(true);
   });
 });
 
@@ -113,8 +122,8 @@ describe('§3.3 / §4.4 己方屍體帶著全部家當與一份 DNA', () => {
     const s = die();
     const pile = s.loot.find((c) => c.kind === 'PLAYER_BODY')!;
     expect(weaponIds(pile).sort()).toEqual(['ar9', 'rr4']);
-    expect(pile.items.some((it) => it.defId === 'AMMO_RIFLE')).toBe(true);
-    expect(pile.items.some((it) => it.defId === 'AMMO_ROCKET')).toBe(true);
+    expect(pile.items.some((it) => it.defId === 'AMMO_556')).toBe(true);
+    expect(pile.items.some((it) => it.defId === 'AMMO_84MM')).toBe(true);
     expect(pile.items.filter((it) => it.kind === 'DNA')).toHaveLength(1);
   });
 });
@@ -125,7 +134,7 @@ describe('§4.3 搜刮操作', () => {
     s.loot.push({
       id: 'LX', kind: 'CACHE', pos: { x: 2, y: 1 }, label: '測試箱',
       items: [
-        { id: 'A', kind: 'AMMO', defId: 'AMMO_RIFLE', name: '步槍彈', weight: 0.5, qty: 8, ammoType: 'RIFLE' },
+        { id: 'A', kind: 'AMMO', defId: 'AMMO_556', name: '5.56 步槍彈', weight: 0.024, qty: 8, calibre: '5.56' },
         { id: 'B', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 1, value: 5 },
       ],
     });
@@ -134,9 +143,9 @@ describe('§4.3 搜刮操作', () => {
 
   it('拿一項花 10 時間，東西進背包、離開那一堆', () => {
     let s = withCache();
-    const before = countAmmo(bagOf(s), 'RIFLE');
+    const before = countAmmo(bagOf(s), '5.56');
     s = run(s, { type: 'PICKUP', lootId: 'LX', itemIndex: 0 });
-    expect(countAmmo(bagOf(s), 'RIFLE')).toBe(before + 8);
+    expect(countAmmo(bagOf(s), '5.56')).toBe(before + 8);
     expect(lootAt(s, { x: 2, y: 1 })!.items).toHaveLength(1);
     expect(player(s).nextActAt).toBe(RULES.loot.takeTime);
   });
@@ -162,11 +171,11 @@ describe('§4.3 搜刮操作', () => {
 
   it('超重就撿不起來 —— 沒有負重代價的話，最優解就是把地圖搬空', () => {
     const s = withCache();
-    // 先把背包塞到接近上限
+    // 先把身上塞到接近上限（v0.15：上限算的是**身上全部**，含兩把槍的 27）
     player(s).backpack!.items.push({
-      id: 'Z', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 5,
+      id: 'Z', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 10,
     });
-    expect(totalWeight(bagOf(s))).toBe(53);
+    expect(carriedWeight(player(s))).toBeCloseTo(101.576, 3);
     const legal = checkLegal(s, { type: 'PICKUP', lootId: 'LX', itemIndex: 1 });   // 6 重
     expect(legal.ok).toBe(false);
     expect(legal.reason).toContain('背包裝不下');
@@ -174,16 +183,19 @@ describe('§4.3 搜刮操作', () => {
 
   it('全部拿走在超重時盡可能拿（可堆疊的拿得下的部分）', () => {
     let s = withCache();
-    player(s).backpack!.items = player(s).backpack!.items.filter((i) => i.defId !== 'SEALANT');
-    player(s).backpack!.items.push({
-      id: 'Z', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 5,
+    const p = player(s);
+    p.backpack!.items = p.backpack!.items.filter((i) => i.defId !== 'SEALANT');
+    // 湊到只剩 2 的餘裕
+    const room = maxWeight() - carriedWeight(p) - 2;
+    p.backpack!.items.push({
+      id: 'Z', kind: 'VALUABLE', defId: 'BALLAST', name: '壓艙物', weight: room, qty: 1,
     });
-    expect(maxWeight() - totalWeight(bagOf(s))).toBe(2);   // 只剩 2 重量
+    expect(maxWeight() - carriedWeight(p)).toBeCloseTo(2, 3);
     s = run(s, { type: 'TAKE_ALL', lootId: 'LX' });
-    // 動力核心（6）拿不動，步槍彈（每發 0.5）拿了 4 發
+    // 動力核心（6）拿不動，5.56（每發 0.024）八發只有 0.192，全部拿得走
     const left = lootAt(s, { x: 2, y: 1 })!;
     expect(left.items.some((it) => it.defId === 'CORE')).toBe(true);
-    expect(totalWeight(bagOf(s))).toBe(maxWeight());
+    expect(left.items.some((it) => it.defId === 'AMMO_556')).toBe(false);
   });
 });
 
@@ -194,11 +206,13 @@ describe('§4.3 全部拿走的邊界', () => {
       id: 'LY', kind: 'CACHE', pos: { x: 2, y: 1 }, label: '重物箱',
       items: [{ id: 'H', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 1 }],
     });
-    player(s).backpack!.items = player(s).backpack!.items.filter((i) => i.defId !== 'SEALANT');
-    player(s).backpack!.items.push({
-      id: 'Z', kind: 'VALUABLE', defId: 'CORE', name: '動力核心', weight: 6, qty: 5,
+    const p = player(s);
+    p.backpack!.items = p.backpack!.items.filter((i) => i.defId !== 'SEALANT');
+    const room = maxWeight() - carriedWeight(p) - 2;
+    p.backpack!.items.push({
+      id: 'Z', kind: 'VALUABLE', defId: 'BALLAST', name: '壓艙物', weight: room, qty: 1,
     });
-    expect(maxWeight() - totalWeight(bagOf(s))).toBe(2);
+    expect(maxWeight() - carriedWeight(p)).toBeCloseTo(2, 3);
     const legal = checkLegal(s, { type: 'TAKE_ALL', lootId: 'LY' });
     expect(legal.ok).toBe(false);
     expect(legal.reason).toContain('一件都裝不下');

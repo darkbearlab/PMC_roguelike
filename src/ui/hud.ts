@@ -3,7 +3,7 @@ import type { GameState, Item } from '../core/state';
 import { abandonedItems, activePlayerUnit, enemies } from '../core/state';
 import { COVER_LABEL, playerDefence } from '../core/cover';
 import {
-  countAmmo, maxWeight, moveCostForWeight, totalWeight, weightTierIndex,
+  carriedWeight, countAmmo, maxWeight, moveCostForWeight, weightTierIndex,
 } from '../core/inventory';
 import { $, esc } from './dom';
 
@@ -40,11 +40,11 @@ export function renderHud(state: GameState): void {
   // 斜線後面是**背包裡的備彈**（§1.1）—— 槍內剩幾發只是一半的資訊。
   $('#hud-weapon').textContent = w
     ? `${shortName(w.name)} ${w.ammo}/${w.magazine}`
-      + (w.magazine < 99 ? `｜備 ${countAmmo(u!.backpack, w.ammoType)}` : '')
+      + (w.magazine < 99 ? `｜備 ${countAmmo(u!.backpack, w.calibre)}` : '')
     : '空手';
 
   // 負重（§3.2）：玩家要看得出「再撿就會變慢」
-  const load = totalWeight(u ? u.backpack : null);
+  const load = carriedWeight(u);
   const tier = weightTierIndex(load);
   // 移動時間只有在「不是基準值」時才值得佔位 —— 沒被拖慢就不用一直報。
   $('#hud-load').textContent = !u ? '負重 —'

@@ -154,11 +154,29 @@ const readable = await p.evaluate(() => {
   };
 });
 console.log(readable.hasBrief ? `✅ 合約簡報可展開並捲動（可捲動 = ${readable.scrollable}）` : '❌ 展開後沒有簡報');
-// 出擊 → 回到戰鬥畫面
+// 出擊 → 配裝畫面（§19）
 await p.locator('.c-card.open button[data-go]').click();
+await p.waitForTimeout(300);
+if (await p.locator('.l-pick').count() === 0) {
+  console.log('❌ 配裝畫面沒有出現');
+  process.exitCode = 1;
+}
+results.push(await audit('配裝畫面'));
+// 換一把重的，重量列要跟著變
+const before = await p.locator('.l-weight').innerText();
+await p.locator('button[data-slot="primary"][data-id="lmg5"]').click();
+await p.waitForTimeout(150);
+const after = await p.locator('.l-weight').innerText();
+console.log(before !== after ? '✅ 配裝重量列即時更新' : '❌ 換武器之後重量列沒變');
+if (before === after) process.exitCode = 1;
+await p.locator('button[data-reset]').click();
+await p.waitForTimeout(150);
+// 出擊
+await p.locator('button[data-go]').click();
 await p.waitForTimeout(400);
 const started = await p.evaluate(() => ({
-  hidden: document.querySelector('#contract-root').classList.contains('hidden'),
+  hidden: document.querySelector('#contract-root').classList.contains('hidden')
+    && document.querySelector('#loadout-root').classList.contains('hidden'),
   map: window.__game && window.__game.state.map.id,
 }));
 console.log(started.hidden && started.map

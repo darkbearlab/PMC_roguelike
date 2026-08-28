@@ -66,9 +66,9 @@ set(m, 19, 18, 'L');
 set(m, 29, 5, 'L');      // 辦公室裡
 
 const caches = [
-  { pos: { x: 7, y: 11 }, label: '棧板上的補給', items: [{ defId: 'AMMO_RIFLE', qty: 10 }] },
-  { pos: { x: 19, y: 18 }, label: '翻倒的板條箱', items: [{ defId: 'SCRAP', qty: 2 }, { defId: 'AMMO_RIFLE', qty: 6 }] },
-  { pos: { x: 29, y: 5 }, label: '主管辦公室', items: [{ defId: 'CORE', qty: 1 }, { defId: 'OPTICS', qty: 1 }] },
+  { pos: { x: 7, y: 11 }, label: '棧板上的補給', items: [{ defId: 'AMMO_556', qty: 10 }, { defId: 'AMMO_12GA', qty: 12 }] },
+  { pos: { x: 19, y: 18 }, label: '翻倒的板條箱', items: [{ defId: 'SCRAP', qty: 2 }, { defId: 'AMMO_556', qty: 6 }, { defId: 'AMMO_9MM', qty: 20 }] },
+  { pos: { x: 29, y: 5 }, label: '主管辦公室', items: [{ defId: 'CORE', qty: 1 }, { defId: 'OPTICS', qty: 1 }, { defId: 'AMMO_762', qty: 8 }] },
 ];
 
 // 面向沿著走道（南北）或跨走道（東西）：兩種都有，才看得出繞側翼有沒有用。

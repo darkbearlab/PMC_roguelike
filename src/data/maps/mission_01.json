@@ -133,8 +133,12 @@
       "label": "彈藥箱",
       "items": [
         {
-          "defId": "AMMO_RIFLE",
+          "defId": "AMMO_556",
           "qty": 12
+        },
+        {
+          "defId": "AMMO_9MM",
+          "qty": 15
         }
       ]
     },
@@ -150,8 +154,12 @@
           "qty": 2
         },
         {
-          "defId": "AMMO_RIFLE",
+          "defId": "AMMO_556",
           "qty": 8
+        },
+        {
+          "defId": "AMMO_762",
+          "qty": 6
         }
       ]
     },
@@ -176,8 +184,12 @@
       "label": "軍械箱",
       "items": [
         {
-          "defId": "AMMO_ROCKET",
+          "defId": "AMMO_84MM",
           "qty": 2
+        },
+        {
+          "defId": "AMMO_12GA",
+          "qty": 8
         },
         {
           "defId": "CORE",

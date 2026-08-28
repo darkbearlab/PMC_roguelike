@@ -74,8 +74,8 @@ set(m, 18, 5, 'L');      // 搜刮點：B 中央檢修室
 set(m, 6, 16, 'L');      // 搜刮點：D 閥室
 
 const caches = [
-  { pos: { x: 18, y: 5 }, label: '管線工具箱', items: [{ defId: 'AMMO_RIFLE', qty: 10 }] },
-  { pos: { x: 6, y: 16 }, label: '維修備品櫃', items: [{ defId: 'OPTICS', qty: 1 }, { defId: 'SEALANT', qty: 1 }] },
+  { pos: { x: 18, y: 5 }, label: '管線工具箱', items: [{ defId: 'AMMO_556', qty: 10 }, { defId: 'AMMO_12GA', qty: 10 }] },
+  { pos: { x: 6, y: 16 }, label: '維修備品櫃', items: [{ defId: 'OPTICS', qty: 1 }, { defId: 'SEALANT', qty: 1 }, { defId: 'AMMO_9MM', qty: 20 }] },
 ];
 
 // 兩格寬的主幹讓一隻敵人塞不死通路，所以守衛可以站在管廊裡而不只是房間。

@@ -14,7 +14,7 @@ import mission02Json from '../data/maps/mission_02.json';
 import mission03Json from '../data/maps/mission_03.json';
 import mission04Json from '../data/maps/mission_04.json';
 
-import type { FireMode, Weapon, WeaponClass } from './state';
+import type { Calibre, FireMode, Weapon, WeaponClass } from './state';
 import type { MapStats, RawMap } from './map';
 import type { ContractBrief } from './contracts';
 
@@ -42,9 +42,26 @@ export interface Rules {
     startingItems: { defId: string; qty: number }[];
     reinforcementItems: { defId: string; qty: number }[];
   };
-  /** §2 射擊模式。三種時間花費相同，差別在耗彈與命中。 */
-  fireModes: Record<FireMode, { label: string; shots: number; accuracy: number }>
+  /**
+   * §1 口徑（v0.15）。口徑是獨立的資料實體，武器以 `calibre` 引用它 ——
+   * 新增武器只要指定口徑，就自動與既有彈藥相容。
+   */
+  calibres: Record<Calibre, { name: string; weightPerRound: number; itemId: string }>;
+  /** §2 射擊模式。時間花費相同，差別在耗彈與命中。 */
+  fireModes: Record<FireMode, { label: string; full: string; shots: number; accuracy: number }>
     & { order: FireMode[] };
+  /** §5 出擊前配裝（v0.15）。可選內容由 weapons/items/calibres 推導，這裡只有預設值與介面參數。 */
+  loadout: {
+    default: {
+      primary: string | null;
+      stowed: string | null;
+      ammo: Partial<Record<Calibre, number>>;
+      consumables: Record<string, number>;
+    };
+    ammoStep: Record<Calibre, number>;
+    ammoMax: number;
+    consumableMax: number;
+  };
   /** §4 搜刮。 */
   loot: { takeTime: number; dnaDefId: string };
   /** §13.5 地圖驗證的門檻。現在防手滑，將來是程序化拼接的約束條件。 */
@@ -115,7 +132,7 @@ export interface ItemDef {
   name: string;
   kind: string;
   weight: number;
-  ammoType?: string;
+  calibre?: string;
   value?: number;
   /**
    * 消耗品的使用方式（§4）。資料驅動：新增品項只要改 items.json。

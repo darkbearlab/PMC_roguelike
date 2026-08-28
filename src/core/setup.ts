@@ -7,6 +7,8 @@ import { parseMap, findTiles } from './map';
 import { createRng, nextFloat } from './rng';
 import { ACTORS, MAPS, RULES, archetype, cloneWeapon, weaponById } from './content';
 import { addItem, emptyBackpack, makeItem } from './inventory';
+import type { Loadout } from './loadout';
+import { defaultLoadout, equipFromLoadout } from './loadout';
 
 function makeUnit(
   archetypeId: string,
@@ -63,14 +65,21 @@ function fillBackpack(
   return bag;
 }
 
-/** 首發士兵：手持 AR-9（滿彈），收納 RR-4（滿彈），背包帶初始彈藥（§8.4 / §1.2）。 */
+/**
+ * 首發士兵。v0.15 起武器與背包內容都來自**出擊前配裝**（§5）；
+ * 沒有指定就用預設配裝，也就是 v0.14 以前那組 AR-9 + RR-4。
+ *
+ * 配裝是 `createInitialState` 的輸入之一，所以決定論不受影響：
+ * 相同的種子 **加上** 相同的配裝，結果完全相同。
+ */
 export function makeStartingSoldier(
-  state: { nextEntitySerial: number }, id: string, pos: Vec2,
+  state: { nextEntitySerial: number }, id: string, pos: Vec2, loadout?: Loadout,
 ): Unit {
+  const kit = equipFromLoadout(state, loadout ?? defaultLoadout());
   return makeUnit('SOLDIER', id, id, pos, {
-    equipped: weaponById('ar9'),
-    stowed: weaponById('rr4'),
-  }, 'S', fillBackpack(state, RULES.backpack.startingItems));
+    equipped: kit.equipped,
+    stowed: kit.stowed,
+  }, 'S', kit.backpack);
 }
 
 /**
@@ -109,8 +118,10 @@ export function rosterIds(): string[] {
  * @param rawMap 指定地圖。**省略時用可播種亂數從四張圖裡挑一張**（§13.2）——
  *               選圖是規則的一部分，不是介面的一部分，所以它走 core/rng.ts，
  *               而且相同種子必然選到相同的圖。
+ * @param loadout 出擊前配裝（v0.15 §5）。省略時用預設配裝，
+ *                機器人基準與 `?map=` 除錯路徑都走這條。
  */
-export function createInitialState(seed: number, rawMap?: RawMap): GameState {
+export function createInitialState(seed: number, rawMap?: RawMap, loadout?: Loadout): GameState {
   const rng = createRng(seed >>> 0);
   // 抽在最前面：後面所有的擲值順序才不會因為「有沒有指定地圖」而錯開。
   const picked = rawMap ?? MAPS[Math.floor(nextFloat(rng) * MAPS.length)];
@@ -133,7 +144,7 @@ export function createInitialState(seed: number, rawMap?: RawMap): GameState {
 
   // 物品與屍體的 id 走同一個流水號，所以先開一個計數器再交給 state
   const serial = { nextEntitySerial: 1 };
-  const units: Unit[] = [makeStartingSoldier(serial, firstId, map.startDropPoint)];
+  const units: Unit[] = [makeStartingSoldier(serial, firstId, map.startDropPoint, loadout)];
   picked.enemies.forEach((e, i) => {
     if (!ACTORS[e.archetype]) throw new Error('地圖引用了未知的敵人原型 ' + e.archetype);
     units.push(makeEnemy(e.archetype, i, e.pos, e.facing));

@@ -20,8 +20,8 @@ import { stepEnemy } from './ai';
 import { RULES, archetype, fireModeOrder } from './content';
 import { nextFloat } from './rng';
 import {
-  addItem, affordableQty, canCarry, countAmmo, effectiveMoveTime, makeItem,
-  maxWeight, takeAmmo, totalWeight, weaponItem,
+  addItem, affordableQty, canCarry, carriedWeight, countAmmo, effectiveMoveTime, makeItem,
+  maxWeight, takeAmmo, weaponItem,
 } from './inventory';
 import { makeReinforcementSoldier } from './setup';
 import { activeUnit, isMissionOver, isPlayerTurn, spend, syncClock } from './scheduler';
@@ -64,8 +64,16 @@ const no = (reason: string): Legality => ({ ok: false, reason });
 // 時間成本（§5.2）—— 全部從 data/rules.json 讀，不寫死
 // ============================================================================
 
+/**
+ * 換槍的時間（v0.15）。**寫在武器上**，因為它是武器的性質不是類別的性質：
+ * 手槍拔出來只要 5，輕機槍要 20。沒寫的退回類別預設值。
+ */
+export function weaponSwapTime(w: Weapon): number {
+  return w.swapTime ?? RULES.time.swap[w.class];
+}
+
 export function swapTime(u: Unit): number {
-  return u.stowed ? RULES.time.swap[u.stowed.class] : Number.POSITIVE_INFINITY;
+  return u.stowed ? weaponSwapTime(u.stowed) : Number.POSITIVE_INFINITY;
 }
 
 /**
@@ -96,6 +104,7 @@ export function commandTime(state: GameState, cmd: Command): number | null {
     case 'FIRE': return u && u.equipped ? u.equipped.fireTime : null;
     case 'RELOAD': {
       if (!u || !u.equipped) return null;
+      // 增量裝填的 reloadTime 就是「一發」的時間，兩者剛好同一個欄位（§3.1）
       return u.equipped.reloadTime;
     }
     case 'SEQUENCE_STEP': return u && u.pendingSequence ? seq.stepTime(u.pendingSequence) : null;
@@ -193,13 +202,15 @@ function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
       // 已經退殼、還沒裝完的槍，這一步是「接著裝」而不是「彈匣已滿」
       if (w.ammo >= w.magazine && w.reloadProgress === 0) return no('彈匣已滿');
       // v0.9：彈藥是背包裡的資源（§1.1）。背包空了就裝不了。
-      if (w.magazine < 99 && countAmmo(u.backpack, w.ammoType) <= 0) return no('沒有備用彈藥');
+      if (w.magazine < 99 && countAmmo(u.backpack, w.calibre) <= 0) return no('沒有備用彈藥');
       return OK;
     }
     case 'CYCLE_FIRE_MODE': {
       const w = u.equipped;
       if (!w) return no('沒有裝備武器');
-      return w.modes.length > 1 ? OK : no('這把武器只有單發');
+      return w.modes.length > 1
+        ? OK
+        : no('這把武器只有' + RULES.fireModes[w.modes[0] ?? 'SINGLE'].full);
     }
     case 'PREPARE': {
       const it = findBagItem(u, cmd.itemId);
@@ -230,8 +241,10 @@ function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
       if (manhattan(pile.pos, u.pos) > INTERACT_REACH) return no('距離太遠，要站到相鄰格');
       const item = pile.items[cmd.itemIndex];
       if (!item) return no('沒有這件東西');
-      if (item.kind === 'WEAPON' && cmd.slot !== 'BACKPACK') return OK;   // 換裝不佔背包
-      return canCarry(u.backpack, item) ? OK : no('背包裝不下');
+      // 換裝不佔背包，但 v0.15 起武器本身計重 —— 換一把更重的槍會加負重，
+      // 只是它換掉的那一把同時落地，所以淨值幾乎不會超過上限。
+      if (item.kind === 'WEAPON' && cmd.slot !== 'BACKPACK') return OK;
+      return canCarry(u, item) ? OK : no('背包裝不下');
     }
     case 'TAKE_ALL': {
       const pile = state.loot.find((c) => c.id === cmd.lootId);
@@ -240,7 +253,7 @@ function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
       if (pile.items.length === 0) return no('這裡已經空了');
       // 一件都拿不動時要擋下來。否則按下去只是白花 10 時間，
       // 而且會讓「一直按」變成一個無限迴圈（笨機器人實測抓到的）。
-      const room = maxWeight() - totalWeight(u.backpack);
+      const room = maxWeight() - carriedWeight(u);
       const anything = pile.items.some((it) => it.weight <= 0 || it.weight <= room);
       return anything ? OK : no('背包一件都裝不下');
     }
@@ -384,9 +397,14 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
         cost = 0;                       // 開始序列本身不花時間，第一步才花
         pushLog(s, 'INFO', u.name + ' 開始' + seq.describe(u.pendingSequence!));
       } else {
-        const got = refillFromBackpack(u, w);
+        // 增量裝填：一次只補一發（§3.1）。**不是系列動作** ——
+        // 這一發裝完就是一個完整結束的動作，沒有進度要保存，
+        // 所以玩家可以在任何一發之後直接開槍。
+        const one = w.reloadMode === 'INCREMENTAL';
+        const got = refillFromBackpack(u, w, one ? 1 : undefined);
         events.push({ kind: 'RELOAD', unitId: u.id, pos: { x: u.pos.x, y: u.pos.y }, weaponName: w.name });
-        pushLog(s, 'INFO', u.name + ' 裝填 ' + w.name + '（+' + got + '，' + w.ammo + '/' + w.magazine + '）');
+        pushLog(s, 'INFO', u.name + ' 裝填 ' + w.name + '（+' + got + '，' + w.ammo + '/' + w.magazine + '）'
+          + (one && w.ammo < w.magazine ? '　還可以繼續裝' : ''));
       }
       break;
     }
@@ -453,7 +471,7 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
     case 'CYCLE_FIRE_MODE': {
       const w = u.equipped as Weapon;
       w.mode = nextFireMode(w);
-      pushLog(s, 'INFO', u.name + ' 切換為' + RULES.fireModes[w.mode].label + '發');
+      pushLog(s, 'INFO', u.name + ' 切換為' + RULES.fireModes[w.mode].full);
       break;
     }
     case 'PREPARE': {
@@ -509,10 +527,10 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
 // ============================================================================
 
 /** 從背包補滿槍。回傳實際補進去的發數 —— 背包不足時就補多少算多少（§1.1）。 */
-export function refillFromBackpack(u: Unit, w: Weapon): number {
+export function refillFromBackpack(u: Unit, w: Weapon, limit?: number): number {
   if (w.magazine >= 99) { w.ammo = w.magazine; return 0; }   // 敵人的攻擊不吃彈藥
-  const need = w.magazine - w.ammo;
-  const got = takeAmmo(u.backpack, w.ammoType, need);
+  const need = Math.min(w.magazine - w.ammo, limit ?? Number.POSITIVE_INFINITY);
+  const got = takeAmmo(u.backpack, w.calibre, need);
   w.ammo += got;
   return got;
 }
@@ -581,8 +599,8 @@ function takeOne(
   if (!u.backpack) return false;
   // 塞不下整堆時，可堆疊的東西就拿得下的部分（§4.3「盡可能拿」）
   const n = item.kind === 'AMMO' || item.kind === 'VALUABLE'
-    ? affordableQty(u.backpack, item)
-    : (canCarry(u.backpack, item) ? item.qty : 0);
+    ? affordableQty(u, item)
+    : (canCarry(u, item) ? item.qty : 0);
   if (n <= 0) return false;
 
   if (n >= item.qty) {

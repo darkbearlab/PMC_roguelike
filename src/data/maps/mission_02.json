@@ -133,7 +133,11 @@
       "label": "管線工具箱",
       "items": [
         {
-          "defId": "AMMO_RIFLE",
+          "defId": "AMMO_556",
+          "qty": 10
+        },
+        {
+          "defId": "AMMO_12GA",
           "qty": 10
         }
       ]
@@ -152,6 +156,10 @@
         {
           "defId": "SEALANT",
           "qty": 1
+        },
+        {
+          "defId": "AMMO_9MM",
+          "qty": 20
         }
       ]
     }

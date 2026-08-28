@@ -139,6 +139,10 @@
         {
           "defId": "SCRAP",
           "qty": 2
+        },
+        {
+          "defId": "AMMO_84MM",
+          "qty": 1
         }
       ]
     },
@@ -150,8 +154,12 @@
       "label": "棄置的彈藥箱",
       "items": [
         {
-          "defId": "AMMO_RIFLE",
+          "defId": "AMMO_556",
           "qty": 12
+        },
+        {
+          "defId": "AMMO_762",
+          "qty": 10
         },
         {
           "defId": "SEALANT",

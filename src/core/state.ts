@@ -19,11 +19,27 @@ export type TileType =
   | 'SUPPLY'      // 可通行，次要目標互動點
   | 'LOOT';       // 可通行，搜刮點（§4.1）
 
-/** 彈藥種類。背包裡追蹤的是**總發數**，不是彈匣個數（§1.1）。 */
-export type AmmoType = 'RIFLE' | 'ROCKET';
+/**
+ * 口徑（v0.15 §1）。背包裡追蹤的是**總發數**，不是彈匣個數。
+ *
+ * 口徑是獨立的資料實體（`rules.json` 的 `calibres`），武器以 `calibre` 引用它。
+ * 共用是刻意的設計：AR-9 與 LMG-5 同吃 5.56、兩把霰彈槍同吃 12ga ——
+ * 六把槍若各吃各的，配裝就沒有取捨；分開之後取捨才會落在
+ * **「餵幾種彈藥」**而不是「哪把槍比較強」。
+ */
+export type Calibre = '5.56' | '7.62' | '12ga' | '9mm' | '84mm';
 
-/** 射擊模式（§2）。三種時間花費相同，差別只在耗彈與命中。 */
-export type FireMode = 'SINGLE' | 'BURST' | 'AUTO';
+/** 射擊模式（§2）。時間花費相同，差別只在耗彈與命中。 */
+export type FireMode = 'SINGLE' | 'BURST' | 'VOLLEY' | 'AUTO';
+
+/**
+ * 裝填方式（v0.15 §3.1）。
+ *
+ * `FULL` 一次補滿（或補到彈倉上限），`INCREMENTAL` 一次只補一發。
+ * **增量裝填不是系列動作** —— 每一發都是一個完整結束的動作，沒有進度要保存，
+ * 所以在任何一發之後都可以直接開槍。壓力下填一發打一發，安全時才填滿。
+ */
+export type ReloadMode = 'FULL' | 'INCREMENTAL';
 
 export type ItemKind = 'AMMO' | 'VALUABLE' | 'DNA' | 'WEAPON' | 'CONSUMABLE';
 
@@ -43,8 +59,8 @@ export interface Item {
   /** 每一個的重量。整堆的重量 = weight × qty。 */
   weight: number;
   qty: number;
-  /** kind 為 'AMMO' 時，這堆是哪一種彈藥。 */
-  ammoType?: AmmoType;
+  /** kind 為 'AMMO' 時，這堆是哪一種口徑。 */
+  calibre?: Calibre;
   /** kind 為 'VALUABLE' 時的價值。局外層還不存在，本版只列在結算畫面上。 */
   value?: number;
   /** kind 為 'WEAPON' 時的完整武器狀態（含槍內剩餘子彈與射擊模式）。 */
@@ -70,8 +86,8 @@ export interface Weapon {
   range: number;          // 最大射程（格）
   magazine: number;       // 彈匣容量
   ammo: number;           // 槍內剩餘子彈（背包裡的總量另外算，§1.1）
-  /** 這把槍吃哪一種彈藥（§1.2）。 */
-  ammoType: AmmoType;
+  /** 這把槍吃哪一種口徑（v0.15 §1.2）。 */
+  calibre: Calibre;
   /** 放進背包時佔的重量（§3）。手持與收納中不佔背包。 */
   weight: number;
   /** 可用的射擊模式（§2）。重武器只有 SINGLE。 */
@@ -80,8 +96,16 @@ export interface Weapon {
   mode: FireMode;
   /** 開火的時間花費（§5 排程器）。 */
   fireTime: number;
-  /** 裝填的時間花費。若 reloadSequence 非 null，這個值等於序列各步的總和。 */
+  /**
+   * **一次裝填動作**的時間花費。
+   * `FULL` 是補滿的總時間；`INCREMENTAL` 是每一發的時間；
+   * 若 reloadSequence 非 null，這個值等於序列各步的總和。
+   */
   reloadTime: number;
+  /** 裝填方式（v0.15）。省略時視為 FULL。 */
+  reloadMode: ReloadMode;
+  /** 換到手上要花多久。省略時退回 `rules.json` 的 `time.swap[class]`。 */
+  swapTime?: number;
   /** 裝填要走的系列動作 id；null = 單一動作即可完成（§5.5）。 */
   reloadSequence: string | null;
   /**

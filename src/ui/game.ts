@@ -33,7 +33,9 @@ import type { Vision } from '../render/vision';
 import { computeVision, isVisible, visionKey } from '../render/vision';
 import { $, $$, esc, show } from './dom';
 import { fmtWeight, missionPanelHtml, renderHud, shortName } from './hud';
-import { totalWeight } from '../core/inventory';
+import { carriedWeight } from '../core/inventory';
+import type { Loadout } from '../core/loadout';
+import { defaultLoadout } from '../core/loadout';
 import { backpackHtml, lootPanelHtml, selfPanelHtml, wireMenu } from './menus';
 import {
   hideModal, showAbortConfirm, showReinforcement, showSplashConfirm, showSummary,
@@ -128,11 +130,12 @@ export class Game {
     private seed: number,
     private forcedMap: RawMap | null = null,
     private onReturnToList: (() => void) | null = null,
+    private loadout: Loadout = defaultLoadout(),
   ) {
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('取不到 Canvas 2D context');
     this.ctx = ctx;
-    this.state = createInitialState(seed, forcedMap ?? undefined);
+    this.state = createInitialState(seed, forcedMap ?? undefined, this.loadout);
     this.vision = computeVision(this.state);
     this.focus = { ...this.state.map.startDropPoint };
     this.bindInput();
@@ -158,14 +161,15 @@ export class Game {
    * 換一份合約（§18.1）。**不重建 Game** —— 事件監聽與 rAF 迴圈只綁一次，
    * 每回清單重新建一個 Game 會把它們疊起來。
    */
-  loadMission(seed: number, map: RawMap): void {
+  loadMission(seed: number, map: RawMap, loadout?: Loadout): void {
     this.seed = seed;
     this.forcedMap = map;
+    if (loadout) this.loadout = loadout;
     this.restart();
   }
 
   restart(): void {
-    this.state = createInitialState(this.seed, this.forcedMap ?? undefined);
+    this.state = createInitialState(this.seed, this.forcedMap ?? undefined, this.loadout);
     this.ghosts.clear();
     this.auto = null;
     this.sel = null;
@@ -484,7 +488,7 @@ export class Game {
     $('#lbl-mode-ammo').textContent = w ? String(RULES.fireModes[shown].shots) : '—';
     $<HTMLButtonElement>('button[data-act="MODE"]').classList.toggle('downgraded', down);
     $<HTMLButtonElement>('button[data-act="MODE"]').title = w && down
-      ? '彈藥不足，實際會用' + RULES.fireModes[shown].label + '發'
+      ? '彈藥不足，實際會用' + RULES.fireModes[shown].full
       : '射擊模式（不花時間）';
     en('button[data-act="BAG"]', true);
     // 背包本身隨時開得了（檢視不花時間），但「用」要準備欄裡有東西（§12.19）
@@ -492,7 +496,7 @@ export class Game {
     const prep = u ? findBagItem(u, u.preparedId) : null;
     $('#lbl-prepared').textContent = prep ? shortName(prep.name) : '—';
     $<HTMLButtonElement>('button[data-act="USE"]').classList.toggle('armed', !!prep);
-    $('#lbl-load').textContent = u ? fmtWeight(totalWeight(u.backpack)) : '—';
+    $('#lbl-load').textContent = u ? fmtWeight(carriedWeight(u)) : '—';
 
     $('#lbl-stance').textContent = u && u.stance === 'STAND' ? '蹲' : '站';
     // 按鈕上顯示的是**時間花費**，不再是 AP（§7.2）

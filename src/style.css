@@ -375,3 +375,98 @@ html, body {
 }
 .c-actions button.primary { background: rgba(20, 62, 84, 0.8); border-color: var(--accent); color: #cdf2ff; }
 .c-actions button em { font-style: normal; font-size: 11px; color: var(--ink-dim); text-align: right; }
+
+/* ---------------- 出擊前配裝（§19） ----------------
+   與合約清單同一套視覺：滿版、可捲動、320px 可用。
+   重量列是這個畫面的主角，所以它有自己的底色，而且在標籤正下方 ——
+   玩家調整配裝時必須同時看得見「為什麼調」與「調的後果」。 */
+#loadout-root {
+  position: fixed; inset: 0; z-index: 30;
+  background: var(--bg);
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
+.loadout-screen {
+  max-width: 460px; margin: 0 auto;
+  padding: max(14px, env(safe-area-inset-top)) 12px max(20px, env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: 10px;
+}
+.l-top { border-bottom: 1px solid var(--glass-line); padding-bottom: 9px; }
+.l-top h2 { margin: 0 0 6px; font-size: 17px; letter-spacing: 1px; }
+.l-where {
+  margin: 0 0 6px; font-size: 12px; color: var(--ink-dim);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.l-h { margin: 6px 0 0; font-size: 12.5px; color: var(--accent); letter-spacing: 1px; }
+
+.l-weight {
+  border: 1px solid var(--glass-line); border-radius: 10px;
+  background: rgba(20, 26, 33, 0.7); padding: 10px 11px;
+}
+.l-weight.warn { border-color: var(--warn); }
+.l-weight.bad { border-color: var(--danger); background: rgba(50, 20, 17, 0.6); }
+.l-weight .note { margin-top: 7px; }
+
+.l-warn {
+  margin: 0; padding: 9px 11px 9px 28px; border-radius: 8px;
+  border: 1px solid var(--warn); background: rgba(60, 42, 12, 0.45);
+  font-size: 11.5px; line-height: 1.6; color: #ffd9a0;
+}
+
+.l-list { display: flex; flex-direction: column; gap: var(--gap); }
+.l-pick {
+  min-height: 48px; width: 100%; text-align: left; padding: 7px 11px;
+  background: rgba(30, 38, 47, 0.55); color: var(--ink);
+  border: 1px solid var(--glass-line); border-radius: 8px; font-size: 13.5px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 3px;
+}
+.l-pick.on { background: rgba(20, 62, 84, 0.8); border-color: var(--accent); color: #cdf2ff; }
+.l-pick-head {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+}
+.l-pick-head b { font-weight: 600; }
+.l-pick-head i {
+  font-style: normal; font-size: 11px; color: var(--ink-dim);
+  text-align: right; white-space: nowrap; flex: 0 0 auto;
+}
+.l-pick em {
+  font-style: normal; font-size: 10.5px; color: var(--ink-dim); line-height: 1.5;
+}
+
+.l-step {
+  display: flex; align-items: stretch; gap: 6px;
+  border: 1px solid var(--glass-line); border-radius: 8px;
+  background: rgba(30, 38, 47, 0.4); padding: 4px;
+}
+.l-step button {
+  min-width: 48px; min-height: 48px; font-size: 20px; line-height: 1;
+  background: rgba(30, 38, 47, 0.7); color: var(--ink);
+  border: 1px solid var(--glass-line); border-radius: 6px;
+}
+.l-step-body {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
+  justify-content: center; gap: 2px; padding: 0 2px;
+}
+.l-step-body b { font-size: 12.5px; font-weight: 600; }
+.l-step-body em { font-style: normal; font-size: 10.5px; color: var(--ink-dim); line-height: 1.4; }
+.l-step-qty {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 42px; font-size: 16px; font-weight: 600; color: var(--accent);
+}
+
+.l-bd { margin: 0; padding: 0; list-style: none; font-size: 11.5px; color: var(--ink-dim); }
+.l-bd li {
+  display: flex; justify-content: space-between; gap: 8px;
+  padding: 3px 2px; border-bottom: 1px dashed var(--glass-line);
+}
+.l-bd b { color: var(--ink); font-weight: 600; }
+
+.l-actions { display: flex; flex-direction: column; gap: var(--gap); margin-top: 6px; }
+.l-actions button {
+  min-height: 48px; width: 100%; text-align: left; padding: 0 11px;
+  background: rgba(30, 38, 47, 0.55); color: var(--ink);
+  border: 1px solid var(--glass-line); border-radius: 8px; font-size: 13.5px;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+.l-actions button.primary { background: rgba(20, 62, 84, 0.8); border-color: var(--accent); color: #cdf2ff; }
+.l-actions button[disabled] { opacity: .4; }
+.l-actions button em { font-style: normal; font-size: 11px; color: var(--ink-dim); text-align: right; }

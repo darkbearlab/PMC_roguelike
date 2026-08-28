@@ -6,6 +6,16 @@
     "idPrefix": "K-44"
   },
 
+  "_calibres": "§1 口徑系統。口徑是獨立的資料實體，武器以 calibre 欄位引用它 —— 這樣新增武器只要指定口徑，就自動與既有彈藥相容。命名參考現實中的 NATO 制式，讓玩家憑常識就能推測相容性。共用是刻意的：AR-9 與 LMG-5 同吃 5.56，兩把霰彈槍同吃 12 號徑。六把槍若各吃各的，配裝就沒有取捨 —— 分開之後取捨才會落在「餵幾種彈藥」而不是「哪把槍比較強」。",
+  "_calibreWeight": "weightPerRound 由現實單發重量除以 500 g 換算（§4.1）。實際放進背包的是 items.json 裡的彈藥物品，這裡的數字是它的來源與對照。",
+  "calibres": {
+    "5.56": { "name": "5.56×45mm", "weightPerRound": 0.024, "itemId": "AMMO_556" },
+    "7.62": { "name": "7.62×51mm", "weightPerRound": 0.048, "itemId": "AMMO_762" },
+    "12ga": { "name": "12 號徑", "weightPerRound": 0.09, "itemId": "AMMO_12GA" },
+    "9mm": { "name": "9×19mm", "weightPerRound": 0.024, "itemId": "AMMO_9MM" },
+    "84mm": { "name": "84mm 無後座力", "weightPerRound": 6.0, "itemId": "AMMO_84MM" }
+  },
+
   "time": {
     "_comment": "v0.7 排程器：所有動作的時間成本。基準是「移動一格 = 10」，程式碼中不得寫死任何時間值。",
     "_wait": "等待固定為 10（等同移動一格）是刻意的：若等待很便宜，玩家就能不斷『等一下下再看看』，永遠讓敵人先出手，等於白拿一個後手優勢。",
@@ -30,33 +40,53 @@
     "_comment": "§3 背包與負重。重量單位見 items.json。",
     "_why": "沒有負重代價的話，最優解就是把地圖搬空。有了它，『貪心』就被標了價 —— 背得越多走得越慢，走得越慢越容易死。",
     "_tiers": "moveCost 是絕對值不是加成：有背包的單位，移動時間直接由這張表決定（複製兵原型的 time.move 是第一級的值）。",
-    "maxWeight": 50,
-    "_firstTier": "v0.12：第一級從 20 放寬到 30。封合劑（重 5）變成強制攜帶之後，初始負重 23 會直接越過 20，士兵一開場就被拖慢 —— 那等於把基準移動速度從 10 悄悄改成 12，所有既有數值的基準都會跟著移動。放寬到 30 讓初始配備仍然落在基準速度內，同時保留約 7 的餘裕：撿東西還是要付代價，只是不會一撿就掉級。",
+    "_v015Weight": "v0.15：重量全部改用 §4.1 的換算尺（1 單位 = 0.5 公斤）重新計算，**手持與收納中的武器也開始計入負重** —— 以前不計，於是「多帶一把槍」是完全免費的，配裝畫面就不會有取捨。門檻依此重設為 55 / 78 / 100。",
+    "_threshold": "標準：背兩把武器、足夠彈藥與一支恢復藥進場後，不得影響移動速度。預設配裝（AR-9 7 + RR-4 20 + 5.56×24 0.58 + 84mm×2 12 + 封合劑 2）= 41.6，落在第一級且尚有約 13 的自由空間。戰利品是把玩家推過門檻的主要壓力來源 —— 這是刻意的，貪心與速度的取捨。",
+    "maxWeight": 100,
     "weightTiers": [
-      { "maxWeight": 30, "moveCost": 10 },
-      { "maxWeight": 40, "moveCost": 12 },
-      { "maxWeight": 50, "moveCost": 14 }
+      { "maxWeight": 55, "moveCost": 10 },
+      { "maxWeight": 78, "moveCost": 12 },
+      { "maxWeight": 100, "moveCost": 14 }
     ],
     "_sealant": "士兵初始帶一個封合劑（§4.1）。其餘靠搜刮 —— 恢復必須稀有，不是標準配備。",
+    "_startingItems": "v0.15 起這只是**預設配裝**的內容（§5.5）；玩家可以在出擊前改。機器人基準一律用它。",
     "startingItems": [
-      { "defId": "AMMO_RIFLE", "qty": 24 },
-      { "defId": "AMMO_ROCKET", "qty": 2 },
+      { "defId": "AMMO_556", "qty": 24 },
+      { "defId": "AMMO_84MM", "qty": 2 },
       { "defId": "SEALANT", "qty": 1 }
     ],
     "_reinforcement": "增援只配步槍彈，跟他只配 AR-9 是同一個道理（§10.1）。火箭彈在前一個人的屍體上。",
     "reinforcementItems": [
-      { "defId": "AMMO_RIFLE", "qty": 24 },
+      { "defId": "AMMO_556", "qty": 24 },
       { "defId": "SEALANT", "qty": 1 }
     ]
   },
 
   "fireModes": {
-    "_comment": "§2 射擊模式。三種**時間花費完全相同**，差別只在耗彈與命中。",
+    "_comment": "§2 射擊模式。**時間花費完全相同**，差別只在耗彈與命中。",
     "_independent": "連發不是『一次判定但命中率較高』，而是三次各自獨立的完整判定（各自擲命中、傷害、護甲）。這讓連發同時具備傷害上限與高變異。",
-    "order": ["SINGLE", "BURST", "AUTO"],
-    "SINGLE": { "label": "單", "shots": 1, "accuracy": 0.10 },
-    "BURST": { "label": "點", "shots": 2, "accuracy": 0 },
-    "AUTO": { "label": "連", "shots": 3, "accuracy": -0.10 }
+    "_available": "v0.15：可用模式清單改為每把武器在 weapons.json 自己列出。order 只決定循環與自動降級的順序 —— 由左而右耗彈遞增。",
+    "_volley": "齊射（v0.15）與連發的差別在意圖：連發是「用彈藥換命中機會」，齊射是「梭哈把它打死，還是留一發」。它只給削短霰彈槍用，而那把槍的彈倉只有 2 發，所以齊射等於清空。",
+    "order": ["SINGLE", "BURST", "VOLLEY", "AUTO"],
+    "SINGLE": { "label": "單", "full": "單發", "shots": 1, "accuracy": 0.10 },
+    "BURST": { "label": "點", "full": "點放", "shots": 2, "accuracy": 0 },
+    "VOLLEY": { "label": "齊", "full": "齊射", "shots": 2, "accuracy": 0 },
+    "AUTO": { "label": "連", "full": "連發", "shots": 3, "accuracy": -0.10 }
+  },
+
+  "_loadout": "§5 出擊前配裝。這裡只放預設值與介面參數 —— 可選的武器來自 weapons.json，可選的彈藥口徑來自 calibres，可選的消耗品是 items.json 裡有 use 欄位的東西。新增一把槍不需要改這個區塊。",
+  "loadout": {
+    "default": {
+      "primary": "ar9",
+      "stowed": "rr4",
+      "ammo": { "5.56": 24, "84mm": 2 },
+      "consumables": { "SEALANT": 1 }
+    },
+    "_ammoStep": "彈藥以合理的增量調整，不要逐發點擊（§5.6）。84mm 每發 6 重，所以它自己一發一發加。",
+    "ammoStep": { "5.56": 6, "7.62": 5, "12ga": 4, "9mm": 5, "84mm": 1 },
+    "_ammoMax": "上限只是介面的防呆，真正的約束是重量。",
+    "ammoMax": 120,
+    "consumableMax": 4
   },
 
   "loot": {
