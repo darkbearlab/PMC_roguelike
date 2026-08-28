@@ -12,8 +12,8 @@
 import type { MetaState, Soldier } from '../core/meta';
 import {
   assignWeapon, freeAmmo, freeConsumable, grantAmmo, grantConsumable, grantSoldier,
-  grantWeapon, holderOf, moveAmmo, moveConsumable, resolveLoadout, supplyBatch,
-  supplyCatalogue, unassignSlot,
+  grantWeapon, holderOf, moveAmmo, moveConsumable, resolveLoadout, resupplyAll,
+  resupplySoldier, resupplyTarget, supplyBatch, supplyCatalogue, unassignSlot,
 } from '../core/meta';
 import { allAmmoTypes, ammoLabel, checkKit, kitBreakdown, selectableConsumables } from '../core/loadout';
 import { ITEMS, RULES, WEAPONS } from '../core/content';
@@ -47,6 +47,23 @@ const weaponName = (meta: MetaState, id: string | null): string => {
   const w = meta.armoury.find((x) => x.instanceId === id);
   return w ? w.name : '（遺失）';
 };
+
+/**
+ * 補給鍵上的說明（v0.19）：告訴玩家「基準是多少、現在差多少」。
+ * 按鈕不會憑空變出東西 —— 不夠就是不夠，那時候要去補給站。
+ */
+function resupplyNote(meta: MetaState, s: Soldier): string {
+  const want = resupplyTarget(meta, s);
+  const parts = Object.entries(want).map(([id, n]) => {
+    const held = s.loadout.ammo[id] ?? 0;
+    const gap = Math.max(0, n - held);
+    const stock = freeAmmo(meta, id);
+    return ammoLabel(id) + ' ' + held + '／' + n
+      + (gap > 0 ? (stock >= gap ? '（可補 ' + gap + '）' : '（庫存只剩 ' + stock + '）') : '');
+  });
+  if (parts.length === 0) return '沒有配槍，沒有要補的東西';
+  return parts.join('　');
+}
 
 /** 服役紀錄。**純數值士兵唯一的人格來源**（§4.4）。 */
 function serviceLine(s: Soldier): string {
@@ -249,6 +266,8 @@ function kitHtml(meta: MetaState, s: Soldier): string {
 
     + '<div class="l-actions">'
     + '<button class="primary" data-back="1">回名冊</button>'
+    + '<button data-resupply="' + esc(s.id) + '">補給至基準<em>'
+    + esc(resupplyNote(meta, s)) + '</em></button>'
     + '<button data-strip="1">全部卸下<em>武器與物資都還回公司</em></button>'
     + '</div>';
 }
@@ -301,6 +320,9 @@ export function showCompany(meta: MetaState, h: CompanyHandlers, pick = false): 
       '<div class="l-actions">'
       + '<button class="primary" data-go="1"' + (meta.roster.length === 0 ? ' disabled' : '') + '>'
       + '接合約<em>' + (meta.roster.length === 0 ? '名冊已空' : '進入合約清單') + '</em></button>'
+      + (v.kind === 'ROSTER'
+        ? '<button data-resupply-all="1">全員補給<em>補到基準，不會讓誰變慢</em></button>'
+        : '')
       + '<button class="danger" data-reset="1">'
       + (armedReset ? '再按一次確認重置<em>這間公司會消失</em>' : '重置公司<em>清除存檔，重新開始</em>')
       + '</button></div>';
@@ -359,6 +381,8 @@ export function showCompany(meta: MetaState, h: CompanyHandlers, pick = false): 
       }
       dirty();
     });
+    on('button[data-resupply]', (b) => { resupplySoldier(meta, b.dataset.resupply!); dirty(); });
+    on('button[data-resupply-all]', () => { resupplyAll(meta); dirty(); });
     on('button[data-strip]', () => {
       const v = view;
       if (v.kind !== 'KIT') return;

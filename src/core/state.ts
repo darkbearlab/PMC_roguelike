@@ -134,6 +134,11 @@ export interface WeaponStats {
   calibre: Calibre;
   /** 機構型式（附錄 B §2.3）。v0.15 不參與任何判斷。 */
   action: WeaponAction;
+  /**
+   * 補給基準（v0.19）：回到公司時自動補到「幾個彈倉的量」。
+   * 省略時視為 1。這只是局外層的便利設定，戰術層完全不看它。
+   */
+  resupplyMagazines?: number;
   /** 計入負重（v0.15）。手持與收納中的武器不佔背包欄位，但仍然要背。 */
   weight: number;
   /** 可用的射擊模式（§8.9）。每把武器自己列出，程式不得寫死。 */

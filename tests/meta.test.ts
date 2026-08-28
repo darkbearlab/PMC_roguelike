@@ -9,8 +9,9 @@ import { describe, expect, it } from 'vitest';
 import type { MetaState, MissionResult } from '../src/core/meta';
 import {
   applyMissionResult, assignWeapon, emptyLoadout, freeAmmo, grantAmmo, grantConsumable,
-  grantSoldier, grantWeapon, holderOf, makeDeployment, missionResultOf, moveAmmo,
-  newCompany, resolveLoadout, unassignedWeapons, unassignSlot,
+  findSoldier, grantSoldier, grantWeapon, holderOf, makeDeployment, missionResultOf, moveAmmo,
+  newCompany, resolveLoadout, resupplyAll, resupplySoldier, resupplyTarget,
+  unassignedWeapons, unassignSlot,
 } from '../src/core/meta';
 import { checkKit } from '../src/core/loadout';
 import { RULES, mapById } from '../src/core/content';
@@ -339,5 +340,110 @@ describe('§6 暫時補給站（全部 0 元）', () => {
     grantAmmo(m, 'buckshot_12ga', RULES.meta.supply.ammoBatch.buckshot_12ga);
     expect(freeAmmo(m, 'buckshot_12ga'))
       .toBe(before + RULES.meta.supply.ammoBatch.buckshot_12ga);
+  });
+});
+
+describe('v0.19 自動補給', () => {
+  const armedWith = (typeId: string): { m: MetaState; id: string } => {
+    const m = co();
+    const s = m.roster[0];
+    const w = m.armoury.find((x) => x.typeId === typeId) ?? grantWeapon(m, typeId);
+    assignWeapon(m, w.instanceId, s.id, 'equipped');
+    return { m, id: s.id };
+  };
+
+  it('基準寫在武器上：AR-9 的 3 個彈倉剛好是 24 發（v0.15 以來的預設攜行量）', () => {
+    const { m, id } = armedWith('ar9');
+    expect(resupplyTarget(m, findSoldier(m, id)!)['standard_5.56']).toBe(24);
+  });
+
+  it('補到基準之後就不再補', () => {
+    const { m, id } = armedWith('ar9');
+    expect(resupplySoldier(m, id)).toBeGreaterThan(0);
+    expect(findSoldier(m, id)!.loadout.ammo['standard_5.56']).toBe(24);
+    expect(resupplySoldier(m, id)).toBe(0);
+  });
+
+  it('**只從公司既有的庫存拿**，不會無中生有', () => {
+    const { m, id } = armedWith('dmr7');
+    expect(freeAmmo(m, 'standard_7.62')).toBe(0);   // 新公司沒有 7.62
+    resupplySoldier(m, id);
+    expect(findSoldier(m, id)!.loadout.ammo['standard_7.62']).toBeUndefined();
+    grantAmmo(m, 'standard_7.62', 5);
+    resupplySoldier(m, id);
+    expect(findSoldier(m, id)!.loadout.ammo['standard_7.62']).toBe(5);   // 有多少補多少
+    expect(freeAmmo(m, 'standard_7.62')).toBe(0);
+  });
+
+  it('**不會讓他變慢**：補到目前這一級負重的上限就停', () => {
+    const { m, id } = armedWith('lmg5');
+    grantAmmo(m, 'standard_5.56', 9999);
+    const s = findSoldier(m, id)!;
+    // 先壓上一塊接近第一級上限的東西
+    const tier0 = RULES.backpack.weightTiers[0].maxWeight;
+    const before = checkKit(resolveLoadout(m, s.loadout));
+    expect(before.tier).toBe(0);
+    resupplySoldier(m, id);
+    const after = checkKit(resolveLoadout(m, s.loadout));
+    expect(after.tier, '自動補給把他補到掉級了').toBe(0);
+    expect(after.weight).toBeLessThanOrEqual(tier0);
+    expect(after.moveCost).toBe(before.moveCost);
+  });
+
+  it('連消耗品一起補（基準在資料檔）', () => {
+    const { m, id } = armedWith('ar9');
+    resupplySoldier(m, id);
+    for (const [defId, n] of Object.entries(RULES.meta.resupply.consumables)) {
+      expect(findSoldier(m, id)!.loadout.consumables[defId], defId).toBe(n);
+    }
+  });
+
+  it('全員補給：沒有配槍的人不補', () => {
+    const m = co();
+    m.roster.forEach((s, i) => {
+      const w = m.armoury[i];
+      if (i < 2 && w) assignWeapon(m, w.instanceId, s.id, 'equipped');
+    });
+    resupplyAll(m);
+    const armedCount = m.roster.filter((s) => Object.keys(s.loadout.ammo).length > 0).length;
+    expect(armedCount).toBe(2);
+    expect(m.roster[2].loadout.ammo).toEqual({});
+  });
+
+  it('庫存不夠時依名冊順序分配 —— 誰先拿到是決定性的', () => {
+    const m = co();
+    m.ammoStock = { 'standard_5.56': 30 };
+    const guns = [grantWeapon(m, 'ar9'), grantWeapon(m, 'ar9')];
+    assignWeapon(m, guns[0].instanceId, m.roster[0].id, 'equipped');
+    assignWeapon(m, guns[1].instanceId, m.roster[1].id, 'equipped');
+    resupplyAll(m);
+    expect(m.roster[0].loadout.ammo['standard_5.56']).toBe(24);   // 第一個補滿
+    expect(m.roster[1].loadout.ammo['standard_5.56']).toBe(6);    // 第二個拿剩下的
+    expect(freeAmmo(m, 'standard_5.56')).toBe(0);
+  });
+
+  it('這就是那個煩人的情境：打完一場之後一鍵回到可出擊狀態', () => {
+    const { m, id } = armedWith('ar9');
+    resupplySoldier(m, id);
+    const plan = makeDeployment(m, id);
+    // 打完一場，帶回來 5 發
+    const after = applyMissionResult(m, {
+      mapName: '測試場', contractCode: '委-TEST', outcome: 'SUCCESS', clock: 100,
+      deployedIds: [id], deadIds: [], survivorId: id,
+      survivorEquippedId: plan.soldiers.find((d) => d.id === id)!.equipped!.instanceId,
+      survivorStowedId: null,
+      extracted: [
+        { id: 'W', kind: 'WEAPON', defId: 'WEAPON', name: 'AR-9',
+          weight: 7, qty: 1, weapon: plan.soldiers.find((d) => d.id === id)!.equipped! },
+        { id: 'A', kind: 'AMMO', defId: 'standard_5.56', name: '5.56 步槍彈',
+          weight: 0.024, qty: 5, ammoTypeId: 'standard_5.56' },
+      ],
+      kills: {}, damageTaken: {},
+    });
+    // 撤離之後他身上是空的（彈藥回到共用庫存）—— 這就是玩家抱怨的那一步
+    expect(after.roster.find((s) => s.id === id)!.loadout.ammo).toEqual({});
+    // 一鍵補回去
+    resupplyAll(after);
+    expect(after.roster.find((s) => s.id === id)!.loadout.ammo['standard_5.56']).toBe(24);
   });
 });

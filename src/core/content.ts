@@ -104,6 +104,8 @@ export interface Rules {
       ammo: string[];
       ammoBatch: Record<string, number>;
     };
+    /** v0.19 自動補給：彈藥基準寫在武器上，這裡只有消耗品。 */
+    resupply: { consumables: Record<string, number> };
   };
   sequences: Record<string, unknown>;
   ai: {

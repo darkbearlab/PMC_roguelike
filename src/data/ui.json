@@ -13,6 +13,9 @@
     "edgeMargin": 2
   },
 
+  "_autoResupplyOnReturn": "任務結束回到公司時，自動把每個人補到基準（v0.19）。放在這裡而不是存檔裡，是因為它是介面的便利設定，不是公司的狀態 —— 改它不會讓既有存檔失效。設為 false 就只剩公司畫面上的手動補給鍵。",
+  "autoResupplyOnReturn": true,
+
   "_lootCloseDistance": "掠奪選單自動關閉的距離門檻（曼哈頓）。容器被掠奪後不會消失，所以不能用「主體失效」當條件；改為兩個明確條件，滿足任一就關：拿空了，或走離這個距離（§4.4）。",
   "lootCloseDistance": 1
 }

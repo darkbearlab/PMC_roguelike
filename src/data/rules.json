@@ -106,6 +106,10 @@
       "ammo": { "standard_5.56": 48, "heat_84mm": 3, "buckshot_12ga": 20, "standard_9mm": 30 },
       "consumables": { "SEALANT": 2 }
     },
+    "_resupply": "回到公司時的自動補給基準（v0.19）。彈藥的基準寫在武器上（resupplyMagazines），這裡只有消耗品。補給**只從公司既有的庫存拿**，不會無中生有 —— 共用庫存仍然是有限的，這只是省掉每場之後手動重新分配的工。",
+    "resupply": {
+      "consumables": { "SEALANT": 1 }
+    },
     "_supply": "暫時補給站（§6）。**全部 0 元，明確標示為佔位。**做成商店的形狀而不是一顆「新增」按鈕，是為了讓經濟層之後只需要填入價格，不必重做介面。",
     "supply": {
       "weapons": ["ar9", "rr4", "sg12p", "sg12s", "dmr7", "lmg5", "p9"],

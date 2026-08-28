@@ -10,11 +10,13 @@ import type { RawMap } from './core/map';
 import type { MetaState } from './core/meta';
 import {
   applyMissionResult, assignWeapon, makeDeployment, missionResultOf, moveAmmo, newCompany,
+  resupplyAll,
 } from './core/meta';
 import { hideContracts, showContracts } from './ui/contracts';
 import { hideCompany, showCompany } from './ui/company';
 import { clearCompany, loadCompany, saveCompany } from './ui/persist';
 import { showVersionMismatch } from './ui/modals';
+import { UI } from './ui/config';
 
 /**
  * §14：rngSeed 可從網址參數覆寫（?seed=12345），方便重現 bug。
@@ -108,7 +110,11 @@ function finish(): void {
       contractCode: current.brief.code,
     });
     meta = applyMissionResult(meta, r);
-    console.info('[PMC] 結算 =', r.outcome, '陣亡', r.deadIds.length, '帶出', r.extracted.length);
+    // v0.19：撤離帶回來的彈藥併回共用庫存、士兵的攜行量歸零 —— 那個模型是對的，
+    // 但副作用是每一場之後都要手動把彈藥一發一發按回去。**要省掉的是那個手工。**
+    const topped = UI.autoResupplyOnReturn ? resupplyAll(meta) : 0;
+    console.info('[PMC] 結算 =', r.outcome, '陣亡', r.deadIds.length, '帶出', r.extracted.length,
+      topped ? '／自動補給 ' + topped + ' 件' : '');
   }
   current = null;
   openCompany();

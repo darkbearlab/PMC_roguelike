@@ -14,7 +14,8 @@
  */
 import type { Item, WeaponInstance } from './state';
 import type { CarriedKit } from './loadout';
-import { ITEMS, RULES } from './content';
+import { kitWeight } from './loadout';
+import { AMMO_TYPES, ITEMS, RULES, ammoTypesForCalibre } from './content';
 import { makeWeapon } from './weapon';
 import type { Serial } from './weapon';
 
@@ -487,4 +488,86 @@ export function missionResultOf(
     kills,
     damageTaken,
   };
+}
+
+// ============================================================================
+// 自動補給（v0.19）
+// ============================================================================
+
+/**
+ * 這名士兵的彈藥基準：他手上那兩把槍各要幾發。
+ *
+ * 基準寫在武器上（`resupplyMagazines` × `magazine`）——
+ * AR-9 的 3 個彈倉剛好是 24 發，也就是 v0.15 以來的預設攜行量。
+ */
+export function resupplyTarget(meta: MetaState, s: Soldier): Record<string, number> {
+  const want: Record<string, number> = {};
+  for (const id of [s.loadout.equippedWeaponId, s.loadout.stowedWeaponId]) {
+    const w = findWeapon(meta, id);
+    if (!w || w.magazine >= 99) continue;
+    const n = w.magazine * (w.resupplyMagazines ?? 1);
+    for (const t of ammoTypesForCalibre(w.calibre)) {
+      want[t.id] = Math.max(want[t.id] ?? 0, n);
+    }
+  }
+  return want;
+}
+
+/**
+ * 把一名士兵補到基準（v0.19）。回傳實際補了幾發。
+ *
+ * 為什麼需要這個：撤離帶回來的彈藥會併回**共用庫存**，而士兵的攜行量歸零 ——
+ * 那個模型是對的（v0.16 §3.2：配裝是分配資源，不是選裝備），
+ * 但它的副作用是每一場之後都要手動把彈藥一發一發按回去。
+ * **要省掉的是那個手工，不是那個決策。**
+ *
+ * 兩條界線：
+ *  - **只從公司既有的庫存拿**，不會無中生有。庫存不夠就補多少算多少。
+ *  - **不會讓他變慢**：補到目前這一級負重的上限就停。
+ *    自動的東西不可以悄悄改變他的移動速度。
+ */
+export function resupplySoldier(meta: MetaState, soldierId: string): number {
+  const s = findSoldier(meta, soldierId);
+  if (!s) return 0;
+  const tiers = RULES.backpack.weightTiers;
+  const start = kitWeight(resolveLoadout(meta, s.loadout));
+  // 目前落在第幾級 → 這一級的上限就是補給的天花板
+  let ceiling = RULES.backpack.maxWeight;
+  for (const t of tiers) if (start <= t.maxWeight) { ceiling = t.maxWeight; break; }
+
+  let added = 0;
+  const room = (): number => ceiling - kitWeight(resolveLoadout(meta, s.loadout));
+
+  const want = resupplyTarget(meta, s);
+  for (const [ammoTypeId, target] of Object.entries(want)) {
+    const held = s.loadout.ammo[ammoTypeId] ?? 0;
+    let need = target - held;
+    if (need <= 0) continue;
+    const per = AMMO_TYPES[ammoTypeId]?.weightPerRound ?? 0;
+    if (per > 0) need = Math.min(need, Math.floor(room() / per));
+    if (need > 0) added += moveAmmo(meta, s.id, ammoTypeId, need);
+  }
+
+  for (const [defId, target] of Object.entries(RULES.meta.resupply.consumables)) {
+    const held = s.loadout.consumables[defId] ?? 0;
+    let need = target - held;
+    if (need <= 0) continue;
+    const per = ITEMS[defId]?.weight ?? 0;
+    if (per > 0) need = Math.min(need, Math.floor(room() / per));
+    if (need > 0) added += moveConsumable(meta, s.id, defId, need);
+  }
+  return added;
+}
+
+/**
+ * 全員補給（v0.19）。**依名冊順序**，所以庫存不夠時誰先拿到是決定性的。
+ * 沒有配槍的人不補 —— 沒有槍就沒有要餵的東西。
+ */
+export function resupplyAll(meta: MetaState): number {
+  let added = 0;
+  for (const s of meta.roster) {
+    if (!s.loadout.equippedWeaponId && !s.loadout.stowedWeaponId) continue;
+    added += resupplySoldier(meta, s.id);
+  }
+  return added;
 }
