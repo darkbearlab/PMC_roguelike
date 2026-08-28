@@ -56,6 +56,10 @@ export interface Rules {
     minMainDistance: number;
     enemies: { min: number; max: number };
     minCaches: number;
+    /** v0.13：預估完成路徑時間（下限估計）的區間。 */
+    estRunTime: { min: number; max: number };
+    /** v0.13：東西向與南北向掩蔽覆蓋率的差距上限（百分點）。 */
+    dirCoverGap: number;
   };
   sequences: Record<string, unknown>;
   ai: {

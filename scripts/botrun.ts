@@ -63,15 +63,41 @@ function botAction(s: GameState, goal: Vec2): GameState {
   }
   if (target) return run(s, { type: 'FIRE', target });
   if (u.equipped && u.equipped.ammo === 0) return run(s, { type: 'RELOAD' });
-  const path = findPath(s, u.pos, goal, { ignoreUnitIds: [u.id] });
-  if (path && path.length > 0 && !unitAt(s, path[0])) {
-    const dir = facingFromDelta(path[0].x - u.pos.x, path[0].y - u.pos.y);
+  const step = nextStep(s, u.pos, goal);
+  if (step) {
+    const dir = facingFromDelta(step.x - u.pos.x, step.y - u.pos.y);
     if (dir) {
       const next = run(s, { type: 'MOVE', dir: dir as Facing });
       if (next !== s) return next;
     }
   }
+  plan = null;                 // 走不動就重算
   return run(s, { type: 'WAIT' });
+}
+
+/**
+ * 機器人的路徑記憶。
+ *
+ * 每個動作都重算最短路的話，遇到會移動的擋路者就會在兩格之間來回震盪：
+ * 在 A 算出要走 B，走到 B 時敵人剛好挪開／擋住，又算出要走回 A。
+ * 實測在 mission_03 上真的發生了，跑掉兩萬次迴圈還沒走到終點。
+ *
+ * 真人玩家不會這樣 —— 他用的是自動移動，那會**沿著一條算好的路徑走**（§12.4）。
+ * 這裡照做：算一次、沿著走，走不動了才重算。
+ */
+let plan: Vec2[] | null = null;
+
+function nextStep(s: GameState, from: Vec2, goal: Vec2): Vec2 | null {
+  const valid = plan
+    && plan.length > 0
+    && manhattan(from, plan[0]) === 1
+    && !unitAt(s, plan[0]);
+  if (!valid) {
+    const fresh = findPath(s, from, goal, { ignoreUnitIds: [activePlayerUnit(s)!.id] });
+    plan = fresh && fresh.length > 0 && !unitAt(s, fresh[0]) ? fresh : null;
+  }
+  if (!plan || plan.length === 0) return null;
+  return plan.shift() ?? null;
 }
 
 /**
@@ -85,6 +111,7 @@ function runOne(seed: number, map?: RawMap): {
   main: boolean; foes: number; ammoUsed: number; carried: number;
 } {
   let s = createInitialState(seed, map);
+  plan = null;
   let guard = 0;
   while (s.result === 'ONGOING' && guard++ < 20000) {
     if (s.pendingReinforcement) { s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] }); continue; }

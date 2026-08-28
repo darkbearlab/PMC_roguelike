@@ -61,16 +61,30 @@ describe('§13.1 四張地圖', () => {
     }
   });
 
-  it('三張新圖肉眼可區分：掩體密度差距明顯', () => {
-    const density = (raw: typeof MAPS[number]): number => {
-      const m = parseMap(raw);
-      const walkable = m.tiles.filter((t) => t !== 'WALL' && t !== 'HALF_COVER').length;
-      return findTiles(m, 'HALF_COVER').length / walkable;
-    };
-    const open = density(mapById('mission_03')!);
-    const dense = density(mapById('mission_04')!);
-    // 開闊地圖與掩體密集圖至少差五倍，不是「差不多但長得不一樣」
-    expect(dense / open).toBeGreaterThan(5);
+  it('四張圖仍然肉眼可區分，不是「差不多但長得不一樣」', () => {
+    const st = (id: string) => mapById(id)!.stats!;
+    // 掩體最密與最疏之間差五倍以上
+    const densities = MAPS.map((raw) => raw.stats!.coverDensity);
+    expect(Math.max(...densities) / Math.min(...densities)).toBeGreaterThan(5);
+    // 管廊是最窄的那張
+    expect(st('mission_02').walkable).toBe(Math.min(...MAPS.map((r) => r.stats!.walkable)));
+    // 倉儲區是掩體最密的那張
+    expect(st('mission_04').coverDensity).toBe(Math.max(...densities));
+    // v0.13 的沉澱池不再是「沒有掩體」，而是「有掩體但抄近路要暴露很久」——
+    // 所以它的直線暴露明顯高於最短的那張
+    expect(st('mission_03').directRun).toBeGreaterThan(st('mission_01').directRun);
+  });
+
+  it('§13.5 的兩條新約束：每張圖都符合', () => {
+    for (const raw of MAPS) {
+      const gap = Math.abs(raw.stats!.dirCoverEW - raw.stats!.dirCoverNS) * 100;
+      expect(gap, raw.id + ' 方向性掩蔽差距').toBeLessThanOrEqual(RULES.mapRules.dirCoverGap);
+      // 預估完成路徑（下限估計）落在區間內
+      expect(raw.stats!.estRun, raw.id + ' 預估耗時')
+        .toBeGreaterThanOrEqual(RULES.mapRules.estRunTime.min);
+      expect(raw.stats!.estRun, raw.id + ' 預估耗時')
+        .toBeLessThanOrEqual(RULES.mapRules.estRunTime.max);
+    }
   });
 
   it('mission_04 的掩體方向與 mission_01 相反 —— 這是 v0.10 卡住的那件事', () => {

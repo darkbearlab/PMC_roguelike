@@ -15,6 +15,35 @@ export interface RawMap {
   enemies: { archetype: string; pos: Vec2; facing?: Facing }[];
   /** 地圖搜刮點的內容（§13.4）。座標必須是 LOOT 地形。 */
   caches?: { pos: Vec2; label?: string; items: { defId: string; qty: number }[] }[];
+  /**
+   * 驗證器算出來的統計值（§13.5），由 `npm run map:build` 一併寫進 JSON。
+   *
+   * 合約清單的地形標籤與難度評級都**由這些值推導，不得手寫** ——
+   * 手寫的標籤會在地圖被修改後開始說謊，而地圖一定會被修改；統計值不會。
+   *
+   * 測試用的臨時地圖沒有這一塊 —— 它們不進合約清單。
+   */
+  stats?: MapStats;
+}
+
+export interface MapStats {
+  walkable: number;
+  coverDensity: number;
+  /** 對東西向／南北向射手提供得出掩蔽的可通行格比例。 */
+  dirCoverEW: number;
+  dirCoverNS: number;
+  mainDist: number;
+  routeLen: number;
+  /** 走最短路徑要連續暴露幾格。 */
+  directRun: number;
+  /** 在所有走法之中最好的那一條，還是得連續暴露幾格。 */
+  forcedRun: number;
+  /** 預估完成路徑的時間（下限估計）。 */
+  estRun: number;
+  enemyCount: number;
+  shooterRatio: number;
+  hulks: number;
+  caches: number;
 }
 
 const VALID_TILES = new Set<TileType>([

@@ -79,7 +79,12 @@
     "secondaryObjectives": 2,
     "minMainDistance": 24,
     "enemies": { "min": 8, "max": 10 },
-    "minCaches": 2
+    "minCaches": 2,
+
+    "_estRunTime": "v0.13 任務長度收斂。這是**靜態下限估計**（走完所有目標再回撤離點的最短路徑 × 基礎移動時間），實際耗時一定更高，因為有交火、繞路、搜刮、裝填。機器人實測的目標區間是 1500～3000，對應的下限估計約落在 700～1400。",
+    "estRunTime": { "min": 700, "max": 1400 },
+    "_dirCoverGap": "東西向與南北向掩蔽覆蓋率的差距上限（百分點）。掩體列的走向等於在決定哪個軸向的交火是安全的 —— 差距太大的話，那件事完全是作者無意間決定的。",
+    "dirCoverGap": 20
   },
 
   "sequences": {

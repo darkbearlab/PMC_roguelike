@@ -258,6 +258,23 @@ export function validate(def) {
     errors.push(`最短路徑上有連續 ${directRun} 格完全無掩蔽（上限 ${limits.maxExposedRun}）`);
   }
 
+  // ---- 任務長度與掩蔽方向（v0.13 的兩條新約束）----
+  //
+  // 局外層會把任務串起來。一場任務長度失控只是煩人，一場接一場就是災難。
+  const estRun = estimatedRunTime(m, start, rules.time.move);
+  if (estRun < limits.estRunTime.min || estRun > limits.estRunTime.max) {
+    errors.push(`預估完成路徑 ${estRun}（下限估計），不在 `
+      + `${limits.estRunTime.min}–${limits.estRunTime.max} 之間`);
+  }
+  // 掩體列的走向等於在決定哪個軸向的交火是安全的。差距太大的話，
+  // 「這張圖對玩家是 19% 還是 51% 的掩蔽」完全是作者無意間決定的。
+  const dc = directionalCover(m);
+  const gap = Math.abs(dc.ew - dc.ns) * 100;
+  if (gap > limits.dirCoverGap) {
+    errors.push(`方向性掩蔽差距 ${gap.toFixed(0)}（東西 ${(dc.ew * 100).toFixed(0)}%／`
+      + `南北 ${(dc.ns * 100).toFixed(0)}%）超過門檻 ${limits.dirCoverGap}`);
+  }
+
   // ---- 敵人 ----
   if (enemies.length < limits.enemies.min || enemies.length > limits.enemies.max) {
     errors.push(`敵人 ${enemies.length} 隻，不在 ${limits.enemies.min}–${limits.enemies.max} 之間`);
@@ -301,15 +318,23 @@ export function validate(def) {
       id: def.id, name: def.name, size: `${m.w}×${m.h}`,
       walkable, covers, density, drops: drops.length,
       dropGap: drops.length >= 2 ? `${minGap}–${maxGap}` : '—',
-      mainDist, routeLen: route ? route.length - 1 : 0, directRun, forcedRun,
+      mainDist, routeLen: route ? route.length - 1 : 0, directRun, forcedRun, estRun,
       dirCover: directionalCover(m),
       enemies: enemies.length, kinds, caches: caches.length,
     },
   };
 }
 
-/** 把定義轉成 core/map.ts 吃的 RawMap。 */
-export function toRawMap(def) {
+/**
+ * 把定義轉成 core/map.ts 吃的 RawMap。
+ *
+ * **統計值一併寫進 JSON**（v0.14）：合約清單的地形標籤與難度評級都由它推導，
+ * 不得手寫（§14.2）。手寫的標籤會在地圖被修改後開始說謊，而地圖一定會被修改；
+ * 統計值不會 —— 它跟著 `npm run map:build` 一起重算，CI 會比對。
+ */
+export function toRawMap(def, stats) {
+  const kinds = stats.kinds;
+  const enemyCount = stats.enemies;
   return {
     id: def.id,
     name: def.name,
@@ -320,5 +345,58 @@ export function toRawMap(def) {
     startDropPoint: def.start,
     enemies: def.enemies,
     caches: def.caches,
+    stats: {
+      walkable: stats.walkable,
+      coverDensity: round3(stats.density),
+      dirCoverEW: round3(stats.dirCover.ew),
+      dirCoverNS: round3(stats.dirCover.ns),
+      mainDist: stats.mainDist,
+      routeLen: stats.routeLen,
+      directRun: stats.directRun,
+      forcedRun: stats.forcedRun,
+      estRun: stats.estRun,
+      enemyCount,
+      shooterRatio: round3((kinds.SHOOTER ?? 0) / enemyCount),
+      hulks: kinds.HULK ?? 0,
+      caches: stats.caches,
+    },
   };
+}
+
+const round3 = (n) => Math.round(n * 1000) / 1000;
+
+/**
+ * 預估完成路徑長度（§13.5，v0.13）。
+ *
+ * 從起始空投點出發、依序抵達所有必要目標、再返回撤離點（＝起始空投點）的
+ * 最短四方向路徑總長，乘以基礎移動時間。
+ *
+ * 這是**下限估計**：實際耗時一定更高，因為有交火、繞路、搜刮、裝填。
+ * 但它是靜態的，不必跑機器人就能算，所以進得了 CI。
+ *
+ * 目標數量很少（主目標 + 兩個次要），所以直接窮舉全部順序取最短。
+ */
+export function estimatedRunTime(m, start, moveTime) {
+  const stops = [...findAll(m, 'T'), ...findAll(m, 'S')];
+  const nodes = [start, ...stops];
+  const dist = nodes.map((a) => nodes.map((b) => {
+    const p = shortestPath(m, a, b);
+    return p ? p.length - 1 : Infinity;
+  }));
+
+  let best = Infinity;
+  const idx = stops.map((_, i) => i + 1);
+  const permute = (rest, acc, total) => {
+    if (total >= best) return;                 // 剪枝
+    if (rest.length === 0) {
+      best = Math.min(best, total + dist[acc][0]);   // 回到撤離點
+      return;
+    }
+    for (let i = 0; i < rest.length; i++) {
+      const next = rest[i];
+      permute(rest.filter((_, j) => j !== i), next, total + dist[acc][next]);
+    }
+  };
+  permute(idx, 0, 0);
+  return Number.isFinite(best) ? best * moveTime : Infinity;
 }

@@ -33,6 +33,7 @@ for (const def of MAPS) {
     + `　空投點 ${stats.drops}（間距 ${stats.dropGap}）`
     + `　主目標距離 ${stats.mainDist}（走 ${stats.routeLen} 步）`
     + `　暴露：直線 ${stats.directRun} / 必經 ${stats.forcedRun}`
+    + `　預估耗時 ${stats.estRun}`
     + `　方向性掩蔽 東西 ${(stats.dirCover.ew * 100).toFixed(0)}% / 南北 ${(stats.dirCover.ns * 100).toFixed(0)}%`);
   console.log(`敵人 ${stats.enemies} ` + JSON.stringify(stats.kinds) + `　搜刮點 ${stats.caches}`);
 
@@ -46,7 +47,7 @@ for (const def of MAPS) {
 
   const out = HERE + '/../src/data/maps/' + def.id + '.json';
   mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, JSON.stringify(toRawMap(def), null, 2) + '\n', 'utf8');
+  writeFileSync(out, JSON.stringify(toRawMap(def, stats), null, 2) + '\n', 'utf8');
 }
 
 // ---- 統計摘要（§13.5.4）：比較四張圖、歸納「什麼叫好地圖」的依據 ----
@@ -56,12 +57,13 @@ const rows = allStats.map((s) => [
   `${s.drops}／${s.dropGap}`,
   `${s.mainDist}／${s.routeLen}`,
   `${s.directRun} / ${s.forcedRun}`,
+  String(s.estRun),
   `${(s.dirCover.ew * 100).toFixed(0)}% / ${(s.dirCover.ns * 100).toFixed(0)}%`,
   `${s.enemies}　R${s.kinds.RUNNER ?? 0} S${s.kinds.SHOOTER ?? 0} H${s.kinds.HULK ?? 0}`,
   String(s.caches),
 ]);
 const head = ['id', '名稱', '尺寸', '可通行', '掩體（密度）', '空投點／間距',
-  '主目標距離／步數', '暴露 直線／必經', '方向性掩蔽 東西／南北', '敵人組成', '搜刮點'];
+  '主目標距離／步數', '暴露 直線／必經', '預估耗時', '方向性掩蔽 東西／南北', '敵人組成', '搜刮點'];
 const md = [
   '# 地圖統計摘要',
   '',
@@ -91,6 +93,10 @@ const md = [
   '- **暴露 直線／必經** = 連續幾格的四鄰完全沒有阻擋物。',
   '  「直線」是走最短路徑要暴露多久，「必經」是**在所有走法之中最好的那一條**還是得暴露多久。',
   '  驗證檢查的是後者 —— 能繞開就不算問題。兩者差距大＝這張圖給了「繞路換安全」的選擇。',
+  '- **預估耗時** = 走完所有目標再回撤離點的最短路徑 × 基礎移動時間。這是**下限估計**，',
+  '  實際耗時一定更高（交火、繞路、搜刮、裝填）。它是靜態的，所以進得了 CI（§13.5）。',
+  '- **方向性掩蔽 東西／南北** = 對該軸向射手提供得出掩蔽的可通行格比例。',
+  '  掩體列的走向等於在決定哪個軸向的交火是安全的，所以兩者的**差距**有上限（v0.13）。',
   '',
 ];
 mkdirSync(HERE + '/../docs', { recursive: true });
