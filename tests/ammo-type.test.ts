@@ -12,7 +12,9 @@ import {
 } from '../src/core/content';
 import type { Calibre } from '../src/core/state';
 import { countAmmo, countAmmoFor, feedableTypes, takeAmmoFor } from '../src/core/inventory';
-import { allAmmoTypes, ammoLabel, checkLoadout, defaultLoadout } from '../src/core/loadout';
+import { allAmmoTypes, ammoLabel, checkKit } from '../src/core/loadout';
+import type { CarriedKit } from '../src/core/loadout';
+import { makeWeapon } from '../src/core/weapon';
 import { createInitialState } from '../src/core/setup';
 import { mapById } from '../src/core/content';
 import { MAPS } from '../src/core/content';
@@ -123,7 +125,14 @@ describe('附錄 B §20.4 玩家看得到的東西不變', () => {
   });
 
   it('預設配裝的重量與級距完全沒動', () => {
-    const c = checkLoadout(defaultLoadout());
+    const serial = { nextEntitySerial: 1 };
+    const kit: CarriedKit = {
+      equipped: makeWeapon(serial, 'ar9'),
+      stowed: makeWeapon(serial, 'rr4'),
+      ammo: { 'standard_5.56': 24, heat_84mm: 2 },
+      consumables: { SEALANT: 1 },
+    };
+    const c = checkKit(kit);
     expect(c.weight).toBeCloseTo(41.576, 3);
     expect(c.tier).toBe(0);
     expect(c.moveCost).toBe(10);

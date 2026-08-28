@@ -61,17 +61,18 @@ const after = await page.evaluate(() => {
   const me = g.state.units.find((u) => u.faction === 'PLAYER');
   return {
     id: me.id, pos: me.pos, nextActAt: me.nextActAt, clock: g.state.clock,
-    equipped: me.equipped && me.equipped.id, stowed: me.stowed && me.stowed.id,
+    equipped: me.equipped && me.equipped.typeId, stowed: me.stowed && me.stowed.typeId,
     loot: g.state.loot.map((c) => ({
       kind: c.kind, pos: c.pos,
-      w: c.items.filter((x) => x.kind === 'WEAPON').map((x) => x.weapon.id),
+      w: c.items.filter((x) => x.kind === "WEAPON").map((x) => x.weapon.typeId),
     })),
     casualties: g.state.casualties, deployed: g.state.deployed, roster: g.state.roster.length,
   };
 });
 console.log('   →', JSON.stringify(after));
 ok(after.pos.x === 2 && after.pos.y === 11, '從最近的空投點 D2 (2,11) 落地');
-ok(after.equipped === 'ar9' && after.stowed === null, '增援只帶 AR-9，重武器留在屍體上');
+ok(after.equipped === 'ar9' && after.stowed === 'rr4',
+  'v0.16：替補帶著自己的配裝降落（測試快照給的是 AR-9 + RR-4）');
 const bodies = after.loot.filter((c) => c.kind === 'PLAYER_BODY');
 ok(bodies.length === 1 && bodies[0].w.sort().join() === 'ar9,rr4', '己方遺體保有死者的全部武器');
 ok(after.casualties === 1 && after.deployed === 2 && after.roster === 2, '結算計數正確');
@@ -97,15 +98,17 @@ const beforePick = await page.evaluate(() => {
   const u = window.__game.state.units.find(x => x.faction === 'PLAYER');
   return { next: u.nextActAt };
 });
+// v0.16：替補自己也帶著 RR-4，所以 AR-9 那一列的提示會寫「換下 RR-4」——
+// 只用「RR-4」+「換為收納」兩個關鍵字會選到錯的按鈕，要比對連在一起的整段。
 await page.locator('#tile-menu button[data-do="pickup"]')
-  .filter({ hasText: 'RR-4' }).filter({ hasText: '換為收納' }).first().click();
+  .filter({ hasText: /換為收納 RR-4/ }).first().click();
 await page.waitForTimeout(300);
 const picked = await page.evaluate(() => {
   const g = window.__game;
   const me = g.state.units.find((u) => u.faction === 'PLAYER');
   return {
     next: me.nextActAt, clock: g.state.clock,
-    equipped: me.equipped && me.equipped.id, stowed: me.stowed && me.stowed.id,
+    equipped: me.equipped && me.equipped.typeId, stowed: me.stowed && me.stowed.typeId,
   };
 });
 ok(picked.equipped === 'rr4' || picked.stowed === 'rr4', '撿回 RR-4');

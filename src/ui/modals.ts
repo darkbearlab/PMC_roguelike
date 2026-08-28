@@ -22,21 +22,35 @@ function open(html: string): HTMLElement {
   return r;
 }
 
-/** §10.1 第 4 點：陣亡後從名冊選一位。MVP 名冊 4 人數值完全相同。 */
+/**
+ * §10.1 第 4 點：陣亡後從名冊選一位。
+ *
+ * v0.16 起**替補帶著他自己的配裝降落**，不再是配發一把 AR-9 ——
+ * 所以這裡要看得到每個人身上有什麼。沒有配裝的人可以派，他會赤手空拳落地，
+ * 那是玩家在公司畫面上的決定的後果。
+ */
 export function showReinforcement(state: GameState, onPick: (id: string) => void, onAbort: () => void): void {
   const p = state.pendingReinforcement;
   if (!p) return;
+  const kitOf = (id: string): string => {
+    const d = state.deployment.find((x) => x.id === id);
+    if (!d) return '（不在派遣名單上）';
+    const guns = [d.equipped, d.stowed].filter(Boolean).map((w) => w!.name);
+    return guns.length === 0 ? '赤手空拳' : guns.join(' ＋ ');
+  };
+  const nameOf = (id: string): string =>
+    state.deployment.find((x) => x.id === id)?.designation ?? id;
   const r = open(
-    '<h2 class="lose">' + esc(p.deadUnitId) + ' 已陣亡</h2>'
+    '<h2 class="lose">' + esc(nameOf(p.deadUnitId)) + ' 已陣亡</h2>'
     + '<p>屍體與其攜帶的所有裝備留在 (' + p.deathPos.x + ',' + p.deathPos.y + ')。'
-    + '接替者只會配發一把 AR-9，並從<b>最近的空投點</b>落地，該回合無法行動。</p>'
+    + '接替者<b>帶著自己的配裝</b>，從<b>最近的空投點</b>落地，該回合無法行動。</p>'
     + '<p>' + esc(ledgerText(state)) + '</p>'
-    + '<p>名冊剩餘 <b>' + state.roster.length + '</b> 人。MVP 階段四人數值完全相同。</p>'
+    + '<p>名冊剩餘 <b>' + state.roster.length + '</b> 人。</p>'
     + '<div class="menu-actions">'
     + state.roster.map((id) =>
-      '<button class="primary" data-pick="' + esc(id) + '">投入 ' + esc(id)
-      + '<em>配發 AR-9（滿彈）</em></button>').join('')
-    + '<button class="danger" data-abort="1">改為止損撤出<em>任務結束</em></button>'
+      '<button class="primary" data-pick="' + esc(id) + '">投入 ' + esc(nameOf(id))
+      + '<em>' + esc(kitOf(id)) + '</em></button>').join('')
+    + '<button class="danger" data-abort="1">改為止損撤出<em>身上的一切留在戰場</em></button>'
     + '</div>',
   );
   r.querySelectorAll<HTMLButtonElement>('button[data-pick]').forEach((b) => {
@@ -159,4 +173,27 @@ export function showSummary(
   (r.querySelector('button[data-restart]') as HTMLButtonElement).addEventListener('click', onRestart);
   const back = r.querySelector<HTMLButtonElement>('button[data-list]');
   if (back && onReturnToList) back.addEventListener('click', onReturnToList);
+}
+
+/**
+ * 存檔版本不符（§7.2）。**不要嘗試遷移，也不要崩潰。**
+ * 專案迭代很快，存檔格式會被之後每一版打破；遷移程式碼的維護成本遠高於重置。
+ */
+export function showVersionMismatch(
+  v: { found: number; expected: number },
+  onReset: () => void,
+): void {
+  const r = open(
+    '<h2 class="abort">存檔版本不符</h2>'
+    + '<p>找到的存檔是第 <b>' + v.found + '</b> 版，這個版本要的是第 <b>' + v.expected + '</b> 版。</p>'
+    + '<p>本作**刻意不做存檔遷移** —— 專案迭代很快，格式會被之後每一版打破，'
+    + '而遷移程式碼的維護成本遠高於重來一次。</p>'
+    + '<div class="menu-actions">'
+    + '<button class="primary" data-reset="1">重置並開始新公司<em>舊的存檔會被清除</em></button>'
+    + '</div>',
+  );
+  (r.querySelector('button[data-reset]') as HTMLButtonElement).addEventListener('click', () => {
+    hideModal();
+    onReset();
+  });
 }

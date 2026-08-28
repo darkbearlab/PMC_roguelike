@@ -23,7 +23,7 @@ import {
   addItem, affordableQty, canCarry, carriedWeight, countAmmoFor, effectiveMoveTime, makeItem,
   maxWeight, takeAmmoFor, weaponItem,
 } from './inventory';
-import { makeReinforcementSoldier } from './setup';
+import { makeDeployedUnit } from './setup';
 import { activeUnit, isMissionOver, isPlayerTurn, spend, syncClock } from './scheduler';
 import * as seq from './sequence';
 import { pushLog } from './log';
@@ -631,6 +631,7 @@ function extract(s: GameState, u: Unit): void {
   if (u.equipped) out.push(weaponItem(s, u.equipped));
   if (u.stowed) out.push(weaponItem(s, u.stowed));
   s.extracted = out;
+  s.extractedBy = u.id;
   s.result = s.objectives.main.done ? 'SUCCESS' : 'ABORTED';
   pushLog(
     s, 'MISSION',
@@ -689,6 +690,7 @@ export function processDeaths(s: GameState, events?: EventSink): void {
       items,
     });
     s.casualties += 1;
+    s.deadSoldierIds.push(u.id);
     if (s.activePlayerUnitId === u.id) s.activePlayerUnitId = null;
     pushLog(
       s, 'DEATH',
@@ -741,8 +743,10 @@ function deployReinforcement(s: GameState, soldierId: string, events: EventSink)
     return;
   }
 
+  const spec = s.deployment.find((d) => d.id === soldierId);
+  if (!spec) return;
   s.roster = s.roster.filter((id) => id !== soldierId);
-  const unit = makeReinforcementSoldier(s, soldierId, spawn);
+  const unit = makeDeployedUnit(s, spec, spawn);
   const f = facingToward(spawn, pending.deathPos);
   if (f) unit.facing = f;
   s.units.push(unit);
@@ -750,9 +754,12 @@ function deployReinforcement(s: GameState, soldierId: string, events: EventSink)
   s.deployed += 1;
   s.pendingReinforcement = null;
   events.push({ kind: 'DEPLOY', unitId: unit.id, pos: { x: spawn.x, y: spawn.y } });
+  // v0.16：替補帶著**他自己的配裝**降落（§4.2）。沒有配裝的人就赤手空拳。
+  const kit = unit.equipped ? unit.equipped.name : '赤手空拳';
   pushLog(
     s, 'INFO',
-    soldierId + ' 自空投點 (' + spawn.x + ',' + spawn.y + ') 落地，僅配發 AR-9。需要 ' + RULES.time.deploy + ' 時間才能行動。',
+    unit.name + ' 自空投點 (' + spawn.x + ',' + spawn.y + ') 落地，攜 ' + kit
+      + '。需要 ' + RULES.time.deploy + ' 時間才能行動。',
   );
 
   // 落地不能立刻行動 —— 這是 v0.6「落地當回合 AP 為 0」的時間換算（§5.2）

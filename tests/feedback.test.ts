@@ -133,10 +133,10 @@ describe('§2.5 回饋層不得污染規則層', () => {
       expect(json.toLowerCase(), banned).not.toContain('"' + banned);
     }
     expect(Object.keys(s).sort()).toEqual([
-      'activePlayerUnitId', 'casualties', 'clock', 'deployed',
-      'extracted', 'log', 'loot', 'map',
+      'activePlayerUnitId', 'casualties', 'clock', 'deadSoldierIds', 'deployed',
+      'deployment', 'extracted', 'extractedBy', 'log', 'loot', 'map',
       'nextEntitySerial', 'objectives', 'pendingReinforcement', 'result', 'rng',
-      'rngSeed', 'roster', 'units',
+      'rngSeed', 'roster', 'stats', 'units',
     ]);
   });
 

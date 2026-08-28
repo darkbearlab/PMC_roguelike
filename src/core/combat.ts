@@ -285,6 +285,28 @@ export function emitNoise(state: GameState, origin: Vec2, radius: number, events
  * 解算一次攻擊：抽亂數 → 判定命中 → 套用傷害 → 產生噪音 → 寫紀錄。
  * 不處理 AP、彈藥、死亡；那些由呼叫端（performAttack / processDeaths）負責。
  */
+/**
+ * 服役紀錄的原料（v0.16 §4.4）。擊殺與承受傷害都記在**士兵 id** 上，
+ * 任務結束後併進 `ServiceRecord`。
+ *
+ * **這是純數值士兵唯一的人格來源** —— 玩家的感情不是對角色設定產生的，
+ * 是對「這傢伙活下來了」產生的。
+ */
+function recordHit(
+  state: GameState, attacker: Unit, victim: Unit, amount: number, lethal: boolean,
+): void {
+  const bump = (id: string, k: 'kills' | 'damageTaken', n: number): void => {
+    const cur = state.stats[id] ?? { kills: 0, damageTaken: 0 };
+    cur[k] += n;
+    state.stats[id] = cur;
+  };
+  if (victim.faction === 'PLAYER') bump(victim.id, 'damageTaken', amount);
+  // 友軍傷害（濺射打到自己）不算擊殺
+  if (lethal && attacker.faction === 'PLAYER' && victim.faction === 'ENEMY') {
+    bump(attacker.id, 'kills', 1);
+  }
+}
+
 export function resolveAttack(
   state: GameState,
   attackerId: string,
@@ -361,6 +383,7 @@ export function resolveAttack(
     // 那些發不再算「擊殺」，否則畫面上會連跳三次「擊殺」。
     const wasAlive = u.hp > 0;
     u.hp -= d.amount;
+    recordHit(state, attacker, u, d.amount, wasAlive && u.hp <= 0);
     events?.push({
       kind: 'IMPACT',
       unitId: u.id,

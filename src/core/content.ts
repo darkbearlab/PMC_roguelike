@@ -88,6 +88,23 @@ export interface Rules {
     /** v0.13：東西向與南北向掩蔽覆蓋率的差距上限（百分點）。 */
     dirCoverGap: number;
   };
+  /** §19 局外層（v0.16）。起始狀態與補給站內容全部在資料檔。 */
+  meta: {
+    schemaVersion: number;
+    soldierHp: number;
+    missionLogSize: number;
+    start: {
+      soldiers: number;
+      weapons: string[];
+      ammo: Record<string, number>;
+      consumables: Record<string, number>;
+    };
+    supply: {
+      weapons: string[];
+      ammo: string[];
+      ammoBatch: Record<string, number>;
+    };
+  };
   sequences: Record<string, unknown>;
   ai: {
     searchTime: number;

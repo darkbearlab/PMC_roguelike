@@ -9,12 +9,10 @@
 import { describe, expect, it } from 'vitest';
 import { AMMO_TYPES, ITEMS, RULES, WEAPONS, ammoTypesForCalibre } from '../src/core/content';
 import type { Calibre } from '../src/core/state';
-import {
-  allAmmoTypes, checkLoadout, cloneLoadout, defaultLoadout, equipFromLoadout,
-  loadoutBreakdown, loadoutWeight, selectableConsumables,
-} from '../src/core/loadout';
-import type { Loadout } from '../src/core/loadout';
-import { carriedWeight, countAmmo, countAmmoFor, totalWeight } from '../src/core/inventory';
+import { allAmmoTypes, checkKit, emptyKit, kitBreakdown, kitWeight } from '../src/core/loadout';
+import type { CarriedKit } from '../src/core/loadout';
+import { makeWeapon } from '../src/core/weapon';
+import { carriedWeight, feedableTypes, totalWeight } from '../src/core/inventory';
 import { createInitialState } from '../src/core/setup';
 import { mapById } from '../src/core/content';
 import { cheapestMode, effectiveMode, shotsFor } from '../src/core/combat';
@@ -73,10 +71,12 @@ describe('§1 口徑系統', () => {
   });
 
   it('新增一把槍只要指定既有口徑就能吃既有彈藥', () => {
-    const l: Loadout = { primary: 'lmg5', stowed: null, ammo: { 'standard_5.56': 30 }, consumables: {} };
-    const kit = equipFromLoadout({ nextEntitySerial: 1 }, l);
-    // LMG-5 與 AR-9 不同型號，但同口徑 —— 背包裡那堆 5.56 兩把都吃得到
-    expect(countAmmoFor(kit.backpack, kit.equipped!)).toBe(30);
+    // LMG-5 與 AR-9 不同型號，但同口徑 —— 那堆 5.56 兩把都吃得到
+    const serial = { nextEntitySerial: 1 };
+    const lmg = makeWeapon(serial, 'lmg5');
+    const ar9 = makeWeapon(serial, 'ar9');
+    expect(feedableTypes(lmg)).toEqual(feedableTypes(ar9));
+    expect(feedableTypes(lmg)).toEqual(['standard_5.56']);
   });
 });
 
@@ -153,7 +153,7 @@ describe('§3 兩個新機制', () => {
 });
 
 describe('§4 換算尺與負重', () => {
-  it('武器重量依 §4.2 的現實換算表', () => {
+  it('武器重量依 §19.2 的現實換算表', () => {
     const want: Record<string, number> = {
       ar9: 7, rr4: 20, sg12p: 7, sg12s: 5, dmr7: 11, lmg5: 15, p9: 2,
     };
@@ -167,8 +167,15 @@ describe('§4 換算尺與負重', () => {
       .toEqual([[55, 10], [78, 12], [100, 14]]);
   });
 
-  it('預設配裝 41.6，落在第一級且有餘裕（§4.3）', () => {
-    const c = checkLoadout(defaultLoadout());
+  it('AR-9 + RR-4 + 24 發 5.56 + 2 發 84mm + 封合劑 = 41.6，第一級且有餘裕', () => {
+    const serial = { nextEntitySerial: 1 };
+    const kit: CarriedKit = {
+      equipped: makeWeapon(serial, 'ar9'),
+      stowed: makeWeapon(serial, 'rr4'),
+      ammo: { 'standard_5.56': 24, heat_84mm: 2 },
+      consumables: { SEALANT: 1 },
+    };
+    const c = checkKit(kit);
     expect(c.weight).toBeCloseTo(41.576, 3);
     expect(c.tier).toBe(0);
     expect(c.moveCost).toBe(10);
@@ -176,7 +183,7 @@ describe('§4 換算尺與負重', () => {
     expect(c.headroom).toBeCloseTo(13.424, 3);
   });
 
-  it('輕武器彈藥的重量幾乎不構成壓力，真正咬人的是 84mm（§1.3）', () => {
+  it('輕武器彈藥的重量幾乎不構成壓力，真正咬人的是 84mm', () => {
     expect(RULES.calibres['5.56'].weightPerRound * 24).toBeLessThan(1);
     expect(RULES.calibres['84mm'].weightPerRound * 2).toBe(12);
   });
@@ -185,98 +192,79 @@ describe('§4 換算尺與負重', () => {
     const s = createInitialState(1, mapById('mission_01')!);
     const p = s.units.find((u) => u.faction === 'PLAYER')!;
     expect(carriedWeight(p) - totalWeight(p.backpack)).toBe(27);   // AR-9 7 + RR-4 20
-    expect(carriedWeight(p)).toBeCloseTo(checkLoadout(defaultLoadout()).weight, 3);
   });
 });
 
-describe('§5 配裝', () => {
-  it('可選內容全部由資料推導，不寫死', () => {
-    expect(allAmmoTypes()).toEqual(Object.keys(AMMO_TYPES));
-    expect(selectableConsumables()).toContain('SEALANT');
-    for (const id of selectableConsumables()) expect(ITEMS[id].use).toBeTruthy();
-  });
+describe('§19.5 配裝的檢查', () => {
+  const serial = { nextEntitySerial: 1 };
 
-  it('帶槍不帶對應彈藥 → 警告，但不阻擋（§5.4）', () => {
-    const c = checkLoadout({ primary: 'dmr7', stowed: null, ammo: {}, consumables: {} });
+  it('帶槍不帶對應彈藥 → 警告，但不阻擋', () => {
+    const c = checkKit({ ...emptyKit(), equipped: makeWeapon(serial, 'dmr7') });
     expect(c.warnings.some((w) => w.includes('DMR-7'))).toBe(true);
-    expect(c.overweight).toBe(false);            // 警告不是阻擋
+    expect(c.overweight).toBe(false);
   });
 
   it('什麼武器都不帶也只是警告', () => {
-    const c = checkLoadout({ primary: null, stowed: null, ammo: {}, consumables: {} });
-    expect(c.warnings.some((w) => w.includes('沒有帶任何武器'))).toBe(true);
+    const c = checkKit(emptyKit());
+    expect(c.warnings).toContain('赤手空拳');
     expect(c.overweight).toBe(false);
   });
 
   it('超重是硬限制', () => {
-    const c = checkLoadout({ primary: 'rr4', stowed: 'lmg5', ammo: { 'heat_84mm': 12 }, consumables: {} });
+    const c = checkKit({
+      equipped: makeWeapon(serial, 'rr4'),
+      stowed: makeWeapon(serial, 'lmg5'),
+      ammo: { heat_84mm: 12 },
+      consumables: {},
+    });
     expect(c.weight).toBeGreaterThan(RULES.backpack.maxWeight);
     expect(c.overweight).toBe(true);
   });
 
-  it('配裝真的變成士兵身上的東西', () => {
-    const l: Loadout = {
-      primary: 'sg12s', stowed: 'p9',
-      ammo: { 'buckshot_12ga': 12, 'standard_9mm': 30 }, consumables: { SEALANT: 2 },
-    };
-    const s = createInitialState(1, mapById('mission_01')!, l);
-    const p = s.units.find((u) => u.faction === 'PLAYER')!;
-    expect(p.equipped!.typeId).toBe('sg12s');
-    expect(p.stowed!.typeId).toBe('p9');
-    expect(countAmmo(p.backpack, 'buckshot_12ga')).toBe(12);
-    expect(countAmmo(p.backpack, 'standard_9mm')).toBe(30);
-    expect(countAmmo(p.backpack, 'standard_5.56')).toBe(0);
-    expect(carriedWeight(p)).toBeCloseTo(loadoutWeight(l), 3);
-  });
-
-  it('可以只帶一把，另一欄留空', () => {
-    const l: Loadout = { primary: 'p9', stowed: null, ammo: { 'standard_9mm': 20 }, consumables: {} };
-    const s = createInitialState(1, mapById('mission_01')!, l);
-    const p = s.units.find((u) => u.faction === 'PLAYER')!;
-    expect(p.stowed).toBeNull();
-    expect(carriedWeight(p)).toBeCloseTo(2 + 20 * 0.024, 3);
-  });
-
-  it('決定論不受影響：相同種子 + 相同配裝 → 相同狀態', () => {
-    const l: Loadout = { primary: 'dmr7', stowed: 'p9', ammo: { 'standard_7.62': 20 }, consumables: {} };
-    const a = createInitialState(4242, mapById('mission_02')!, cloneLoadout(l));
-    const b = createInitialState(4242, mapById('mission_02')!, cloneLoadout(l));
-    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
-  });
-
   it('重量明細加起來等於總重', () => {
-    const l = defaultLoadout();
-    const sum = loadoutBreakdown(l).reduce((a, x) => a + x.weight, 0);
-    expect(sum).toBeCloseTo(loadoutWeight(l), 3);
+    const kit: CarriedKit = {
+      equipped: makeWeapon(serial, 'sg12s'),
+      stowed: makeWeapon(serial, 'p9'),
+      ammo: { buckshot_12ga: 12, standard_9mm: 30 },
+      consumables: { SEALANT: 1 },
+    };
+    const sum = kitBreakdown(kit).reduce((a, x) => a + x.weight, 0);
+    expect(sum).toBeCloseTo(kitWeight(kit), 3);
   });
 });
 
-describe('§6 至少三種明顯不同、各有適用場合的組合', () => {
-  const combos: [string, Loadout][] = [
-    ['近遠互補', { primary: 'sg12s', stowed: 'dmr7', ammo: { 'buckshot_12ga': 12, 'standard_7.62': 20 }, consumables: { SEALANT: 1 } }],
-    ['通用＋反裝甲', defaultLoadout()],
-    ['火力＋應急', { primary: 'lmg5', stowed: 'p9', ammo: { 'standard_5.56': 90, 'standard_9mm': 30 }, consumables: { SEALANT: 1 } }],
-    ['狹窄空間', { primary: 'sg12p', stowed: 'ar9', ammo: { 'buckshot_12ga': 20, 'standard_5.56': 32 }, consumables: { SEALANT: 1 } }],
+describe('§19.4 至少三種明顯不同、各有適用場合的組合', () => {
+  const serial = { nextEntitySerial: 1 };
+  const mk = (a: string, b: string | null, ammo: Record<string, number>): CarriedKit => ({
+    equipped: makeWeapon(serial, a),
+    stowed: b ? makeWeapon(serial, b) : null,
+    ammo,
+    consumables: { SEALANT: 1 },
+  });
+  const combos: [string, CarriedKit][] = [
+    ['近遠互補', mk('sg12s', 'dmr7', { buckshot_12ga: 12, 'standard_7.62': 20 })],
+    ['通用＋反裝甲', mk('ar9', 'rr4', { 'standard_5.56': 24, heat_84mm: 2 })],
+    ['火力＋應急', mk('lmg5', 'p9', { 'standard_5.56': 90, standard_9mm: 30 })],
+    ['狹窄空間', mk('sg12p', 'ar9', { buckshot_12ga: 20, 'standard_5.56': 32 })],
   ];
 
   it('四種組合都出得了門，而且重量差得出來', () => {
-    const ws = combos.map(([, l]) => checkLoadout(l));
+    const ws = combos.map(([, k]) => checkKit(k));
     for (const [i, c] of ws.entries()) {
       expect(c.overweight, combos[i][0] + ' 超重').toBe(false);
       expect(c.tier, combos[i][0] + ' 一出門就被拖慢').toBe(0);
     }
-    // 最輕與最重的差距要夠大，否則「選哪一組」不構成決定
     const min = Math.min(...ws.map((c) => c.weight));
     const max = Math.max(...ws.map((c) => c.weight));
     expect(max - min).toBeGreaterThan(15);
   });
 
   it('每種組合的射程涵蓋不同 —— 這才叫組合，不是換皮', () => {
-    const spans = combos.map(([, l]) => {
-      const rs = [l.primary, l.stowed].filter(Boolean).map((id) => W(id as string).range);
+    const spans = combos.map(([, k]) => {
+      const rs = [k.equipped, k.stowed].filter(Boolean).map((w) => w!.range);
       return { min: Math.min(...rs), max: Math.max(...rs) };
     });
-    expect(spans[0].max - spans[0].min).toBeGreaterThan(10);   // 近遠互補真的很互補
-    expect(spans[2].max).toBeLessThan(spans[0].max);           // 火力組打不到那麼遠
+    expect(spans[0].max - spans[0].min).toBeGreaterThan(10);
+    expect(spans[2].max).toBeLessThan(spans[0].max);
   });
 });

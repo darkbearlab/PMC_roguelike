@@ -10,8 +10,7 @@ import { createRng, nextFloat } from './rng';
 import { ACTORS, MAPS, RULES, archetype } from './content';
 import { makeWeapon, makeWeaponFrom } from './weapon';
 import { addItem, emptyBackpack, makeItem } from './inventory';
-import type { Loadout } from './loadout';
-import { defaultLoadout, equipFromLoadout } from './loadout';
+import type { Deployment, DeployedSoldier } from './meta';
 
 function makeUnit(
   archetypeId: string,
@@ -56,47 +55,28 @@ function makeUnit(
 }
 
 /**
- * 背包的初始內容（§1.2 / §3）。
- * 需要 state 是因為物品 id 走的是狀態的流水號，不是亂數。
- */
-function fillBackpack(
-  state: { nextEntitySerial: number },
-  spec: { defId: string; qty: number }[],
-): Backpack {
-  const bag = emptyBackpack();
-  for (const e of spec) addItem(bag, makeItem(state as never, e.defId, e.qty));
-  return bag;
-}
-
-/**
- * 首發士兵。v0.15 起武器與背包內容都來自**出擊前配裝**（§5）；
- * 沒有指定就用預設配裝，也就是 v0.14 以前那組 AR-9 + RR-4。
+ * 依派遣快照造一名士兵（v0.16 §4.2）。
  *
- * 配裝是 `createInitialState` 的輸入之一，所以決定論不受影響：
- * 相同的種子 **加上** 相同的配裝，結果完全相同。
+ * **首發與替補走同一條路** —— 替補不再是「配發一把 AR-9」，
+ * 而是**帶著他自己的配裝**降落。沒有配裝的人就赤手空拳，那是玩家的責任。
+ *
+ * 派遣快照是 `createInitialState` 的輸入之一，所以決定論不受影響：
+ * 相同的種子 **加上** 相同的快照，結果完全相同。
  */
-export function makeStartingSoldier(
-  state: { nextEntitySerial: number }, id: string, pos: Vec2, loadout?: Loadout,
+export function makeDeployedUnit(
+  state: { nextEntitySerial: number }, d: DeployedSoldier, pos: Vec2,
 ): Unit {
-  const kit = equipFromLoadout(state, loadout ?? defaultLoadout());
-  return makeUnit('SOLDIER', id, id, pos, {
-    equipped: kit.equipped,
-    stowed: kit.stowed,
-  }, 'S', kit.backpack);
-}
-
-/**
- * 增援士兵：只有預設配備，一把滿彈的 AR-9，沒有 RR-4（§10.1 第 6 點）。
- * 背包也只有步槍彈 —— 火箭彈在前一個人的屍體上。
- */
-export function makeReinforcementSoldier(
-  state: { nextEntitySerial: number }, id: string, pos: Vec2,
-): Unit {
-  return makeUnit('SOLDIER', id, id, pos, {
-    equipped: makeWeapon(state, 'ar9'),
-    stowed: null,
-  }, 'S', fillBackpack(state, RULES.backpack.reinforcementItems));
-  // nextActAt 由 deployReinforcement 依 clock 設定
+  const bag = emptyBackpack();
+  for (const e of d.items) {
+    if (e.qty > 0) addItem(bag, makeItem(state as never, e.defId, e.qty));
+  }
+  const u = makeUnit('SOLDIER', d.id, d.designation, pos, {
+    equipped: d.equipped ? JSON.parse(JSON.stringify(d.equipped)) as WeaponInstance : null,
+    stowed: d.stowed ? JSON.parse(JSON.stringify(d.stowed)) as WeaponInstance : null,
+  }, 'S', bag);
+  u.hp = d.hp;
+  u.maxHp = d.maxHp;
+  return u;
 }
 
 /**
@@ -118,6 +98,7 @@ export function makeEnemy(
   }, facing);
 }
 
+/** 測試與機器人用的固定名冊 id。正式流程的名冊來自 MetaState。 */
 export function rosterIds(): string[] {
   const out: string[] = [];
   for (let i = 0; i < RULES.roster.size; i++) out.push(RULES.roster.idPrefix + (i + 1));
@@ -128,10 +109,12 @@ export function rosterIds(): string[] {
  * @param rawMap 指定地圖。**省略時用可播種亂數從四張圖裡挑一張**（§13.2）——
  *               選圖是規則的一部分，不是介面的一部分，所以它走 core/rng.ts，
  *               而且相同種子必然選到相同的圖。
- * @param loadout 出擊前配裝（v0.15 §5）。省略時用預設配裝，
- *                機器人基準與 `?map=` 除錯路徑都走這條。
+ * @param deployment 派遣快照（v0.16 §1.1）。**任務期間不讀寫 MetaState**，
+ *                   替補也是從這份快照裡取。省略時用測試用的預設名冊。
  */
-export function createInitialState(seed: number, rawMap?: RawMap, loadout?: Loadout): GameState {
+export function createInitialState(
+  seed: number, rawMap?: RawMap, deployment?: Deployment,
+): GameState {
   const rng = createRng(seed >>> 0);
   // 抽在最前面：後面所有的擲值順序才不會因為「有沒有指定地圖」而錯開。
   const picked = rawMap ?? MAPS[Math.floor(nextFloat(rng) * MAPS.length)];
@@ -148,13 +131,15 @@ export function createInitialState(seed: number, rawMap?: RawMap, loadout?: Load
     done: false,
   }));
 
-  const roster = rosterIds();
-  const firstId = roster.shift();
-  if (!firstId) throw new Error('名冊人數必須 >= 1');
+  const serial = { nextEntitySerial: 1 };
+  const plan = deployment ?? testDeployment(serial);
+  const firstId = plan.firstId;
+  const first = plan.soldiers.find((d) => d.id === firstId);
+  if (!first) throw new Error('派遣快照裡沒有首發士兵 ' + firstId);
+  const roster = plan.soldiers.filter((d) => d.id !== firstId).map((d) => d.id);
 
   // 物品與屍體的 id 走同一個流水號，所以先開一個計數器再交給 state
-  const serial = { nextEntitySerial: 1 };
-  const units: Unit[] = [makeStartingSoldier(serial, firstId, map.startDropPoint, loadout)];
+  const units: Unit[] = [makeDeployedUnit(serial, first, map.startDropPoint)];
   picked.enemies.forEach((e, i) => {
     if (!ACTORS[e.archetype]) throw new Error('地圖引用了未知的敵人原型 ' + e.archetype);
     units.push(makeEnemy(serial, e.archetype, i, e.pos, e.facing));
@@ -182,6 +167,10 @@ export function createInitialState(seed: number, rawMap?: RawMap, loadout?: Load
     objectives: { main, secondary },
     casualties: 0,
     deployed: 1,
+    deployment: plan.soldiers,
+    stats: {},
+    deadSoldierIds: [],
+    extractedBy: null,
     rngSeed: seed >>> 0,
     rng,
     result: 'ONGOING',
@@ -190,12 +179,35 @@ export function createInitialState(seed: number, rawMap?: RawMap, loadout?: Load
     nextEntitySerial: serial.nextEntitySerial,
     log: [
       { at: 0, kind: 'MISSION', text: '任務開始：' + map.name },
-      { at: 0, kind: 'INFO', text: firstId + ' 已投入戰場。' },
+      { at: 0, kind: 'INFO', text: first.designation + ' 已投入戰場。' },
       {
         at: 0,
         kind: 'INFO',
         text: 'HUD 的防禦狀態採「最差情況」：在所有看得到你的敵人之中取掩蔽最低的那一個。',
       },
     ],
+  };
+}
+
+/**
+ * 測試與機器人用的派遣快照：四名數值相同的士兵，都帶預設配備。
+ *
+ * 正式流程的快照來自 `MetaState`（§1.1）。這一份存在的理由是
+ * **機器人基準必須跟得上**：它要能在不碰局外層的情況下跑出可比較的數據（§9 回歸）。
+ */
+export function testDeployment(serial: { nextEntitySerial: number }): Deployment {
+  const ids = rosterIds();
+  const spec = RULES.backpack.startingItems.map((e) => ({ defId: e.defId, qty: e.qty }));
+  return {
+    firstId: ids[0],
+    soldiers: ids.map((id) => ({
+      id,
+      designation: id + ' Gen.1',
+      hp: RULES.meta.soldierHp,
+      maxHp: RULES.meta.soldierHp,
+      equipped: makeWeapon(serial, 'ar9'),
+      stowed: makeWeapon(serial, 'rr4'),
+      items: spec,
+    })),
   };
 }

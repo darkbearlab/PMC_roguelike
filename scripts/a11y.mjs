@@ -131,9 +131,36 @@ await p.locator('#modal-root button[data-yes]').click();
 await p.waitForTimeout(250);
 results.push(await audit('結算畫面'));
 
-// ---- 合約清單（§18.5）。走的是另一條入口：沒有 ?map= 才會出現 ----
-await p.goto((process.env.URL || 'http://localhost:4188/') + '?seed=1', { waitUntil: 'networkidle' });
+// ---- 公司 → 合約 → 派遣 → 任務（v0.16 §4.1）。沒有 ?map= 才會出現 ----
+await p.goto((process.env.URL || 'http://localhost:4188/') + '?seed=1&reset=1', { waitUntil: 'networkidle' });
 await p.waitForTimeout(300);
+if (await p.locator('.co-card').count() === 0) {
+  console.log('❌ 公司畫面沒有名冊');
+  process.exitCode = 1;
+}
+results.push(await audit('公司・名冊'));
+await p.locator('button[data-tab="ARMOURY"]').click();
+await p.waitForTimeout(150);
+results.push(await audit('公司・軍械庫'));
+await p.locator('button[data-tab="SUPPLY"]').click();
+await p.waitForTimeout(150);
+results.push(await audit('公司・補給站'));
+await p.locator('button[data-tab="ROSTER"]').click();
+await p.waitForTimeout(150);
+// 逐人配裝：把第一把槍指給第一個人
+await p.locator('button[data-kit]').first().click();
+await p.waitForTimeout(200);
+results.push(await audit('逐人配裝'));
+const kitBefore = await p.locator('.l-weight').innerText();
+await p.locator('.l-list button[data-slot="equipped"]').nth(1).click();
+await p.waitForTimeout(200);
+const kitAfter = await p.locator('.l-weight').innerText();
+console.log(kitBefore !== kitAfter ? '✅ 逐人配裝的重量列即時更新' : '❌ 指派武器後重量列沒變');
+if (kitBefore === kitAfter) process.exitCode = 1;
+await p.locator('button[data-back]').click();
+await p.waitForTimeout(150);
+await p.locator('button[data-go]').click();
+await p.waitForTimeout(400);
 if (await p.locator('.c-card').count() !== 3) {
   console.log('❌ 合約清單沒有出現三張卡片');
   process.exitCode = 1;
@@ -154,33 +181,23 @@ const readable = await p.evaluate(() => {
   };
 });
 console.log(readable.hasBrief ? `✅ 合約簡報可展開並捲動（可捲動 = ${readable.scrollable}）` : '❌ 展開後沒有簡報');
-// 出擊 → 配裝畫面（§19）
+// 選合約 → 派遣畫面（§4.1）
 await p.locator('.c-card.open button[data-go]').click();
 await p.waitForTimeout(300);
-if (await p.locator('.l-pick').count() === 0) {
-  console.log('❌ 配裝畫面沒有出現');
+if (await p.locator('button[data-deploy]').count() === 0) {
+  console.log('❌ 派遣畫面沒有出現');
   process.exitCode = 1;
 }
-results.push(await audit('配裝畫面'));
-// 換一把重的，重量列要跟著變
-const before = await p.locator('.l-weight').innerText();
-await p.locator('button[data-slot="primary"][data-id="lmg5"]').click();
-await p.waitForTimeout(150);
-const after = await p.locator('.l-weight').innerText();
-console.log(before !== after ? '✅ 配裝重量列即時更新' : '❌ 換武器之後重量列沒變');
-if (before === after) process.exitCode = 1;
-await p.locator('button[data-reset]').click();
-await p.waitForTimeout(150);
-// 出擊
-await p.locator('button[data-go]').click();
-await p.waitForTimeout(400);
+results.push(await audit('派遣'));
+await p.locator('button[data-deploy]').first().click();
+await p.waitForTimeout(500);
 const started = await p.evaluate(() => ({
   hidden: document.querySelector('#contract-root').classList.contains('hidden')
-    && document.querySelector('#loadout-root').classList.contains('hidden'),
+    && document.querySelector('#company-root').classList.contains('hidden'),
   map: window.__game && window.__game.state.map.id,
 }));
 console.log(started.hidden && started.map
-  ? `✅ 確認出擊後進入 ${started.map}，清單已關閉`
+  ? `✅ 派遣後進入 ${started.map}，公司與清單都關閉了`
   : '❌ 出擊流程沒有進入任務：' + JSON.stringify(started));
 if (!started.hidden || !started.map) process.exitCode = 1;
 

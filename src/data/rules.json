@@ -94,6 +94,29 @@
     "consumableMax": 4
   },
 
+  "_meta": "局外層（v0.16 §7.4）。新公司的起始狀態刻意**不讓四個人都配得滿** —— 第一次進入配裝畫面就應該遇到「東西不夠分」的處境。schemaVersion 由 §7.2 使用：載入時版本不符就提示重置，不要遷移。",
+  "meta": {
+    "schemaVersion": 1,
+    "soldierHp": 60,
+    "missionLogSize": 20,
+    "start": {
+      "_comment": "四名士兵，但只有兩套武器 —— 那個缺口就是配裝畫面的第一堂課。",
+      "soldiers": 4,
+      "weapons": ["ar9", "rr4", "sg12p", "p9"],
+      "ammo": { "standard_5.56": 48, "heat_84mm": 3, "buckshot_12ga": 20, "standard_9mm": 30 },
+      "consumables": { "SEALANT": 2 }
+    },
+    "_supply": "暫時補給站（§6）。**全部 0 元，明確標示為佔位。**做成商店的形狀而不是一顆「新增」按鈕，是為了讓經濟層之後只需要填入價格，不必重做介面。",
+    "supply": {
+      "weapons": ["ar9", "rr4", "sg12p", "sg12s", "dmr7", "lmg5", "p9"],
+      "ammo": ["standard_5.56", "standard_7.62", "buckshot_12ga", "standard_9mm", "heat_84mm"],
+      "ammoBatch": {
+        "standard_5.56": 24, "standard_7.62": 20, "buckshot_12ga": 12,
+        "standard_9mm": 24, "heat_84mm": 2
+      }
+    }
+  },
+
   "loot": {
     "_comment": "§4 搜刮。敵人屍體的掉落表寫在 actors.json 各原型的 loot 欄位；搜刮點的內容寫在地圖檔。",
     "_dna": "己方屍體一定有一份 DNA（§4.4）。局外層還不存在，帶出去只會列在結算畫面上。",

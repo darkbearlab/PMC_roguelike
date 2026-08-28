@@ -34,8 +34,7 @@ import { computeVision, isVisible, visionKey } from '../render/vision';
 import { $, $$, esc, show } from './dom';
 import { fmtWeight, missionPanelHtml, renderHud, shortName } from './hud';
 import { carriedWeight } from '../core/inventory';
-import type { Loadout } from '../core/loadout';
-import { defaultLoadout } from '../core/loadout';
+import type { Deployment } from '../core/meta';
 import { backpackHtml, lootPanelHtml, selfPanelHtml, wireMenu } from './menus';
 import {
   hideModal, showAbortConfirm, showReinforcement, showSplashConfirm, showSummary,
@@ -129,13 +128,13 @@ export class Game {
   constructor(
     private seed: number,
     private forcedMap: RawMap | null = null,
-    private onReturnToList: (() => void) | null = null,
-    private loadout: Loadout = defaultLoadout(),
+    private onMissionEnd: (() => void) | null = null,
+    private deployment: Deployment | null = null,
   ) {
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('取不到 Canvas 2D context');
     this.ctx = ctx;
-    this.state = createInitialState(seed, forcedMap ?? undefined, this.loadout);
+    this.state = createInitialState(seed, forcedMap ?? undefined, this.deployment ?? undefined);
     this.vision = computeVision(this.state);
     this.focus = { ...this.state.map.startDropPoint };
     this.bindInput();
@@ -161,15 +160,15 @@ export class Game {
    * 換一份合約（§18.1）。**不重建 Game** —— 事件監聽與 rAF 迴圈只綁一次，
    * 每回清單重新建一個 Game 會把它們疊起來。
    */
-  loadMission(seed: number, map: RawMap, loadout?: Loadout): void {
+  loadMission(seed: number, map: RawMap, deployment?: Deployment): void {
     this.seed = seed;
     this.forcedMap = map;
-    if (loadout) this.loadout = loadout;
+    if (deployment) this.deployment = deployment;
     this.restart();
   }
 
   restart(): void {
-    this.state = createInitialState(this.seed, this.forcedMap ?? undefined, this.loadout);
+    this.state = createInitialState(this.seed, this.forcedMap ?? undefined, this.deployment ?? undefined);
     this.ghosts.clear();
     this.auto = null;
     this.sel = null;
@@ -637,11 +636,7 @@ export class Game {
     if (this.modal === 'SPLASH') return;
     if (s.result !== 'ONGOING' && this.modal !== 'SUMMARY') {
       this.modal = 'SUMMARY';
-      showSummary(
-        s,
-        () => this.restart(),
-        this.onReturnToList,
-      );
+      showSummary(s, () => this.restart(), this.onMissionEnd);
       return;
     }
     if (this.modal === 'SUMMARY' || this.modal === 'ABORT') return;

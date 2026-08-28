@@ -41,7 +41,7 @@ describe('§10 死亡、增援與屍體', () => {
     expect(s.activePlayerUnitId).toBeNull();
   });
 
-  it('增援只帶 AR-9，AP 為 0，從最近的空投點出現', () => {
+  it('替補帶著自己的配裝，AP 為 0，從最近的空投點出現（v0.16 §4.2）', () => {
     let s = testState(ROOM);
     const p = player(s);
     p.hp = 3;
@@ -53,9 +53,17 @@ describe('§10 死亡、增援與屍體', () => {
     s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: next });
     const fresh = unit(s, next);
     expect(fresh.pos).toEqual({ x: 6, y: 1 });      // 最近的空投點，不是起點
+    // v0.16：替補不再是「配發一把 AR-9」，而是帶著他自己的配裝降落。
+    // 測試用的派遣快照給每個人 AR-9 + RR-4，所以兩把都在。
     expect(fresh.equipped!.typeId).toBe('ar9');
     expect(fresh.equipped!.ammo).toBe(8);
-    expect(fresh.stowed).toBeNull();                 // 重武器留在屍體上
+    expect(fresh.stowed!.typeId).toBe('rr4');
+    // 而且是**他自己那一把**，不是死者留在地上的那一把
+    const corpse = s.loot.find((c) => c.kind === 'PLAYER_BODY')!;
+    const onGround = corpse.items.filter((it) => it.kind === 'WEAPON')
+      .map((it) => it.weapon!.instanceId);
+    expect(onGround).not.toContain(fresh.equipped!.instanceId);
+    expect(onGround).not.toContain(fresh.stowed!.instanceId);
     expect(s.deployed).toBe(2);
     expect(s.pendingReinforcement).toBeNull();
   });
@@ -80,7 +88,12 @@ describe('§10 死亡、增援與屍體', () => {
     });
     expect(player(s).stowed!.typeId).toBe('rr4');
     expect(player(s).nextActAt).toBeGreaterThan(before);   // 拾取花了時間
-    expect(weaponIds(lootAt(s, { x: 6, y: 1 }))).toEqual(['ar9']);
+    // v0.16：替補自己也帶著一把 RR-4，換上死者那把之後自己那把落在同一堆上。
+    // 這正是實例化的用處 —— 兩把同型號的槍分得出來是哪一把。
+    expect(weaponIds(lootAt(s, { x: 6, y: 1 })).sort()).toEqual(['ar9', 'rr4']);
+    const pile = lootAt(s, { x: 6, y: 1 })!;
+    const left = pile.items.filter((it) => it.kind === 'WEAPON').map((it) => it.weapon!.instanceId);
+    expect(left).not.toContain(player(s).stowed!.instanceId);
   });
 
   it('替換手持武器時，被換下來的槍免費留在同一具屍體上', () => {

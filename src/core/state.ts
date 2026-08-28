@@ -5,6 +5,7 @@
  * 相同的初始狀態 + 相同的指令序列 ⇒ 完全相同的結果（§3.1）。
  */
 import type { RngState } from './rng';
+import type { DeployedSoldier } from './meta';
 
 export type Vec2 = { x: number; y: number };
 export type Stance = 'STAND' | 'CROUCH';
@@ -385,6 +386,17 @@ export interface GameState {
   };
   casualties: number;
   deployed: number;          // 累計投入士兵數（結算畫面用）
+  /**
+   * 派遣快照（v0.16 §1.1）。**任務期間唯讀** —— 替補從這裡取自己的配裝。
+   * 局外層的 MetaState 不進 GameState，任務仍然是純函數。
+   */
+  deployment: DeployedSoldier[];
+  /** 本場的個人統計，結束後併進服役紀錄（§4.4）。soldierId → 數字。 */
+  stats: Record<string, { kills: number; damageTaken: number }>;
+  /** 這一場陣亡的士兵 id。局外層據此永久移除（§5.1）。 */
+  deadSoldierIds: string[];
+  /** 走出撤離點的那一位。止損與全滅都是 null。 */
+  extractedBy: string | null;
   rngSeed: number;
   rng: RngState;
   result: 'ONGOING' | 'SUCCESS' | 'ABORTED' | 'WIPED';
