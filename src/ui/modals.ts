@@ -53,7 +53,13 @@ export function showReinforcement(
   // 插隊版 §2：**只有已啟用的空投點可以降落。**
   // 死亡懲罰因此從「地圖作者決定的間距」變成「玩家事先買不買保險」。
   const drops = activatedDropOptions(state);
+  // 預設選離陣亡地點最近的那一個 —— 不挑也能直接按，維持原本的節奏（§12.26）。
   let chosen = 0;
+  let bestDist = Number.POSITIVE_INFINITY;
+  drops.forEach((d, i) => {
+    const dist = Math.abs(d.x - p.deathPos.x) + Math.abs(d.y - p.deathPos.y);
+    if (dist < bestDist) { bestDist = dist; chosen = i; }
+  });
   const dropLine = (d: Vec2, i: number): string => {
     const dist = Math.abs(d.x - p.deathPos.x) + Math.abs(d.y - p.deathPos.y);
     // 只反映**玩家已知的情況** —— 有迷霧之後這一點特別重要
