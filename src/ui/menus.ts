@@ -28,6 +28,9 @@ export interface MenuHandlers {
   takeAll(lootId: string): void;
   prepare(itemId: string): void;
   drop(itemId: string): void;
+  /** v0.18：在主手、收納欄與背包之間搬一把槍。 */
+  moveGear(from: WeaponSlot, to: WeaponSlot, itemId?: string): void;
+  swapWeapon(): void;
   interact(pos: Vec2): void;
   abortSequence(): void;
   close(): void;
@@ -170,7 +173,8 @@ export function lootPanelHtml(state: GameState, pos: Vec2): string {
  * 按別的鍵就取消 —— 誤觸的代價只是多看一眼。
  */
 function needsConfirm(kind: string | undefined): boolean {
-  return kind === 'prepare' || kind === 'drop';
+  // v0.18：搬裝備會花時間，而背包是滿版介面 —— 誤觸的代價是整場的時間。
+  return kind === 'prepare' || kind === 'drop' || kind === 'gear' || kind === 'swap';
 }
 
 export function wireMenu(host: HTMLElement, at: Vec2, h: MenuHandlers): void {
@@ -199,6 +203,14 @@ export function wireMenu(host: HTMLElement, at: Vec2, h: MenuHandlers): void {
         case 'take-all': h.takeAll(btn.dataset.loot as string); break;
         case 'prepare': h.prepare(btn.dataset.item as string); break;
         case 'drop': h.drop(btn.dataset.item as string); break;
+        case 'swap': h.swapWeapon(); break;
+        case 'gear':
+          h.moveGear(
+            btn.dataset.from as WeaponSlot,
+            btn.dataset.to as WeaponSlot,
+            btn.dataset.item || undefined,
+          );
+          break;
         case 'pickup':
           h.pickup(
             btn.dataset.loot as string,
@@ -210,6 +222,48 @@ export function wireMenu(host: HTMLElement, at: Vec2, h: MenuHandlers): void {
       }
     });
   });
+}
+
+/**
+ * 一顆搬裝備的按鈕（v0.18 §3.2）。
+ * **顯示時間花費**，而且會走 needsConfirm 的二次確認 ——
+ * 背包是滿版介面，誤觸的代價是整場的時間。
+ */
+function gearButton(
+  state: GameState, from: WeaponSlot, to: WeaponSlot, label: string, itemId?: string,
+): string {
+  const cmd = { type: 'MOVE_GEAR' as const, from, to, itemId };
+  const legal = checkLegal(state, cmd);
+  const cost = commandTime(state, cmd);
+  return '<button data-do="gear" data-from="' + from + '" data-to="' + to + '"'
+    + (itemId ? ' data-item="' + esc(itemId) + '"' : '')
+    + (legal.ok ? '' : ' disabled') + '>' + label
+    + '<em>' + (legal.ok ? '費時 ' + cost : esc(legal.reason)) + '</em></button>';
+}
+
+/**
+ * 裝備欄（v0.18 §3.1）。**沒有新增介面** —— 就長在既有的滿版背包畫面裡。
+ *
+ * 這一段存在的理由：空投下來的替補走到屍體旁邊，屍體上躺著一把無後座力砲，
+ * 但他自己的主手與收納欄都滿了，而在此之前**遊戲裡沒有任何動作可以騰出位置**。
+ */
+function gearSectionHtml(state: GameState, u: PlayerUnit): string {
+  const row = (slot: WeaponSlot, name: string, w: PlayerUnit['equipped']): string => {
+    if (!w) return '<button disabled>' + name + '：空<em>沒有東西可以搬</em></button>';
+    const label = name + '：' + esc(w.name) + '（' + fmtWeight(w.weight) + '）';
+    return gearButton(state, slot, 'BACKPACK', label + ' → 背包');
+  };
+  const swap = checkLegal(state, { type: 'SWAP_WEAPON' });
+  return '<h3 class="sub">裝備</h3>'
+    + '<p class="note">三個位置的東西<b>全部計入負重</b>，所以搬動不改變總重 ——'
+    + '改變的是拿不拿得到。也因此它要花時間：在敵火下騰位置是件蠢事。</p>'
+    + '<div class="menu-actions">'
+    + row('EQUIPPED', '手持', u.equipped)
+    + row('STOWED', '收納', u.stowed)
+    + '<button data-do="swap"' + (swap.ok ? '' : ' disabled') + '>手持 ↔ 收納'
+    + '<em>' + (swap.ok ? '費時 ' + commandTime(state, { type: 'SWAP_WEAPON' }) : esc(swap.reason))
+    + '</em></button>'
+    + '</div>';
 }
 
 /**
@@ -248,14 +302,9 @@ export function backpackHtml(state: GameState): string {
       : '　已經是最重的級距。')
     + '</p>';
 
-  const guns = (u.equipped ? u.equipped.weight : 0) + (u.stowed ? u.stowed.weight : 0);
-  if (guns > 0) {
-    html += '<p class="note">其中 ' + fmtWeight(guns) + ' 是身上的槍'
-      + (u.equipped ? '（手持 ' + esc(u.equipped.name) + ' ' + fmtWeight(u.equipped.weight) + '）' : '')
-      + (u.stowed ? '（收納 ' + esc(u.stowed.name) + ' ' + fmtWeight(u.stowed.weight) + '）' : '')
-      + '　—— 丟不掉，只能換掉。</p>';
-  }
+  html += gearSectionHtml(state, u);
 
+  html += '<h3 class="sub">背包</h3>';
   if (u.backpack.items.length === 0) {
     return html + '<p class="note">背包是空的。</p><div class="menu-actions"></div>';
   }
@@ -271,10 +320,14 @@ export function backpackHtml(state: GameState): string {
         + '>' + (isPrepared ? '已準備：' : '準備 ') + label
         + '<em>' + (legal.ok ? '費時 ' + RULES.time.prepare : esc(legal.reason)) + '</em></button>';
     } else {
-      html += '<button disabled>' + label + '<em>'
-        + (it.kind === 'WEAPON' ? '放在背包裡的武器不能用，要先換到手持或收納'
-          : it.kind === 'AMMO' ? '裝填時自動使用' : '帶出去才有價值')
-        + '</em></button>';
+      if (it.kind === 'WEAPON') {
+        // v0.18：這一顆就是 v0.9 規格預期、但一直沒實作的那個動作。
+        html += gearButton(state, 'BACKPACK', 'STOWED', '移到收納欄 ' + label, it.id);
+      } else {
+        html += '<button disabled>' + label + '<em>'
+          + (it.kind === 'AMMO' ? '裝填時自動使用' : '帶出去才有價值')
+          + '</em></button>';
+      }
     }
     html += '<button class="danger" data-do="drop" data-item="' + esc(it.id) + '">丟下 '
       + label + '<em>不花時間，落在腳下</em></button>';

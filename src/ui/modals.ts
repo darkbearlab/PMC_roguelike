@@ -186,7 +186,7 @@ export function showVersionMismatch(
   const r = open(
     '<h2 class="abort">存檔版本不符</h2>'
     + '<p>找到的存檔是第 <b>' + v.found + '</b> 版，這個版本要的是第 <b>' + v.expected + '</b> 版。</p>'
-    + '<p>本作**刻意不做存檔遷移** —— 專案迭代很快，格式會被之後每一版打破，'
+    + '<p>本作<b>刻意不做存檔遷移</b> —— 專案迭代很快，格式會被之後每一版打破，'
     + '而遷移程式碼的維護成本遠高於重來一次。</p>'
     + '<div class="menu-actions">'
     + '<button class="primary" data-reset="1">重置並開始新公司<em>舊的存檔會被清除</em></button>'

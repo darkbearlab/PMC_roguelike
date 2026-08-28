@@ -9,7 +9,7 @@
  * 非法指令回傳「原本那個 state 物件」（identity 不變），讓 UI 可以直接比對。
  */
 import type {
-  Facing, FireMode, GameState, Item, LootPile, Stance, Unit, Vec2, Weapon,
+  Facing, FireMode, GameState, Item, LootPile, Stance, Unit, Vec2, Weapon, WeaponInstance,
 } from './state';
 import { activePlayerUnit, lootAt } from './state';
 import { DIR_VEC, facingToward, manhattan, sameTile } from './grid';
@@ -40,6 +40,17 @@ export type Command =
   | { type: 'FIRE'; target: Vec2 }
   | { type: 'RELOAD' }
   | { type: 'SWAP_WEAPON' }
+  /**
+   * 在主手、收納欄與背包之間搬一把槍（v0.18）。
+   *
+   * v0.9 起規格就預期這件事可行（「撿到的第三把武器可以放進背包，
+   * 要先換到收納欄」），但那個動作從來沒有被實作 —— 於是空投下來的替補
+   * 走到屍體旁邊之後，**沒有任何動作可以騰出位置**，
+   * 而「要不要冒險走回去撿自己的屍體」是這款遊戲最重要的單一決策。
+   *
+   * `from` 為 BACKPACK 時要指定 `itemId`。
+   */
+  | { type: 'MOVE_GEAR'; from: WeaponSlot; to: WeaponSlot; itemId?: string }
   | { type: 'PICKUP'; lootId: string; itemIndex: number; slot?: WeaponSlot }
   | { type: 'TAKE_ALL'; lootId: string }
   | { type: 'CYCLE_FIRE_MODE' }
@@ -70,6 +81,19 @@ const no = (reason: string): Legality => ({ ok: false, reason });
  */
 export function weaponSwapTime(w: Weapon): number {
   return w.swapTime ?? RULES.time.swap[w.class];
+}
+
+/**
+ * 某個位置上的那把槍（v0.18）。`BACKPACK` 要指定 itemId。
+ * 找不到就是 null —— 呼叫端據此判定合法性與花費。
+ */
+export function gearAt(
+  u: Unit, slot: WeaponSlot, itemId?: string,
+): WeaponInstance | null {
+  if (slot === 'EQUIPPED') return u.equipped;
+  if (slot === 'STOWED') return u.stowed;
+  const it = findBagItem(u, itemId ?? null);
+  return it && it.kind === 'WEAPON' && it.weapon ? it.weapon : null;
 }
 
 export function swapTime(u: Unit): number {
@@ -110,6 +134,11 @@ export function commandTime(state: GameState, cmd: Command): number | null {
     case 'SEQUENCE_STEP': return u && u.pendingSequence ? seq.stepTime(u.pendingSequence) : null;
     case 'ABORT_SEQUENCE': return 0;
     case 'SWAP_WEAPON': return u ? swapTime(u) : null;
+    case 'MOVE_GEAR': {
+      // 花費依**被搬動的那一把**決定（v0.15 起寫在武器上，未寫則退回類別預設）
+      const w = u ? gearAt(u, cmd.from, cmd.itemId) : null;
+      return w ? weaponSwapTime(w) : null;
+    }
     case 'PICKUP':
     case 'TAKE_ALL': return RULES.loot.takeTime;
     case 'CYCLE_FIRE_MODE': return 0;   // 切換模式不花時間（§2.5）
@@ -134,7 +163,7 @@ const PLAYER_COMMANDS = new Set<Command['type']>([
   'MOVE', 'SET_STANCE', 'TOGGLE_STANCE', 'SET_FACING', 'FIRE',
   'RELOAD', 'SWAP_WEAPON', 'PICKUP', 'TAKE_ALL', 'INTERACT', 'WAIT',
   'SEQUENCE_STEP', 'ABORT_SEQUENCE', 'CYCLE_FIRE_MODE',
-  'PREPARE', 'USE_ITEM', 'DROP',
+  'PREPARE', 'USE_ITEM', 'DROP', 'MOVE_GEAR',
 ]);
 
 /** 系列動作進行中時，這個單位輪到時只能執行下一步或中止（§5.5）。 */
@@ -235,6 +264,19 @@ function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
       return u.pendingSequence ? OK : no('沒有進行中的動作');
     case 'SWAP_WEAPON':
       return u.stowed ? OK : no('沒有收納的武器');
+    case 'MOVE_GEAR': {
+      if (cmd.from === cmd.to) return no('原地不動');
+      if (cmd.to === 'EQUIPPED') return no('要拿到手上請用換武器');
+      const w = gearAt(u, cmd.from, cmd.itemId);
+      if (!w) {
+        return no(cmd.from === 'BACKPACK' ? '背包裡沒有這把槍'
+          : cmd.from === 'EQUIPPED' ? '手上沒有武器' : '收納欄是空的');
+      }
+      if (cmd.to === 'BACKPACK' && !u.backpack) return no('沒有背包');
+      // **不必檢查重量**：三個位置的東西全部計入負重（§1），
+      // 所以搬動不改變身上的總重，只改變「拿不拿得到」。
+      return OK;
+    }
     case 'PICKUP': {
       const pile = state.loot.find((c) => c.id === cmd.lootId);
       if (!pile) return no('找不到這一堆東西');
@@ -443,6 +485,12 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
       u.stowed = old;
       seq.abort(u);
       pushLog(s, 'INFO', u.name + ' 換裝為 ' + (u.equipped ? u.equipped.name : '空手'));
+      break;
+    }
+    case 'MOVE_GEAR': {
+      moveGear(s, u, cmd.from, cmd.to, cmd.itemId);
+      // 搬裝備跟換槍一樣會中斷手上的序列 —— 你正在裝填的那把槍被收走了
+      seq.abort(u);
       break;
     }
     case 'PICKUP': {
@@ -780,4 +828,40 @@ export function movePath(state: GameState, to: Vec2): Vec2[] | null {
 export function lootUnder(state: GameState): LootPile | null {
   const u = activePlayerUnit(state);
   return u ? lootAt(state, u.pos) : null;
+}
+
+/**
+ * 在主手、收納欄與背包之間搬一把槍（v0.18 §2）。
+ *
+ * **三個位置的東西全部計入負重**，所以搬動不改變身上的總重 ——
+ * 改變的是「拿不拿得到」。這也是為什麼它要花時間：
+ * 在敵火下騰位置應該是件蠢事，在掩體後應該是可行的。
+ *
+ * 目的地已經有東西時就對調（收納欄換出來的那把進背包），
+ * 這比「先清空再搬」少按一次，而且淨重量一樣不變。
+ */
+function moveGear(
+  s: GameState, u: Unit, from: WeaponSlot, to: WeaponSlot, itemId?: string,
+): void {
+  const w = gearAt(u, from, itemId);
+  if (!w || !u.backpack) return;
+
+  // 先從來源位置取下
+  if (from === 'EQUIPPED') u.equipped = null;
+  else if (from === 'STOWED') u.stowed = null;
+  else u.backpack.items = u.backpack.items.filter((it) => it.weapon !== w);
+
+  // 目的地原本的東西讓位
+  if (to === 'STOWED') {
+    const displaced = u.stowed;
+    u.stowed = w;
+    if (displaced) addItem(u.backpack, weaponItem(s, displaced));
+  } else {
+    addItem(u.backpack, weaponItem(s, w));
+  }
+
+  const where: Record<WeaponSlot, string> = {
+    EQUIPPED: '手持', STOWED: '收納欄', BACKPACK: '背包',
+  };
+  pushLog(s, 'INFO', u.name + ' 把 ' + w.name + ' 從' + where[from] + '移到' + where[to]);
 }

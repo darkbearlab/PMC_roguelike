@@ -8,7 +8,9 @@ import { generateContracts } from './core/contracts';
 import type { Contract } from './core/contracts';
 import type { RawMap } from './core/map';
 import type { MetaState } from './core/meta';
-import { applyMissionResult, makeDeployment, missionResultOf, newCompany } from './core/meta';
+import {
+  applyMissionResult, assignWeapon, makeDeployment, missionResultOf, moveAmmo, newCompany,
+} from './core/meta';
 import { hideContracts, showContracts } from './ui/contracts';
 import { hideCompany, showCompany } from './ui/company';
 import { clearCompany, loadCompany, saveCompany } from './ui/persist';
@@ -150,6 +152,8 @@ Object.assign(window as unknown as Record<string, unknown>, {
   __build: BUILD_ID,
   __maps: MAPS,
   __meta: (): MetaState => meta,
+  /** 驗收腳本用：直接動局外層，介面部分由 company.mjs 驗。 */
+  __metaApi: { assignWeapon, moveAmmo },
   __openList: openList,
   __company: openCompany,
 });

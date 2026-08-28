@@ -212,7 +212,8 @@ describe('§5 把任務結果套用回公司', () => {
   };
   const result = (over: Partial<MissionResult>): MissionResult => ({
     mapName: '測試場', contractCode: '委-TEST', outcome: 'ABORTED', clock: 100,
-    deployedIds: [], deadIds: [], survivorId: null, extracted: [],
+    deployedIds: [], deadIds: [], survivorId: null,
+    survivorEquippedId: null, survivorStowedId: null, extracted: [],
     kills: {}, damageTaken: {}, ...over,
   });
 
@@ -246,10 +247,11 @@ describe('§5 把任務結果套用回公司', () => {
     const snap = plan.soldiers.find((d) => d.id === a.id)!;
     const st = createInitialState(1, mapById('mission_01')!, plan);
     const carried = weaponItem(st, snap.equipped!);
-    const after = applyMissionResult(m, result({
-      outcome: 'SUCCESS', deployedIds: [a.id], survivorId: a.id, extracted: [carried],
-    }));
     const id = snap.equipped!.instanceId;
+    const after = applyMissionResult(m, result({
+      outcome: 'SUCCESS', deployedIds: [a.id], survivorId: a.id,
+      survivorEquippedId: id, extracted: [carried],
+    }));
     expect(after.armoury.some((w) => w.instanceId === id)).toBe(true);
     expect(after.armoury.some((w) => w.instanceId === snap.stowed!.instanceId)).toBe(false);
     expect(after.roster.find((s) => s.id === a.id)!.loadout.equippedWeaponId).toBe(id);

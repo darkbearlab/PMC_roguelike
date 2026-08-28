@@ -624,6 +624,12 @@ export class Game {
       takeAll: (lootId) => { this.dispatch({ type: 'TAKE_ALL', lootId }); this.updateCard(); },
       // 準備要花時間，所以做完就把面板收掉 —— 讓玩家回到戰場看清楚代價
       prepare: (itemId) => { this.dispatch({ type: 'PREPARE', itemId }); this.clearSel(); },
+      // v0.18：搬裝備同樣花時間，所以做完也收掉面板 —— 理由與準備一樣
+      moveGear: (from, to, itemId) => {
+        this.dispatch({ type: 'MOVE_GEAR', from, to, itemId });
+        this.clearSel();
+      },
+      swapWeapon: () => { this.dispatch({ type: 'SWAP_WEAPON' }); this.clearSel(); },
       // 丟棄不花時間，通常會連丟好幾樣，面板留著
       drop: (itemId) => { this.dispatch({ type: 'DROP', itemId }); this.updateCard(); },
       interact: (pos) => { this.dispatch({ type: 'INTERACT', pos }); this.clearSel(); },

@@ -310,6 +310,14 @@ export interface MissionResult {
   deadIds: string[];
   /** 走出撤離點的那一位（止損與全滅都是 null）。 */
   survivorId: string | null;
+  /**
+   * 他撤離時手上與收納欄裡的是哪兩把（v0.18）。
+   *
+   * 不靠 `extracted` 的順序去猜 —— 那樣背包裡的手槍會搶走主手，
+   * 而玩家冒著命撿回來的那把砲反而變成未指派。
+   */
+  survivorEquippedId: string | null;
+  survivorStowedId: string | null;
   /** 帶出來的東西。武器仍是原本那個 instanceId。 */
   extracted: Item[];
   kills: Record<string, number>;
@@ -368,10 +376,14 @@ export function applyMissionResult(meta: MetaState, r: MissionResult): MetaState
       const i = m.armoury.findIndex((w) => w.instanceId === it.weapon!.instanceId);
       if (i >= 0) m.armoury[i] = it.weapon;
       else m.armoury.push(it.weapon);
-      // 帶出來的槍留在那個人手上，不用重新分配
+      // 帶出來的槍留在那個人手上，**而且是他撤離時的那個配置**（v0.18）
       if (survivor) {
-        if (!survivor.loadout.equippedWeaponId) survivor.loadout.equippedWeaponId = it.weapon.instanceId;
-        else if (!survivor.loadout.stowedWeaponId) survivor.loadout.stowedWeaponId = it.weapon.instanceId;
+        if (it.weapon.instanceId === r.survivorEquippedId) {
+          survivor.loadout.equippedWeaponId = it.weapon.instanceId;
+        } else if (it.weapon.instanceId === r.survivorStowedId) {
+          survivor.loadout.stowedWeaponId = it.weapon.instanceId;
+        }
+        // 其餘（背包裡的槍）留在軍械庫，等玩家在公司畫面重新分配
       }
     } else if (it.kind === 'AMMO' && it.ammoTypeId) {
       grantAmmo(m, it.ammoTypeId, it.qty);
@@ -453,6 +465,9 @@ export function missionResultOf(
     if (v.kills) kills[id] = v.kills;
     if (v.damageTaken) damageTaken[id] = v.damageTaken;
   }
+  const survivor = state.extractedBy
+    ? state.units.find((u) => u.id === state.extractedBy) ?? null
+    : null;
   // 下場過的人 = 快照全部，扣掉還沒被投入的
   const notDeployed = new Set(state.roster);
   const deployedIds = state.deployment
@@ -466,6 +481,8 @@ export function missionResultOf(
     deployedIds,
     deadIds: [...state.deadSoldierIds],
     survivorId: state.extractedBy,
+    survivorEquippedId: survivor?.equipped?.instanceId ?? null,
+    survivorStowedId: survivor?.stowed?.instanceId ?? null,
     extracted: state.extracted.map((it) => JSON.parse(JSON.stringify(it)) as Item),
     kills,
     damageTaken,
