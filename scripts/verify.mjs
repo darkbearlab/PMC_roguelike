@@ -70,7 +70,10 @@ const after = await page.evaluate(() => {
   };
 });
 console.log('   →', JSON.stringify(after));
-ok(after.pos.x === 2 && after.pos.y === 11, '從最近的空投點 D2 (2,11) 落地');
+// 插隊版 §1.2：D2 (2,11) 就在旁邊，但沒人去啟用過它 —— 接替者只能從起始空投點下來。
+// 「最近的空投點」變成「最近的**已啟用**空投點」，這是難度旋鈕交到玩家手上的代價。
+ok(after.pos.x === 1 && after.pos.y === 1,
+  '未啟用的 D2 不能用，接替者從起始空投點 (1,1) 落地');
 ok(after.equipped === 'ar9' && after.stowed === 'rr4',
   'v0.16：替補帶著自己的配裝降落（測試快照給的是 AR-9 + RR-4）');
 const bodies = after.loot.filter((c) => c.kind === 'PLAYER_BODY');

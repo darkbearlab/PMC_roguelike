@@ -70,6 +70,7 @@ const INTERACT_LABEL: Record<string, string> = {
   TERMINAL: '存取終端',
   SUPPLY: '回收補給箱',
   EXTRACT: '撤離',
+  ACTIVATE_DROP: '啟用空投點',
 };
 
 export class Game {
@@ -720,10 +721,10 @@ export class Game {
         this.modal = 'REINFORCE';
         showReinforcement(
           s,
-          (id) => {
+          (id, at) => {
             this.modal = 'NONE';
             hideModal();
-            this.dispatch({ type: 'DEPLOY_REINFORCEMENT', soldierId: id });
+            this.dispatch({ type: 'DEPLOY_REINFORCEMENT', soldierId: id, at });
           },
           () => this.askAbort(),
         );

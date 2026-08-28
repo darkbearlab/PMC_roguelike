@@ -46,6 +46,9 @@ describe('§10 死亡、增援與屍體', () => {
     const p = player(s);
     p.hp = 3;
     p.pos = { x: 7, y: 1 };   // 靠近第二個空投點 (6,1)
+    // 插隊版：只有已啟用的空投點可以降落。先啟用 (6,1)，
+    // 否則替補只能回到起始空投點 —— 這正是「保險要事先買」的意思。
+    s.activatedDrops.push('6,1');
     s = run(s, { type: 'FIRE', target: p.pos });
     expect(s.pendingReinforcement!.deathPos).toEqual({ x: 7, y: 1 });
 
@@ -73,6 +76,7 @@ describe('§10 死亡、增援與屍體', () => {
     const p = player(s);
     p.hp = 3;
     p.pos = { x: 6, y: 1 };
+    s.activatedDrops.push('6,1');
     s = run(s, { type: 'FIRE', target: p.pos });
     s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
     s = runEnemyTurn(s);
@@ -101,6 +105,7 @@ describe('§10 死亡、增援與屍體', () => {
     const p = player(s);
     p.hp = 3;
     p.pos = { x: 6, y: 1 };
+    s.activatedDrops.push('6,1');
     s = run(s, { type: 'FIRE', target: p.pos });
     s = run(s, { type: 'DEPLOY_REINFORCEMENT', soldierId: s.roster[0] });
     s = runEnemyTurn(s);

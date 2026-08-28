@@ -70,7 +70,8 @@ export function selfPanelHtml(state: GameState): string {
   const kind = interactTarget(state, u, u.pos);
   const label = kind === 'TERMINAL' ? '存取終端（主目標）'
     : kind === 'SUPPLY' ? '回收補給箱（次要目標）'
-    : kind === 'EXTRACT' ? '撤離（帶著背包走人）' : null;
+    : kind === 'EXTRACT' ? '撤離（帶著背包走人）'
+    : kind === 'ACTIVATE_DROP' ? '啟用空投點（陣亡後可從這裡降落）' : null;
   const legal = checkLegal(state, { type: 'INTERACT', pos: u.pos });
   const load = carriedWeight(u);
 
@@ -152,6 +153,7 @@ function interactButtonHtml(state: GameState, u: PlayerUnit, pos: Vec2): string 
   if (!kind) return '';
   const label = kind === 'TERMINAL' ? '存取終端（主目標）'
     : kind === 'SUPPLY' ? '回收補給箱（次要目標）'
+    : kind === 'ACTIVATE_DROP' ? '啟用空投點（陣亡後可從這裡降落）'
     : '撤離（帶著背包走人）';
   const legal = checkLegal(state, { type: 'INTERACT', pos });
   return '<button data-do="interact" ' + (legal.ok ? 'class="primary"' : 'disabled') + '>'

@@ -9,6 +9,8 @@ import type { Camera } from './camera';
 import { screenToTile, tileCenter, tileToScreen } from './camera';
 import type { Vision } from './vision';
 import { isVisible } from './vision';
+import { isExplored } from '../core/fog';
+import { isDropActivated } from '../core/commands';
 
 const C = {
   bg: '#0b0e12',
@@ -27,6 +29,8 @@ const C = {
   supply: '#14493f',
   supplyInk: '#5cf0cd',
   fog: 'rgba(5,8,12,0.62)',
+  /** 未探索：**全黑**。不是壓暗，是什麼都沒有。 */
+  unexplored: '#05070a',
   voidFill: '#0a0d11',
   voidHatch: 'rgba(105,121,139,0.085)',
   edge: 'rgba(105,121,139,0.55)',
@@ -172,6 +176,31 @@ function drawTiles(ctx: CanvasRenderingContext2D, sc: Scene, x0: number, y0: num
         continue;
       }
       const kind = tileAt(state.map, p);
+      const known = isExplored(state, p);
+
+      // 未探索 = 全黑。地形、屍體、掩體，什麼都看不到。
+      //
+      // **目標點是例外**（§3.3）：合約簡報告訴了你要去哪裡，
+      // 未知的是路，不是目的地。若目標也藏起來，玩家只會盲目繞圈。
+      // **空投點則相反 —— 沒走到過就不知道它在那裡。**
+      if (!known) {
+        ctx.fillStyle = C.unexplored;
+        ctx.fillRect(s.x, s.y, t, t);
+        const isObjective = (kind === 'TERMINAL' && sameTile(state.objectives.main.pos, p))
+          || (kind === 'SUPPLY' && state.objectives.secondary.some((q) => sameTile(q.pos, p)));
+        if (isObjective) {
+          const done = kind === 'TERMINAL'
+            ? state.objectives.main.done
+            : state.objectives.secondary.find((q) => sameTile(q.pos, p))?.done ?? false;
+          ctx.globalAlpha = 0.55;
+          marker(ctx, s, t,
+            kind === 'TERMINAL' ? C.terminal : C.supply,
+            kind === 'TERMINAL' ? C.terminalInk : C.supplyInk,
+            done ? '✓' : (kind === 'TERMINAL' ? 'T' : 'S'));
+          ctx.globalAlpha = 1;
+        }
+        continue;
+      }
 
       ctx.fillStyle = C.floor;
       ctx.fillRect(s.x, s.y, t, t);
@@ -192,7 +221,12 @@ function drawTiles(ctx: CanvasRenderingContext2D, sc: Scene, x0: number, y0: num
         ctx.fillStyle = C.coverTop;
         ctx.fillRect(s.x + 1, s.y + (t - hh), t - 2, Math.max(2, t * 0.11));
       } else if (kind === 'DROP_POINT') {
-        marker(ctx, s, t, C.drop, C.dropInk, sameTile(p, state.map.startDropPoint) ? '⌂' : 'D');
+        // 已啟用的空投點畫成實心；未啟用的是空心的「待啟用」
+        const home = sameTile(p, state.map.startDropPoint);
+        const on = home || isDropActivated(state, p);
+        ctx.globalAlpha = on ? 1 : 0.5;
+        marker(ctx, s, t, C.drop, C.dropInk, home ? '⌂' : (on ? 'D' : 'd'));
+        ctx.globalAlpha = 1;
       } else if (kind === 'TERMINAL') {
         marker(ctx, s, t, C.terminal, C.terminalInk, state.objectives.main.done ? '✓' : 'T');
       } else if (kind === 'LOOT') {
@@ -263,6 +297,9 @@ function drawLootPiles(ctx: CanvasRenderingContext2D, sc: Scene, x0: number, y0:
   const seen = new Set<string>();
   for (const c of state.loot) {
     if (c.pos.x < x0 || c.pos.x > x1 || c.pos.y < y0 || c.pos.y > y1) continue;
+    // 未探索的區域什麼都看不到；已探索但現在看不見的**照畫**
+    // —— 你知道它們在那裡（§4.3）。
+    if (!isExplored(state, c.pos)) continue;
     const k = c.pos.x + ',' + c.pos.y;
     if (seen.has(k)) continue;
     seen.add(k);

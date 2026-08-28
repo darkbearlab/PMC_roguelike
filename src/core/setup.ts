@@ -10,6 +10,7 @@ import { createRng, nextFloat } from './rng';
 import { ACTORS, MAPS, RULES, archetype } from './content';
 import { makeWeapon, makeWeaponFrom } from './weapon';
 import { addItem, emptyBackpack, makeItem } from './inventory';
+import { blankExplored, markExplored } from './fog';
 import type { Deployment, DeployedSoldier } from './meta';
 
 function makeUnit(
@@ -157,7 +158,7 @@ export function createInitialState(
     };
   });
 
-  return {
+  const state: GameState = {
     clock: 0,
     map,
     units,
@@ -167,6 +168,9 @@ export function createInitialState(
     objectives: { main, secondary },
     casualties: 0,
     deployed: 1,
+    explored: blankExplored(map),
+    // 起始空投點預設已啟用 —— 他就是從那裡下來的
+    activatedDrops: [map.startDropPoint.x + ',' + map.startDropPoint.y],
     deployment: plan.soldiers,
     stats: {},
     deadSoldierIds: [],
@@ -187,6 +191,9 @@ export function createInitialState(
       },
     ],
   };
+  // 落地當下就看得見周圍 —— 迷霧從第一幀就是對的
+  markExplored(state, units[0]);
+  return state;
 }
 
 /**

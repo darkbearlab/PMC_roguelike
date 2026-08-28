@@ -9,6 +9,7 @@
  */
 import type { Facing, GameState, Vec2 } from './state';
 import { blocksMovement, inBounds, isHalfCover } from './map';
+import { isExplored } from './fog';
 import { DIR_VEC, MOVE_DIRECTIONS, facingFromDelta, sameTile } from './grid';
 
 export interface PathOptions {
@@ -23,6 +24,12 @@ export interface PathOptions {
    */
   stepCost?: number;
   vaultCost?: number;
+  /**
+   * 只走已探索的格子（戰爭迷霧）。
+   * 尋路移動要開，因為**玩家不能規劃一條穿過他沒看過的地形的路線**；
+   * AI 與地圖驗證器不開 —— 迷霧是玩家的限制，不是世界的限制。
+   */
+  exploredOnly?: boolean;
 }
 
 /** 地形是否可站（不含單位佔據）。 */
@@ -108,6 +115,7 @@ export function findPath(
 ): Vec2[] | null {
   if (sameTile(from, goal)) return [];
   if (!terrainPassable(state, goal)) return null;
+  if (opts.exploredOnly && !isExplored(state, goal)) return null;
 
   const ignore = opts.ignoreUnitIds ?? [];
   const stepCost = opts.stepCost ?? 1;
@@ -155,6 +163,7 @@ export function findPath(
       if (vaultTo) edges.push({ to: vaultTo, c: vaultCost });
 
       for (const e of edges) {
+        if (opts.exploredOnly && !isExplored(state, e.to)) continue;
         const k = key(e.to);
         const isGoal = sameTile(e.to, goal);
         if (occupiedBy(state, e.to, ignore) && !(isGoal && opts.allowGoalOccupied)) continue;

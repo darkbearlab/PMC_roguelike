@@ -59,6 +59,12 @@ async function run(preset) {
   const p = await ctx.newPage();
   await p.goto(`${URL}/?seed=1&map=mission_01`, { waitUntil: 'networkidle' });
   await p.waitForTimeout(300);
+  // 這支腳本量的是動畫的牆鐘成本，不是迷霧。先把地圖攤開，
+  // 否則「點目標 → 自動尋路」走不進未探索區，整場一步都不會動（插隊版 §3.3）。
+  await p.evaluate(() => {
+    const g = window.__game;
+    g.state.explored = '1'.repeat(g.state.map.width * g.state.map.height);
+  });
   if (preset) {
     await p.evaluate((v) => {
       const c = window.__game.test.config();

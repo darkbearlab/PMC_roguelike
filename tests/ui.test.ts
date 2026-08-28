@@ -52,6 +52,8 @@ async function scene(foes: { at: [number, number]; archetype?: string; hp?: numb
   const { Game } = await import('../src/ui/game');
   const { makeEnemy } = await import('../src/core/setup');
   const g: GameType = new Game(1);
+  // 這一組測的是點擊文法與按鈕，不是戰爭迷霧 —— 全部視為已探索。
+  g.state.explored = '1'.repeat(g.state.map.width * g.state.map.height);
   g.state.units = g.state.units.filter((u) => u.faction === 'PLAYER');
   g.state.units[0].pos = { x: 5, y: 9 };
   foes.forEach((f, i) => {

@@ -407,6 +407,23 @@ export interface GameState {
   deadSoldierIds: string[];
   /** 走出撤離點的那一位。止損與全滅都是 null。 */
   extractedBy: string | null;
+  /**
+   * 已探索的格子（戰爭迷霧）。`'1'` = 曾經進入過玩家的可見範圍。
+   * index = y × width + x，長度 = width × height。
+   *
+   * **它屬於 `GameState` 而不是渲染狀態**，因為它會影響玩家做得到什麼
+   * （尋路移動只能走已探索區域），而且必須跟著存檔與決定論一起走。
+   * 用字串是為了序列化便宜 —— 一張 32×24 的圖只有 768 個字元。
+   */
+  explored: string;
+  /**
+   * 已啟用的空投點（`"x,y"`）。起始空投點預設已啟用。
+   *
+   * 這把死亡懲罰的性質換掉了：原本「退回最近的空投點」是**地圖作者**
+   * 透過間距控制的空間懲罰，現在它變成**玩家可以預先投資的東西** ——
+   * 往前推進時順手啟用，等於買了一份保險。
+   */
+  activatedDrops: string[];
   rngSeed: number;
   rng: RngState;
   result: 'ONGOING' | 'SUCCESS' | 'ABORTED' | 'WIPED';

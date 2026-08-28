@@ -1,15 +1,16 @@
 /** 跑幾場笨機器人，看看難度落點大概在哪（僅供調參參考，不是測試）。 */
 import { createInitialState } from '../src/core/setup';
-import { applyCommand, checkLegal } from '../src/core/commands';
+import { applyCommand, checkLegal, isDropActivated } from '../src/core/commands';
 import type { Command } from '../src/core/commands';
 
 /** applyCommand 現在回傳 { state, events }（§8.6）；這支探針只看狀態。 */
 const run = (s: GameState, c: Command): GameState => applyCommand(s, c).state;
-import { findPath, stepDirection } from '../src/core/pathfind';
+import { findPath, stepDirection, terrainPassable } from '../src/core/pathfind';
+import { isExplored } from '../src/core/fog';
 import { isPlayerTurn } from '../src/core/scheduler';
 import { activePlayerUnit, unitAt } from '../src/core/state';
 import { canAttack } from '../src/core/combat';
-import { facingFromDelta, manhattan } from '../src/core/grid';
+import { facingFromDelta, manhattan, sameTile } from '../src/core/grid';
 import { MAPS, RULES } from '../src/core/content';
 import type { RawMap } from '../src/core/map';
 import { countAmmo, effectiveMoveTime } from '../src/core/inventory';
@@ -43,6 +44,13 @@ function botAction(s: GameState, goal: Vec2): GameState {
     }
   }
 
+  // 腳邊的空投點順手啟用 —— 真人會這麼做，而那正是這一版要量的「保險」
+  for (const p of dropsNear(s, u.pos)) {
+    if (checkLegal(s, { type: 'INTERACT', pos: p }).ok) {
+      return run(s, { type: 'INTERACT', pos: p });
+    }
+  }
+
   // 腳邊有東西就拿（笨機器人不挑，全拿）
   const pile = s.loot.find(
     (c) => manhattan(c.pos, u.pos) <= 1 && checkLegal(s, { type: 'TAKE_ALL', lootId: c.id }).ok,
@@ -71,8 +79,97 @@ function botAction(s: GameState, goal: Vec2): GameState {
       if (next !== s) return next;
     }
   }
+  // 迷霧：目標還在黑的地方，就先往最靠近目標的「已知邊緣」走過去，再踏出去一步。
+  // **方向鍵不受迷霧限制**，探索本來就是一步一步走出來的。
+  if (RULES.fog.enabled) {
+    const explored = exploreStep(s, u.pos, goal);
+    if (explored) {
+      const next = run(s, { type: 'MOVE', dir: explored });
+      if (next !== s) return next;
+    }
+  }
   plan = null;                 // 走不動就重算
   return run(s, { type: 'WAIT' });
+}
+
+/** 腳邊（含自己這一格）還沒啟用的空投點。 */
+function dropsNear(s: GameState, at: Vec2): Vec2[] {
+  const out: Vec2[] = [];
+  for (const d of [[0, 0], [0, -1], [1, 0], [0, 1], [-1, 0]]) {
+    const p = { x: at.x + d[0], y: at.y + d[1] };
+    if (p.x < 0 || p.y < 0 || p.x >= s.map.width || p.y >= s.map.height) continue;
+    if (s.map.tiles[p.y * s.map.width + p.x] !== 'DROP_POINT') continue;
+    if (isDropActivated(s, p)) continue;
+    out.push(p);
+  }
+  return out;
+}
+
+/**
+ * 迷霧下的探索：往最靠近目標的「已知邊緣」推進一步。
+ *
+ * 邊緣 = 已探索、可通行、而且有一個未探索的鄰居。
+ * 站在邊緣上就直接踏進黑的那一格；還沒到就沿著已探索的路走過去。
+ * 平手時取離目標近的、再取 y 小 x 小的 —— 保持決定性。
+ */
+function exploreStep(s: GameState, from: Vec2, goal: Vec2): Facing | null {
+  const { width, height } = s.map;
+  const dirs: Facing[] = ['N', 'E', 'S', 'W'];
+  const dv: Record<string, Vec2> = {
+    N: { x: 0, y: -1 }, E: { x: 1, y: 0 }, S: { x: 0, y: 1 }, W: { x: -1, y: 0 },
+  };
+  const free = (p: Vec2): boolean =>
+    p.x >= 0 && p.y >= 0 && p.x < width && p.y < height && terrainPassable(s, p);
+
+  // 站在邊緣上 → 踏進**離目標最近**的那一格黑地。
+  // 不挑方向的話它會往北往東亂走，然後在地圖角落把時間燒光。
+  let stepDir: Facing | null = null;
+  let stepScore = Number.POSITIVE_INFINITY;
+  for (const d of dirs) {
+    const n = { x: from.x + dv[d].x, y: from.y + dv[d].y };
+    if (!free(n) || isExplored(s, n) || unitAt(s, n)) continue;
+    const score = manhattan(n, goal);
+    if (score < stepScore) { stepScore = score; stepDir = d; }
+  }
+  if (stepDir) return stepDir;
+
+  // 否則在**已探索且走得到**的範圍內找一個邊緣，往它走一步。
+  // 只用一次 BFS：先算出走得到哪裡，再從走得到的那些格子裡挑最靠近目標的邊緣。
+  const key = (p: Vec2): number => p.y * 1024 + p.x;
+  const prev = new Map<number, Vec2 | null>([[key(from), null]]);
+  const queue: Vec2[] = [from];
+  let best: Vec2 | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (let head = 0; head < queue.length; head++) {
+    const cur = queue[head];
+    // 這一格是不是邊緣（有一個未探索的可通行鄰居）
+    for (const d of dirs) {
+      const n = { x: cur.x + dv[d].x, y: cur.y + dv[d].y };
+      if (!free(n) || isExplored(s, n)) continue;
+      const score = manhattan(cur, goal);
+      if (score < bestScore) { bestScore = score; best = cur; }
+      break;
+    }
+    for (const d of dirs) {
+      const n = { x: cur.x + dv[d].x, y: cur.y + dv[d].y };
+      if (!free(n) || !isExplored(s, n)) continue;
+      if (unitAt(s, n)) continue;
+      const k = key(n);
+      if (prev.has(k)) continue;
+      prev.set(k, cur);
+      queue.push(n);
+    }
+  }
+  if (!best || sameTile(best, from)) return null;
+
+  // 沿 parent 鏈回推到第一步
+  let node: Vec2 = best;
+  for (;;) {
+    const parent = prev.get(key(node)) ?? null;
+    if (!parent) return null;
+    if (sameTile(parent, from)) return stepDirection(from, node);
+    node = parent;
+  }
 }
 
 /**
@@ -95,10 +192,12 @@ function nextStep(s: GameState, from: Vec2, goal: Vec2): Vec2 | null {
     && !unitAt(s, plan[0]);
   if (!valid) {
     const me = activePlayerUnit(s)!;
+    // 迷霧開著時，機器人只能走已探索的路 —— 它現在也要探索（§6 的量測就是這件事）
     const fresh = findPath(s, from, goal, {
       ignoreUnitIds: [me.id],
       stepCost: effectiveMoveTime(me),
       vaultCost: RULES.time.vault,
+      exploredOnly: RULES.fog.enabled,
     });
     plan = fresh && fresh.length > 0 && !unitAt(s, fresh[0]) ? fresh : null;
   }

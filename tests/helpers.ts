@@ -88,7 +88,11 @@ export function testState(
       facing: e.facing ?? facingToward(e.pos, start as Vec2) ?? 'S',
     })),
   };
-  return createInitialState(seed, raw);
+  const st = createInitialState(seed, raw);
+  // **測試地圖預設全部已探索。**戰爭迷霧有自己的測試檔（tests/fog.test.ts）；
+  // 其餘測試在測的是移動、射擊、掩蔽，不該被「還沒走過去」擋住。
+  st.explored = '1'.repeat(st.map.width * st.map.height);
+  return st;
 }
 
 export function player(s: GameState): Unit {

@@ -149,6 +149,9 @@ ok(await p.evaluate(() => window.__game.test.config().animation.followActingUnit
 // 往前走幾步引出敵人回合，全程取樣鏡頭原點
 const trace = await p.evaluate(async () => {
   const g = window.__game;
+  // 這一段量的是鏡頭與動畫，不是迷霧。先把地圖攤開，讓「點目標→自動尋路」還能用；
+  // 否則尋路走不進未探索區，整段取樣一步都不會動（插隊版 §3.3）。
+  g.state.explored = '1'.repeat(g.state.map.width * g.state.map.height);
   let enemyFrames = 0;
   let worst = 0;          // 敵人回合期間，鏡頭焦點離玩家最遠有多少格
   let spotSet = 0;

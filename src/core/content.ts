@@ -31,6 +31,8 @@ export interface Rules {
     interact: number;
     stance: number;
     facing: number;
+    /** 啟用空投點。比一般互動貴 —— 現在花時間，換之後少走一段路。 */
+    activateDrop: number;
     /** 翻越半身掩體（v0.19）。一次兩格、兩倍時間、落地強制站姿。 */
     vault: number;
     /** 把一件消耗品放進準備欄（§12.19）。 */
@@ -117,6 +119,8 @@ export interface Rules {
     /** v0.18 附錄：自動補給：彈藥基準寫在武器上，這裡只有消耗品。 */
     resupply: { consumables: Record<string, number> };
   };
+  /** 戰爭迷霧。關掉時一切視同已探索（機器人基準用）。 */
+  fog: { enabled: boolean; activateNoise: number };
   sequences: Record<string, unknown>;
   ai: {
     searchTime: number;

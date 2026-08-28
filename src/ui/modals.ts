@@ -1,6 +1,9 @@
 /** 增援選單、止損二次確認、任務結算（§10.1 / §11.3 / §11.4）。 */
 import type { GameState, Vec2 } from '../core/state';
 import { activePlayerUnit, unitAt } from '../core/state';
+import { activatedDropOptions } from '../core/commands';
+import { isExplored } from '../core/fog';
+import { sameTile } from '../core/grid';
 import { damageAfterArmor } from '../core/combat';
 import { $, esc, show } from './dom';
 import { abandonedList, extractedList, ledgerText } from './hud';
@@ -31,7 +34,11 @@ function open(html: string): HTMLElement {
  * 所以這裡要看得到每個人身上有什麼。沒有配裝的人可以派，他會赤手空拳落地，
  * 那是玩家在公司畫面上的決定的後果。
  */
-export function showReinforcement(state: GameState, onPick: (id: string) => void, onAbort: () => void): void {
+export function showReinforcement(
+  state: GameState,
+  onPick: (id: string, at?: Vec2) => void,
+  onAbort: () => void,
+): void {
   const p = state.pendingReinforcement;
   if (!p) return;
   const kitOf = (id: string): string => {
@@ -42,25 +49,64 @@ export function showReinforcement(state: GameState, onPick: (id: string) => void
   };
   const nameOf = (id: string): string =>
     state.deployment.find((x) => x.id === id)?.designation ?? id;
-  const r = open(
+
+  // 插隊版 §2：**只有已啟用的空投點可以降落。**
+  // 死亡懲罰因此從「地圖作者決定的間距」變成「玩家事先買不買保險」。
+  const drops = activatedDropOptions(state);
+  let chosen = 0;
+  const dropLine = (d: Vec2, i: number): string => {
+    const dist = Math.abs(d.x - p.deathPos.x) + Math.abs(d.y - p.deathPos.y);
+    // 只反映**玩家已知的情況** —— 有迷霧之後這一點特別重要
+    const near = state.units.filter((u) => u.faction === 'ENEMY'
+      && isExplored(state, u.pos)
+      && Math.abs(u.pos.x - d.x) + Math.abs(u.pos.y - d.y) <= 6);
+    const home = sameTile(d, state.map.startDropPoint);
+    return '<button class="' + (i === chosen ? 'primary' : '') + '" data-drop="' + i + '">'
+      + (home ? '起始空投點' : '空投點') + ' (' + d.x + ',' + d.y + ')'
+      + '<em>離陣亡地點 ' + dist
+      + (near.length ? '　⚠ 附近有 ' + near.length + ' 名已知敵人' : '　附近無已知敵人')
+      + '</em></button>';
+  };
+
+  const html = (): string =>
     '<h2 class="lose">' + esc(nameOf(p.deadUnitId)) + ' 已陣亡</h2>'
     + '<p>屍體與其攜帶的所有裝備留在 (' + p.deathPos.x + ',' + p.deathPos.y + ')。'
-    + '接替者<b>帶著自己的配裝</b>，從<b>最近的空投點</b>落地，該回合無法行動。</p>'
+    + '接替者<b>帶著自己的配裝</b>，從<b>你選的已啟用空投點</b>落地，該回合無法行動。</p>'
     + '<p>' + esc(ledgerText(state)) + '</p>'
-    + '<p>名冊剩餘 <b>' + state.roster.length + '</b> 人。</p>'
+    + (drops.length > 1
+      ? '<h3 class="sub">降落位置</h3><div class="menu-actions">'
+        + drops.map(dropLine).join('') + '</div>'
+      : drops.length === 1
+        ? '<p class="note">只有一個已啟用的空投點：('
+          + drops[0].x + ',' + drops[0].y + ')。'
+          + '往前推進時順手啟用空投點，等於買了一份保險。</p>'
+        : '<p class="note"><b>沒有可用的空投點。</b></p>')
+    + '<h3 class="sub">投入誰（名冊剩餘 ' + state.roster.length + ' 人）</h3>'
     + '<div class="menu-actions">'
     + state.roster.map((id) =>
       '<button class="primary" data-pick="' + esc(id) + '">投入 ' + esc(nameOf(id))
       + '<em>' + esc(kitOf(id)) + '</em></button>').join('')
     + '<button class="danger" data-abort="1">改為止損撤出<em>身上的一切留在戰場</em></button>'
-    + '</div>',
-  );
-  r.querySelectorAll<HTMLButtonElement>('button[data-pick]').forEach((b) => {
-    b.addEventListener('click', () => onPick(b.dataset.pick as string));
-  });
-  const ab = r.querySelector<HTMLButtonElement>('button[data-abort]');
-  if (ab) ab.addEventListener('click', onAbort);
+    + '</div>';
+
+  const r = open(html());
+  const wire = (): void => {
+    r.querySelectorAll<HTMLButtonElement>('button[data-drop]').forEach((b) => {
+      b.addEventListener('click', () => {
+        chosen = Number(b.dataset.drop);
+        r.innerHTML = '<div class="modal">' + html() + '</div>';
+        wire();
+      });
+    });
+    r.querySelectorAll<HTMLButtonElement>('button[data-pick]').forEach((b) => {
+      b.addEventListener('click', () => onPick(b.dataset.pick as string, drops[chosen]));
+    });
+    const ab = r.querySelector<HTMLButtonElement>('button[data-abort]');
+    if (ab) ab.addEventListener('click', onAbort);
+  };
+  wire();
 }
+
 
 /** §11.3：止損按鈕任何時候都可以按，按下後顯示戰況損益並二次確認。 */
 export function showAbortConfirm(state: GameState, onConfirm: () => void, onCancel: () => void): void {

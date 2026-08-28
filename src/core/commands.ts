@@ -17,7 +17,7 @@ import { findTiles, tileAt } from './map';
 import {
   canStep, findPath, nearestFreeTileOfType, occupiedBy, terrainPassable, vaultTarget,
 } from './pathfind';
-import { canAttack, performAttack, type Legality } from './combat';
+import { canAttack, emitNoise, performAttack, type Legality } from './combat';
 import { stepEnemy } from './ai';
 import { RULES, archetype, fireModeOrder } from './content';
 import { nextFloat } from './rng';
@@ -28,6 +28,7 @@ import {
 import { makeDeployedUnit } from './setup';
 import { activeUnit, isMissionOver, isPlayerTurn, spend, syncClock } from './scheduler';
 import * as seq from './sequence';
+import { markExplored } from './fog';
 import { pushLog } from './log';
 import type { CombatEvent, EventSink } from './events';
 
@@ -67,7 +68,13 @@ export type Command =
   | { type: 'SEQUENCE_STEP' }
   | { type: 'ABORT_SEQUENCE' }
   | { type: 'ADVANCE' }
-  | { type: 'DEPLOY_REINFORCEMENT'; soldierId: string }
+  /**
+   * 陣亡後補人。`at` 指定降落的空投點；省略時取距離死亡地點最近的已啟用空投點。
+   *
+   * 只有**已啟用**的空投點可以選（插隊版 §2.1）——
+   * 死亡懲罰因此從「地圖作者決定的間距」變成「玩家事先買不買保險」。
+   */
+  | { type: 'DEPLOY_REINFORCEMENT'; soldierId: string; at?: Vec2 }
   | { type: 'ABORT' };
 
 const OK: Legality = { ok: true, reason: '' };
@@ -158,7 +165,11 @@ export function commandTime(state: GameState, cmd: Command): number | null {
       if (!u || !u.preparedId) return null;
       return 0;
     }
-    case 'INTERACT': return RULES.time.interact;
+    case 'INTERACT': {
+      // 啟用空投點比一般互動貴 —— 它買的是之後的一段路
+      const kind = u ? interactTarget(state, u, cmd.pos) : null;
+      return kind === 'ACTIVATE_DROP' ? RULES.time.activateDrop : RULES.time.interact;
+    }
     case 'WAIT': return RULES.time.wait;
     default: return null;
   }
@@ -321,7 +332,12 @@ function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
   }
 }
 
-export type InteractKind = 'TERMINAL' | 'SUPPLY' | 'EXTRACT';
+/** 這個空投點啟用了嗎（插隊版 §1.1）。 */
+export function isDropActivated(state: GameState, pos: Vec2): boolean {
+  return state.activatedDrops.includes(pos.x + ',' + pos.y);
+}
+
+export type InteractKind = 'TERMINAL' | 'SUPPLY' | 'EXTRACT' | 'ACTIVATE_DROP';
 
 /** 互動距離：站在目標格上或正交相鄰皆可（曼哈頓 <= 1）。 */
 export const INTERACT_REACH = 1;
@@ -344,7 +360,11 @@ export function interactKindAt(state: GameState, pos: Vec2): InteractKind | null
   // v0.9：撤離不再需要先完成主目標（§5.1）。任務不是打開了就必須打完的副本，
   // 而是一個可以走人的工地 —— 系統不禁止，只標價：主目標沒完成就是合約失敗，
   // 但背包裡的東西照樣帶出去。
-  if (t === 'DROP_POINT' && sameTile(pos, state.map.startDropPoint)) return 'EXTRACT';
+  if (t === 'DROP_POINT') {
+    if (sameTile(pos, state.map.startDropPoint)) return 'EXTRACT';
+    // 尚未啟用的空投點可以布設信標。**現在花時間，換之後少走一段路。**
+    return isDropActivated(state, pos) ? null : 'ACTIVATE_DROP';
+  }
   return null;
 }
 
@@ -396,7 +416,7 @@ export function applyCommand(state: GameState, cmd: Command): CommandResult {
       pushLog(s, 'MISSION', '指揮部下令止損，任務中止。');
       break;
     case 'DEPLOY_REINFORCEMENT':
-      deployReinforcement(s, cmd.soldierId, events);
+      deployReinforcement(s, cmd.soldierId, events, cmd.at);
       break;
     case 'ADVANCE': {
       // 排程器推進一格：clock 前進到該敵人的時刻，它做一件事，然後往後推
@@ -582,6 +602,15 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
         const n = s.objectives.secondary.filter((x) => x.done).length;
         events.push({ kind: 'OBJECTIVE', pos: { ...cmd.pos }, text: '次要目標 ' + n + '/' + s.objectives.secondary.length });
         pushLog(s, 'OBJECTIVE', '次要目標完成（' + n + '/' + s.objectives.secondary.length + '）');
+      } else if (kind === 'ACTIVATE_DROP') {
+        s.activatedDrops.push(cmd.pos.x + ',' + cmd.pos.y);
+        events.push({ kind: 'OBJECTIVE', pos: { ...cmd.pos }, text: '空投點已啟用' });
+        pushLog(s, 'OBJECTIVE',
+          '空投點 (' + cmd.pos.x + ',' + cmd.pos.y + ') 已啟用。陣亡後可以從這裡降落。');
+        // 布設信標會引來注意 —— 這讓「要不要現在啟用」多一層考量
+        if (RULES.fog.activateNoise > 0) {
+          emitNoise(s, cmd.pos, RULES.fog.activateNoise, events);
+        }
       } else if (kind === 'EXTRACT') {
         extract(s, u);
         return;
@@ -594,6 +623,8 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
   }
 
   spend(s, u.id, cost);
+  // 移動、轉向、蹲下都會改變可見範圍 —— 每個動作之後補一次探索
+  markExplored(s, u);
 }
 
 
@@ -783,9 +814,20 @@ export function processDeaths(s: GameState, events?: EventSink): void {
   }
 }
 
-/** 找出距離死亡地點最近、且未被佔據的 DROP_POINT（§10.1 第 5 點）。 */
+/**
+ * 可以降落的空投點：**已啟用、且沒有單位佔著**（插隊版 §2.1）。
+ *
+ * 附近有敵人照樣可選 —— 系統不禁止，只標價，介面負責警告（§2.2）。
+ */
+export function activatedDropOptions(s: GameState): Vec2[] {
+  return findTiles(s.map, 'DROP_POINT')
+    .filter((p) => isDropActivated(s, p))
+    .filter((p) => !occupiedBy(s, p));
+}
+
+/** 找出距離死亡地點最近、且未被佔據的**已啟用**空投點（§10.1 第 5 點）。 */
 export function reinforcementSpawn(s: GameState, deathPos: Vec2): Vec2 | null {
-  const drops = findTiles(s.map, 'DROP_POINT');
+  const drops = activatedDropOptions(s);
   const best = nearestFreeTileOfType(s, deathPos, drops);
   if (best) return best;
   // 極端狀況：所有空投點都被佔住。退而求其次，找離初始空投點最近的空格。
@@ -807,10 +849,14 @@ function findFreeTileNear(s: GameState, origin: Vec2): Vec2 | null {
   return null;
 }
 
-function deployReinforcement(s: GameState, soldierId: string, events: EventSink): void {
+function deployReinforcement(
+  s: GameState, soldierId: string, events: EventSink, at?: Vec2,
+): void {
   const pending = s.pendingReinforcement;
   if (!pending) return;
-  const spawn = reinforcementSpawn(s, pending.deathPos);
+  const spawn = at && activatedDropOptions(s).some((p) => sameTile(p, at))
+    ? at
+    : reinforcementSpawn(s, pending.deathPos);
   if (!spawn) {
     s.result = 'WIPED';
     s.pendingReinforcement = null;
@@ -839,6 +885,7 @@ function deployReinforcement(s: GameState, soldierId: string, events: EventSink)
 
   // 落地不能立刻行動 —— 這是 v0.6「落地當回合 AP 為 0」的時間換算（§5.2）
   unit.nextActAt = s.clock + RULES.time.deploy;
+  markExplored(s, unit);
 }
 
 // ============================================================================
@@ -851,10 +898,13 @@ export function movePath(state: GameState, to: Vec2): Vec2[] | null {
   if (!u) return null;
   // v0.19：路徑要算**時間**而不是步數 —— 翻越是兩格但花兩倍時間，
   // 若只數格子，尋路會把每一排掩體都當成捷徑。
+  // 迷霧：**玩家不能規劃一條穿過他沒看過的地形的路線**（插隊版 §4.1）。
+  // 方向鍵一步一步走進未探索區域則完全正常 —— 探索本來就是那樣進行的。
   return findPath(state, u.pos, to, {
     ignoreUnitIds: [u.id],
     stepCost: effectiveMoveTime(u),
     vaultCost: RULES.time.vault,
+    exploredOnly: true,
   });
 }
 

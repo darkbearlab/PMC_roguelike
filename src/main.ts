@@ -4,6 +4,8 @@ import { BUILD_ID } from './ui/build';
 import { computeVision } from './render/vision';
 import { MAPS, WEAPONS, mapById } from './core/content';
 import { createRng } from './core/rng';
+import { activatedDropOptions, interactKindAt } from './core/commands';
+import { isExplored } from './core/fog';
 import { generateContracts } from './core/contracts';
 import type { Contract } from './core/contracts';
 import type { RawMap } from './core/map';
@@ -147,6 +149,8 @@ function publish(g: Game): void {
     __computeVision: computeVision,
     __weapons: WEAPONS,
     __maps: MAPS,
+    /** 驗收腳本用：純規則函式，介面部分由 fog.mjs 另外驗。 */
+    __core: { activatedDropOptions, interactKindAt, isExplored },
   });
   console.info('[PMC] build =', BUILD_ID, '/ seed =', seed, '/ map =', g.state.map.id);
 }
