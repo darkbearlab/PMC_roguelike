@@ -177,9 +177,9 @@
     "ammoMax": 120,
     "consumableMax": 4
   },
-  "_meta": "局外層（v0.16 §7.4）。新公司的起始狀態刻意**不讓四個人都配得滿** —— 第一次進入配裝畫面就應該遇到「東西不夠分」的處境。schemaVersion 由 §7.2 使用：載入時版本不符就提示重置，不要遷移。",
+  "_meta": "局外層（v0.16 §7.4）。新公司的起始狀態刻意**不讓四個人都配得滿** —— 第一次進入配裝畫面就應該遇到「東西不夠分」的處境。schemaVersion 由 §7.2 使用：載入時版本不符就提示重置，不要遷移。 **改動 MetaState 的形狀就必須遞增 schemaVersion。**敵人武器批把 legacyStock 從型號字串陣列換成 WeaponInstance[] 卻忘了遞增，於是舊存檔照常載入，補給站畫面在 RULES.calibres[undefined].name 當場炸掉 —— 整個分頁空白。那正是這個欄位存在的理由。",
   "meta": {
-    "schemaVersion": 2,
+    "schemaVersion": 3,
     "soldierHp": 60,
     "missionLogSize": 20,
     "start": {

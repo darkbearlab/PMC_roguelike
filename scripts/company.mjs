@@ -90,6 +90,44 @@ const resup = await p.evaluate(() => {
 ok(!!resup && Object.values(resup.ammo).some((n) => n > 0),
   '回到公司時自動補給了：' + JSON.stringify(resup && resup.ammo));
 
+// ---- 舊格式存檔：**提示重置，不要崩掉** ----
+//
+// 這一段是為了一個真的災情才存在：敵人武器批把 legacyStock 從型號字串陣列
+// 換成 WeaponInstance[] 卻忘了遞增 schemaVersion，於是舊存檔照常載入，
+// 補給站分頁在 RULES.calibres[undefined].name 當場炸掉 —— 整頁空白，連子彈都補不了。
+const errsBefore = errs.length;
+await p.goto('http://localhost:4188/?seed=1&reset=1', { waitUntil: 'networkidle' });
+await p.waitForTimeout(400);
+await p.evaluate(() => {
+  const k = 'pmc.company.v1';
+  const m = JSON.parse(localStorage.getItem(k));
+  m.schemaVersion = m.schemaVersion - 1;      // 假裝是上一版寫的
+  m.legacyStock = ['dmr7', 'p9'];             // 舊形狀
+  localStorage.setItem(k, JSON.stringify(m));
+});
+await p.goto('http://localhost:4188/?seed=1', { waitUntil: 'networkidle' });
+await p.waitForTimeout(500);
+const body = await p.locator('body').innerText();
+ok(/存檔版本/.test(body) || /重新開始/.test(body) || /重置/.test(body),
+  '舊格式存檔會跳出版本提示，而不是安靜地壞掉');
+ok(errs.length === errsBefore, '舊格式存檔不會丟出例外：' + errs.slice(errsBefore).join(' / '));
+
+// 重置之後補給站要能用 —— 至少得買得到子彈
+await p.goto('http://localhost:4188/?seed=1&reset=1', { waitUntil: 'networkidle' });
+await p.waitForTimeout(400);
+await p.locator('button[data-tab="SUPPLY"]').click();
+await p.waitForTimeout(300);
+const supplyText = await p.locator('#company-root').innerText();
+ok(/遺產武器|土製武器/.test(supplyText), '補給站畫面畫得出來');
+const ammoBtn = p.locator('button[data-buy="ammo"]').first();
+ok(await ammoBtn.count() > 0, '補給站有彈藥可以買');
+const creditsBefore = (await meta()).credits;
+await ammoBtn.click();
+await p.waitForTimeout(300);
+const afterBuy = await meta();
+ok(afterBuy.credits < creditsBefore, `買得到子彈（${creditsBefore} → ${afterBuy.credits}）`);
+ok(Object.values(afterBuy.ammoStock).some((n) => n > 0), '子彈真的進了共用庫存');
+
 console.log('   deployName =', deployName.replace(/\n/g, ' '));
 console.log('errors:', errs.length ? errs : 'none');
 if (errs.length) process.exitCode = 1;

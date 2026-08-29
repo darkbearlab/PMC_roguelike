@@ -13,7 +13,7 @@
 ```bash
 npm install
 npm run dev        # http://localhost:5173  （手機同網段可用 --host 顯示的網址開）
-npm run test       # 623 個測試：core/ 規則層、UI 互動文法、整張正式地圖的整合測試
+npm run test       # 624 個測試：core/ 規則層、UI 互動文法、整張正式地圖的整合測試
 npm run typecheck
 npm run build
 npm run map:build  # 重新產生並驗證四張地圖，同時更新 docs/map-stats.md
@@ -668,6 +668,25 @@ v0.20 的遺產武器結構性稀缺當場失效。
 兩條底線，**資產不計入損益**。自己帶出去又帶回來的槍兩邊都不列 —— 什麼都沒發生。
 
 這剛好就是損益表與資產負債表的差別。
+
+### 一個把補給站弄壞的雷
+
+`legacyStock` 從「型號字串陣列」變成 `WeaponInstance[]` 是一次 **`MetaState` 形狀改動**，
+但我忘了遞增 `schemaVersion`。於是既有存檔照常載入，補給站分頁在
+`RULES.calibres[undefined].name` 當場丟例外 —— **整頁空白，連補子彈都做不到**。
+
+規格 §21.7 寫的是「版本不符就提示重置，不要遷移」。那條規則本身是對的，
+**但那個守門員只有在版本號真的被遞增時才會站崗。**
+
+補了兩道，都針對「下次還會忘記」這件事：
+
+- `tests/economy.test.ts` 把 `MetaState` 的鍵集合與容器元素型別釘死，
+  測試裡直接寫「改了下面任何一行，就回去把 `schemaVersion` 加一」
+- `scripts/company.mjs` 偽造一份舊格式存檔，驗證它會跳版本提示**而且不丟例外**，
+  接著驗證重置後真的買得到子彈
+
+> 通則：**凡是會被寫進 `localStorage` 的型別，改形狀就是改版本。**
+> 新增可選欄位不算；改變既有欄位裝的是什麼，一定算。
 
 ### 難度：機制是中性的，動了難度的是我選的那組數字
 

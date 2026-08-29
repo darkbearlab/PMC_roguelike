@@ -408,6 +408,36 @@ describe('§6 存檔', () => {
     expect(m.schemaVersion).toBeGreaterThanOrEqual(2);
   });
 
+  /**
+   * **改動 MetaState 的形狀就必須遞增 `schemaVersion`。**
+   *
+   * 這條測試存在的理由是一個真的災情：敵人武器批把 `legacyStock` 從
+   * 「型號字串陣列」換成 `WeaponInstance[]`，卻忘了遞增版本號。
+   * 舊存檔於是照常載入，補給站畫面在 `RULES.calibres[undefined].name`
+   * 當場炸掉 —— 整個分頁空白，連子彈都補不了。
+   *
+   * §21.7 的規則是「版本不符就提示重置，**不要遷移**」。
+   * 那個守門員只有在版本號真的被遞增時才會站崗。
+   *
+   * 這裡把形狀釘死：**改了下面任何一行，就回去把 schemaVersion 加一。**
+   */
+  it('存檔形狀被釘住 —— 改了形狀就要遞增 schemaVersion', () => {
+    const m = co();
+    expect(Object.keys(m).sort()).toEqual([
+      'ammoStock', 'armoury', 'consumableStock', 'contractsCompleted', 'credits',
+      'instanceCounter', 'legacyStock', 'mail', 'missionLog', 'roster',
+      'salvage', 'schemaVersion', 'stockSeed',
+    ]);
+    // 這幾個容器裝的是什麼，與鍵有沒有存在同等重要
+    expect(typeof m.legacyStock[0]).toBe('object');
+    expect(typeof m.legacyStock[0].instanceId).toBe('string');
+    expect(typeof m.legacyStock[0].typeId).toBe('string');
+    expect(typeof m.armoury[0].instanceId).toBe('string');
+    expect(typeof m.roster[0].loadout).toBe('object');
+    // 目前的形狀對應到這個版本號
+    expect(m.schemaVersion).toBe(3);
+  });
+
   it('整份狀態仍可完整序列化還原', () => {
     const m = co();
     const { meta } = settleMission(m, base(m));
