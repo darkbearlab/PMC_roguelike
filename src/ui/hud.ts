@@ -40,7 +40,7 @@ export function renderHud(state: GameState): void {
   // 斜線後面是**背包裡的備彈**（§1.1）—— 槍內剩幾發只是一半的資訊。
   $('#hud-weapon').textContent = w
     ? `${shortName(w.name)} ${w.ammo}/${w.magazine}`
-      + (w.magazine < 99 ? `｜備 ${countAmmoFor(u!.backpack, w)}` : '')
+      + (!w.intrinsic ? `｜備 ${countAmmoFor(u!.backpack, w)}` : '')
     : '空手';
 
   // 負重（§3.2）：玩家要看得出「再撿就會變慢」

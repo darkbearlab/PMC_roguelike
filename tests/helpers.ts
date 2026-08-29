@@ -7,6 +7,7 @@ import { applyCommand } from '../src/core/commands';
 import { isPlayerTurn } from '../src/core/scheduler';
 import { makeWeapon } from '../src/core/weapon';
 import { facingToward } from '../src/core/grid';
+import { archetype } from '../src/core/content';
 import type { CombatEvent } from '../src/core/events';
 
 /**
@@ -92,7 +93,30 @@ export function testState(
   // **測試地圖預設全部已探索。**戰爭迷霧有自己的測試檔（tests/fog.test.ts）；
   // 其餘測試在測的是移動、射擊、掩蔽，不該被「還沒走過去」擋住。
   st.explored = '1'.repeat(st.map.width * st.map.height);
+  // **持槍的敵人一律配一把固定的槍。**正式流程裡他們是從物品池抽的（§2），
+  // 但那個隨機性屬於局外層 —— 測掩蔽、視線與 AI 的檔案不該因為某一場抽到削短霰彈槍
+  // （射程 3）就整批失效。要驗抽取本身的請直接呼叫 drawEnemyWeapons。
+  for (const u of st.units) {
+    if (u.faction !== 'ENEMY') continue;
+    if (!archetype(u.archetype).armed) continue;
+    armEnemy(st, u.id, TEST_ENEMY_WEAPON);
+  }
   return st;
+}
+
+/** 測試裡持槍敵人的預設武器。射程 8、單發、傷害 30。 */
+export const TEST_ENEMY_WEAPON = 'ar9';
+
+/**
+ * 把一把指定的槍塞到敵人手上，備彈給滿。
+ *
+ * 「備彈給滿」是刻意的：**彈藥管理有自己的測試檔**（tests/enemy-ammo.test.ts），
+ * 其餘測試不該因為敵人打到第九發沒子彈而變成在測別的東西。
+ */
+export function armEnemy(s: GameState, id: string, typeId: string): void {
+  const e = unit(s, id);
+  e.equipped = makeWeapon(s, typeId);
+  e.reserveAmmo = 9999;
 }
 
 export function player(s: GameState): Unit {
@@ -135,14 +159,12 @@ export function freezeCombat(): void {
   frozen = {
     w: WEAPONS.map((x) => x.damageSpread),
     a: ARCH_IDS.map((k) => ACTORS[k].armorSpread),
-    d: ARCH_IDS.map((k) => ACTORS[k].attack?.damageSpread ?? 0),
+    d: [],
     roll: RULES.combat.enableToHitRoll,
   };
+  // 敵人的攻擊現在也是 weapons.json 裡的武器（§1），所以上面那一行就夠了
   for (const x of WEAPONS) x.damageSpread = 0;
-  for (const k of ARCH_IDS) {
-    ACTORS[k].armorSpread = 0;
-    if (ACTORS[k].attack) ACTORS[k].attack!.damageSpread = 0;
-  }
+  for (const k of ARCH_IDS) ACTORS[k].armorSpread = 0;
   RULES.combat.enableToHitRoll = false;
   resetToHitPolicy();
 }
@@ -150,10 +172,7 @@ export function freezeCombat(): void {
 export function thawCombat(): void {
   if (!frozen) return;
   WEAPONS.forEach((x, i) => { x.damageSpread = frozen!.w[i]; });
-  ARCH_IDS.forEach((k, i) => {
-    ACTORS[k].armorSpread = frozen!.a[i];
-    if (ACTORS[k].attack) ACTORS[k].attack!.damageSpread = frozen!.d[i];
-  });
+  ARCH_IDS.forEach((k, i) => { ACTORS[k].armorSpread = frozen!.a[i]; });
   RULES.combat.enableToHitRoll = frozen.roll;
   frozen = null;
   resetToHitPolicy();

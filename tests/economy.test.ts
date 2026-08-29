@@ -12,6 +12,7 @@ import {
   ammoPrice, contractReward, debtTier, isLegacy, legacyStockFromSeed, localCatalogue,
   secondaryReward, sellValue, soldierPrice, weaponPrice,
 } from '../src/core/economy';
+import { makeWeapon } from '../src/core/weapon';
 import type { MetaState, MissionResult } from '../src/core/meta';
 import {
   assignWeapon, buySoldier, buyWeapon, freeAmmo, grantAmmo, grantWeapon, makeDeployment,
@@ -39,10 +40,12 @@ describe('§2.1 人便宜，好槍貴', () => {
     expect(cheapest).toBeGreaterThan(soldierPrice());
   });
 
-  it('分界線是自動循環：泵動與中折是土製的，其餘都是遺產', () => {
-    expect(localCatalogue().sort()).toEqual(['sg12p', 'sg12s']);
+  it('分界線是自動循環：手動循環的是土製的，其餘都是遺產', () => {
+    // 內建近戰不上架 —— 它長在身上，不是一件商品（§1.2）
+    expect(localCatalogue().sort()).toEqual(['rb7', 'sg12p', 'sg12s']);
     expect(isLegacy('ar9')).toBe(true);
     expect(isLegacy('sg12s')).toBe(false);
+    expect(isLegacy('rb7'), '拉栓是手動循環，所以做得出來').toBe(false);
   });
 });
 
@@ -67,29 +70,30 @@ describe('§2.2 遺產武器的稀缺是結構性的', () => {
     expect(seen.size).toBe(2);
   });
 
-  it('現貨更新綁定**完成的合約數**，不綁定真實時間', () => {
-    expect(ECONOMY.legacyStock.refreshEvery).toBeGreaterThanOrEqual(1);
+  it('**現貨不會重抽** —— 重抽會憑空生出武器，也會憑空消滅武器', () => {
     const m = co();
-    const before = [...m.legacyStock];
-    const seedBefore = m.stockSeed;
+    const before = m.legacyStock.map((w) => w.instanceId);
     const r = base(m);
     const { meta: after } = settleMission(m, r);
     expect(after.contractsCompleted).toBe(1);
-    expect(after.stockSeed).not.toBe(seedBefore);
-    // 同一份存檔重跑一次，抽到的現貨一模一樣（決定論）
+    // 這一場什麼都沒留在戰場上，所以池子一件不多、一件不少
+    expect(after.legacyStock.map((w) => w.instanceId)).toEqual(before);
+    expect(m.legacyStock.every((w) => isLegacy(w.typeId))).toBe(true);
+    // 同一份存檔重跑一次，結果一模一樣（決定論）
     const again = settleMission(m, r).meta;
-    expect(again.legacyStock).toEqual(after.legacyStock);
-    expect(before.every((x) => isLegacy(x))).toBe(true);
+    expect(again.legacyStock.map((w) => w.instanceId))
+      .toEqual(after.legacyStock.map((w) => w.instanceId));
   });
 
-  it('買走就沒了 —— 現貨不是型錄', () => {
+  it('買走就沒了 —— 架上擺的是實例，不是型號', () => {
     const m = co();
-    const id = m.legacyStock[0];
-    expect(buyWeapon(m, id)).not.toBeNull();
-    expect(m.legacyStock).not.toContain(id);
-    // 現貨清單上沒有的遺產武器買不到
-    const absent = WEAPONS.find((w) => w.origin === 'LEGACY' && !m.legacyStock.includes(w.id))!;
-    expect(buyWeapon(m, absent.id)).toBeNull();
+    const w = m.legacyStock[0];
+    expect(buyWeapon(m, w.instanceId)).not.toBeNull();
+    expect(m.legacyStock.map((x) => x.instanceId)).not.toContain(w.instanceId);
+    expect(m.armoury.map((x) => x.instanceId), '換了位置，不是被複製')
+      .toContain(w.instanceId);
+    // 架上沒有的遺產武器買不到 —— 型號 id 也買不到，因為架上賣的不是型號
+    expect(buyWeapon(m, 'dmr7')).toBeNull();
     // 土製的隨時買得到
     expect(buyWeapon(m, 'sg12p')).not.toBeNull();
   });
@@ -100,7 +104,7 @@ function base(m: MetaState, over: Partial<MissionResult> = {}): MissionResult {
   return {
     mapName: '測試場', contractCode: '委-TEST', rating: 'C',
     outcome: 'SUCCESS', clock: 100, mainDone: true, secondaryDone: 0,
-    issued: [], issuedWeaponIds: [], deployedIds: [m.roster[0].id], deadIds: [],
+    issued: [], issuedWeaponIds: [], leftBehind: [], deployedIds: [m.roster[0].id], deadIds: [],
     survivorId: null, survivorEquippedId: null, survivorStowedId: null,
     extracted: [], kills: {}, damageTaken: {}, ...over,
   };
@@ -421,5 +425,52 @@ describe('§6 存檔', () => {
     const plan = makeDeployment(m, m.roster[0].id);
     expect(JSON.stringify(plan)).not.toContain('credits');
     expect(JSON.stringify(plan)).not.toContain('legacyStock');
+  });
+});
+
+describe('§5 損益表的資產區塊', () => {
+  it('武器不進現金損益 —— 兩條底線，資產不計入損益', () => {
+    const m = co();
+    const w = m.armoury[0];
+    const { ledger } = settleMission(m, base(m, {
+      issuedWeaponIds: [w.instanceId],
+    }));
+    // 帶出去沒帶回來 → 資產損失，但現金損益裡看不到它
+    expect(ledger.assetsLost).toHaveLength(1);
+    expect(ledger.assetsLost[0].name).toBe(w.name);
+    expect(ledger.assetNet).toBeLessThan(0);
+    expect(ledger.net).toBe(ledger.creditsEarned + ledger.salvage
+      - ledger.soldiersLost - ledger.suppliesLost);
+  });
+
+  it('撿到的槍列在「取得」，一樣不進現金損益', () => {
+    const m = co();
+    const loot = makeWeapon({ nextEntitySerial: 7000 }, 'dmr7');
+    const { ledger } = settleMission(m, base(m, {
+      extracted: [{
+        id: 'W', kind: 'WEAPON', defId: 'WEAPON', name: loot.name,
+        weight: loot.weight, qty: 1, weapon: loot,
+      }],
+    }));
+    expect(ledger.assetsGained).toHaveLength(1);
+    expect(ledger.assetsGained[0].value).toBeGreaterThan(0);
+    expect(ledger.assetNet).toBeGreaterThan(0);
+    expect(ledger.salvage, '槍不是戰利品收入').toBe(0);
+    expect(ledger.net, '現金損益只有合約報酬').toBe(ledger.creditsEarned);
+  });
+
+  it('自己帶出去又帶回來的槍**兩邊都不列** —— 什麼都沒發生', () => {
+    const m = co();
+    const w = m.armoury[0];
+    const { ledger } = settleMission(m, base(m, {
+      issuedWeaponIds: [w.instanceId],
+      extracted: [{
+        id: 'W', kind: 'WEAPON', defId: 'WEAPON', name: w.name,
+        weight: w.weight, qty: 1, weapon: w,
+      }],
+    }));
+    expect(ledger.assetsGained).toHaveLength(0);
+    expect(ledger.assetsLost).toHaveLength(0);
+    expect(ledger.assetNet).toBe(0);
   });
 });

@@ -107,9 +107,13 @@ export function legacyStockFromSeed(seed: number): string[] {
   return rollLegacyStock(createRng(seed >>> 0));
 }
 
-/** 土製武器隨時買得到 —— 現在還做得出來的東西不需要現貨清單。 */
+/**
+ * 土製武器隨時買得到 —— 現在還做得出來的東西不需要現貨清單。
+ *
+ * **內建近戰不上架**（§1.2）：它長在身上，不是一件商品。
+ */
 export function localCatalogue(): string[] {
-  return WEAPONS.filter((w) => w.origin === 'LOCAL').map((w) => w.id);
+  return WEAPONS.filter((w) => w.origin === 'LOCAL' && !w.intrinsic).map((w) => w.id);
 }
 
 // ---------------------------------------------------------------- 債務

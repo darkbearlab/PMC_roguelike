@@ -16,6 +16,7 @@ import { coverAgainst, type CoverLevel } from './cover';
 import { hasLineOfSight } from './los';
 import { occupiedBy, terrainPassable, vaultTarget } from './pathfind';
 import { RULES, archetype } from './content';
+import { outOfAmmo } from './combat';
 
 export interface AiWeights {
   approach: number;
@@ -30,6 +31,9 @@ const NEUTRAL: AiWeights = {
 };
 
 export function weightsFor(u: Unit): AiWeights {
+  // §3.4：彈盡改用內建近戰的敵人，權重切換成積極型。
+  // 保持距離對一個只剩刀的人毫無意義 —— 那只會產生一個不會結束的僵局。
+  if (u.faction === 'ENEMY' && outOfAmmo(u)) return RULES.ai.desperate as AiWeights;
   return (archetype(u.archetype).ai as AiWeights | undefined) ?? NEUTRAL;
 }
 

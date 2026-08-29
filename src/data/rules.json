@@ -1,22 +1,44 @@
 {
   "_comment": "§17 待調整數值。所有平衡數字集中在 data/ 的 JSON，不寫死在程式碼裡。",
-
   "roster": {
     "size": 4,
     "idPrefix": "K-44"
   },
-
   "_calibres": "§1 口徑系統。口徑是獨立的資料實體，武器以 calibre 欄位引用它 —— 這樣新增武器只要指定口徑，就自動與既有彈藥相容。命名參考現實中的 NATO 制式，讓玩家憑常識就能推測相容性。共用是刻意的：AR-9 與 LMG-5 同吃 5.56，兩把霰彈槍同吃 12 號徑。六把槍若各吃各的，配裝就沒有取捨 —— 分開之後取捨才會落在「餵幾種彈藥」而不是「哪把槍比較強」。",
   "_calibreWeight": "weightPerRound 由現實單發重量除以 500 g 換算（§4.1）。**實際放進背包的是彈藥型別**（ammo.json），一個口徑可以有多種型別；這裡的重量是該口徑的典型值與對照基準。",
   "_ammoTier": "彈藥同樣分兩層（附錄 B §1.3）：12 號徑與粗製手槍彈容易本地生產；5.56 與 7.62 需要穩定膛壓，困難但可行；**84mm 不可能生產，屬遺產彈藥** —— 每開一砲，世界上就永遠少一發。本版不為此加任何機制。",
   "calibres": {
-    "5.56": { "name": "5.56×45mm", "weightPerRound": 0.024, "localProduction": "HARD" },
-    "7.62": { "name": "7.62×51mm", "weightPerRound": 0.048, "localProduction": "HARD" },
-    "12ga": { "name": "12 號徑", "weightPerRound": 0.09, "localProduction": "EASY" },
-    "9mm": { "name": "9×19mm", "weightPerRound": 0.024, "localProduction": "EASY" },
-    "84mm": { "name": "84mm 無後座力", "weightPerRound": 6.0, "localProduction": "NONE" }
+    "5.56": {
+      "name": "5.56×45mm",
+      "weightPerRound": 0.024,
+      "localProduction": "HARD"
+    },
+    "7.62": {
+      "name": "7.62×51mm",
+      "weightPerRound": 0.048,
+      "localProduction": "HARD"
+    },
+    "12ga": {
+      "name": "12 號徑",
+      "weightPerRound": 0.09,
+      "localProduction": "EASY"
+    },
+    "9mm": {
+      "name": "9×19mm",
+      "weightPerRound": 0.024,
+      "localProduction": "EASY"
+    },
+    "84mm": {
+      "name": "84mm 無後座力",
+      "weightPerRound": 6.0,
+      "localProduction": "NONE"
+    },
+    "melee": {
+      "name": "近戰",
+      "weightPerRound": 0,
+      "localProduction": "EASY"
+    }
   },
-
   "time": {
     "_comment": "v0.7 排程器：所有動作的時間成本。基準是「移動一格 = 10」，程式碼中不得寫死任何時間值。",
     "_wait": "等待固定為 10（等同移動一格）是刻意的：若等待很便宜，玩家就能不斷『等一下下再看看』，永遠讓敵人先出手，等於白拿一個後手優勢。",
@@ -38,9 +60,12 @@
     "vault": 20,
     "_drop": "丟棄不花時間：丟東西比撿東西快，而且緊急時不該被時間懲罰。負重直接等於被追擊時的生存率。",
     "drop": 0,
-    "swap": { "LIGHT": 10, "HEAVY": 20 }
+    "swap": {
+      "LIGHT": 10,
+      "HEAVY": 20
+    },
+    "weaponSetup": 15
   },
-
   "backpack": {
     "_comment": "§3 背包與負重。重量單位見 items.json。",
     "_why": "沒有負重代價的話，最優解就是把地圖搬空。有了它，『貪心』就被標了價 —— 背得越多走得越慢，走得越慢越容易死。",
@@ -49,55 +74,109 @@
     "_threshold": "標準：背兩把武器、足夠彈藥與一支恢復藥進場後，不得影響移動速度。預設配裝（AR-9 7 + RR-4 20 + 5.56×24 0.58 + 84mm×2 12 + 封合劑 2）= 41.6，落在第一級且尚有約 13 的自由空間。戰利品是把玩家推過門檻的主要壓力來源 —— 這是刻意的，貪心與速度的取捨。",
     "maxWeight": 100,
     "weightTiers": [
-      { "maxWeight": 55, "moveCost": 10 },
-      { "maxWeight": 78, "moveCost": 12 },
-      { "maxWeight": 100, "moveCost": 14 }
+      {
+        "maxWeight": 55,
+        "moveCost": 10
+      },
+      {
+        "maxWeight": 78,
+        "moveCost": 12
+      },
+      {
+        "maxWeight": 100,
+        "moveCost": 14
+      }
     ],
     "_sealant": "士兵初始帶一個封合劑（§4.1）。其餘靠搜刮 —— 恢復必須稀有，不是標準配備。",
     "_startingItems": "v0.15 起這只是**預設配裝**的內容（§5.5）；玩家可以在出擊前改。機器人基準一律用它。",
     "startingItems": [
-      { "defId": "standard_5.56", "qty": 24 },
-      { "defId": "heat_84mm", "qty": 2 },
-      { "defId": "SEALANT", "qty": 1 }
+      {
+        "defId": "standard_5.56",
+        "qty": 24
+      },
+      {
+        "defId": "heat_84mm",
+        "qty": 2
+      },
+      {
+        "defId": "SEALANT",
+        "qty": 1
+      }
     ],
     "_reinforcement": "增援只配步槍彈，跟他只配 AR-9 是同一個道理（§10.1）。火箭彈在前一個人的屍體上。",
     "reinforcementItems": [
-      { "defId": "standard_5.56", "qty": 24 },
-      { "defId": "SEALANT", "qty": 1 }
+      {
+        "defId": "standard_5.56",
+        "qty": 24
+      },
+      {
+        "defId": "SEALANT",
+        "qty": 1
+      }
     ]
   },
-
   "fireModes": {
     "_comment": "§2 射擊模式。**時間花費完全相同**，差別只在耗彈與命中。",
     "_independent": "連發不是『一次判定但命中率較高』，而是三次各自獨立的完整判定（各自擲命中、傷害、護甲）。這讓連發同時具備傷害上限與高變異。",
     "_available": "v0.15：可用模式清單改為每把武器在 weapons.json 自己列出。order 只決定循環與自動降級的順序 —— 由左而右耗彈遞增。",
     "_volley": "齊射（v0.15）與連發的差別在意圖：連發是「用彈藥換命中機會」，齊射是「梭哈把它打死，還是留一發」。它只給削短霰彈槍用，而那把槍的彈倉只有 2 發，所以齊射等於清空。",
-    "order": ["SINGLE", "BURST", "VOLLEY", "AUTO"],
-    "SINGLE": { "label": "單", "full": "單發", "shots": 1, "accuracy": 0.10 },
-    "BURST": { "label": "點", "full": "點放", "shots": 2, "accuracy": 0 },
-    "VOLLEY": { "label": "齊", "full": "齊射", "shots": 2, "accuracy": 0 },
-    "AUTO": { "label": "連", "full": "連發", "shots": 3, "accuracy": -0.10 }
+    "order": [
+      "SINGLE",
+      "BURST",
+      "VOLLEY",
+      "AUTO"
+    ],
+    "SINGLE": {
+      "label": "單",
+      "full": "單發",
+      "shots": 1,
+      "accuracy": 0.1
+    },
+    "BURST": {
+      "label": "點",
+      "full": "點放",
+      "shots": 2,
+      "accuracy": 0
+    },
+    "VOLLEY": {
+      "label": "齊",
+      "full": "齊射",
+      "shots": 2,
+      "accuracy": 0
+    },
+    "AUTO": {
+      "label": "連",
+      "full": "連發",
+      "shots": 3,
+      "accuracy": -0.1
+    }
   },
-
   "_loadout": "§5 出擊前配裝。這裡只放預設值與介面參數 —— 可選的武器來自 weapons.json，可選的彈藥口徑來自 calibres，可選的消耗品是 items.json 裡有 use 欄位的東西。新增一把槍不需要改這個區塊。",
   "loadout": {
     "_keys": "ammo 與 ammoStep 的鍵是**彈藥型別 id**（ammo.json），不是口徑 —— 附錄 B §2.2。",
     "default": {
       "primary": "ar9",
       "stowed": "rr4",
-      "ammo": { "standard_5.56": 24, "heat_84mm": 2 },
-      "consumables": { "SEALANT": 1 }
+      "ammo": {
+        "standard_5.56": 24,
+        "heat_84mm": 2
+      },
+      "consumables": {
+        "SEALANT": 1
+      }
     },
     "_ammoStep": "彈藥以合理的增量調整，不要逐發點擊（§5.6）。84mm 每發 6 重，所以它自己一發一發加。",
     "ammoStep": {
-      "standard_5.56": 6, "standard_7.62": 5, "buckshot_12ga": 4,
-      "standard_9mm": 5, "heat_84mm": 1
+      "standard_5.56": 6,
+      "standard_7.62": 5,
+      "buckshot_12ga": 4,
+      "standard_9mm": 5,
+      "heat_84mm": 1
     },
     "_ammoMax": "上限只是介面的防呆，真正的約束是重量。",
     "ammoMax": 120,
     "consumableMax": 4
   },
-
   "_meta": "局外層（v0.16 §7.4）。新公司的起始狀態刻意**不讓四個人都配得滿** —— 第一次進入配裝畫面就應該遇到「東西不夠分」的處境。schemaVersion 由 §7.2 使用：載入時版本不符就提示重置，不要遷移。",
   "meta": {
     "schemaVersion": 2,
@@ -106,62 +185,101 @@
     "start": {
       "_comment": "四名士兵，但只有兩套武器 —— 那個缺口就是配裝畫面的第一堂課。",
       "soldiers": 4,
-      "weapons": ["ar9", "rr4", "sg12p", "p9"],
-      "ammo": { "standard_5.56": 48, "heat_84mm": 3, "buckshot_12ga": 20, "standard_9mm": 30 },
-      "consumables": { "SEALANT": 2 },
+      "weapons": [
+        "ar9",
+        "rr4",
+        "sg12p",
+        "p9"
+      ],
+      "ammo": {
+        "standard_5.56": 48,
+        "heat_84mm": 3,
+        "buckshot_12ga": 20,
+        "standard_9mm": 30
+      },
+      "consumables": {
+        "SEALANT": 2
+      },
       "_credits": "起始資金。約一份 C 級合約的報酬 —— 夠買一個人或補一輪彈藥，不夠買一把遺產武器。",
       "credits": 400,
       "stockSeed": 20200401
     },
     "_resupply": "回到公司時的自動補給基準（v0.18 附錄）。彈藥的基準寫在武器上（resupplyMagazines），這裡只有消耗品。補給**只從公司既有的庫存拿**，不會無中生有 —— 共用庫存仍然是有限的，這只是省掉每場之後手動重新分配的工。",
     "resupply": {
-      "consumables": { "SEALANT": 1 }
+      "consumables": {
+        "SEALANT": 1
+      }
     },
     "_supply": "暫時補給站（§6）。**全部 0 元，明確標示為佔位。**做成商店的形狀而不是一顆「新增」按鈕，是為了讓經濟層之後只需要填入價格，不必重做介面。",
     "supply": {
-      "weapons": ["ar9", "rr4", "sg12p", "sg12s", "dmr7", "lmg5", "p9"],
-      "ammo": ["standard_5.56", "standard_7.62", "buckshot_12ga", "standard_9mm", "heat_84mm"],
+      "weapons": [
+        "ar9",
+        "rr4",
+        "sg12p",
+        "sg12s",
+        "dmr7",
+        "lmg5",
+        "p9"
+      ],
+      "ammo": [
+        "standard_5.56",
+        "standard_7.62",
+        "buckshot_12ga",
+        "standard_9mm",
+        "heat_84mm"
+      ],
       "ammoBatch": {
-        "standard_5.56": 24, "standard_7.62": 20, "buckshot_12ga": 12,
-        "standard_9mm": 24, "heat_84mm": 2
+        "standard_5.56": 24,
+        "standard_7.62": 20,
+        "buckshot_12ga": 12,
+        "standard_9mm": 24,
+        "heat_84mm": 2
       }
-    }
+    },
+    "companyName": "本公司"
   },
-
   "_fog": "戰爭迷霧。**enabled 設為 false 時一切視同已探索** —— 機器人基準走這條路，讓 v0.11 以來的數據仍可比較。activateNoise 是啟用空投點的噪音半徑：布設信標會引來注意，這讓「要不要現在啟用」多一層考量；設為 0 即可關掉。",
   "fog": {
     "enabled": true,
     "activateNoise": 8
   },
-
   "loot": {
     "_comment": "§4 搜刮。敵人屍體的掉落表寫在 actors.json 各原型的 loot 欄位；搜刮點的內容寫在地圖檔。",
     "_dna": "己方屍體一定有一份 DNA（§4.4）。局外層還不存在，帶出去只會列在結算畫面上。",
     "takeTime": 10,
     "dnaDefId": "DNA"
   },
-
   "mapRules": {
     "_comment": "§13.4 地圖驗證的門檻。現在的用途是防止手刻地圖出現結構性錯誤；將來的用途是程序化區塊拼接的約束條件 —— 沿用一路以來的作法：現在建立鉤子，將來直接使用。",
     "_coverDensity": "刻意寬：四張圖的密度天差地遠（開闊地圖與掩體密集圖是兩個對照組）。這個區間抓的是『整張圖沒有掩體』或『幾乎不能走』這種結構性錯誤，不是設計約束。實際密度記在 docs/map-stats.md。",
     "_maxExposedRun": "主推進路線上連續多少格完全無掩蔽算太多。刻意設計成開闊的地圖可以在自己的檔案裡覆寫這一項 —— 那是一句寫下來的設計宣告，不是漏檢。",
     "minDropPoints": 3,
-    "dropSpacing": { "min": 6, "max": 48 },
-    "coverDensity": { "min": 0.01, "max": 0.4 },
+    "dropSpacing": {
+      "min": 6,
+      "max": 48
+    },
+    "coverDensity": {
+      "min": 0.01,
+      "max": 0.4
+    },
     "maxExposedRun": 20,
     "maxForcedExposure": 8,
     "maxOrphanTiles": 0,
     "secondaryObjectives": 2,
     "minMainDistance": 24,
-    "enemies": { "min": 8, "max": 10 },
+    "enemies": {
+      "min": 8,
+      "max": 10
+    },
     "minCaches": 2,
-
     "_estRunTime": "v0.13 任務長度收斂。這是**靜態下限估計**（走完所有目標再回撤離點的最短路徑 × 基礎移動時間），實際耗時一定更高，因為有交火、繞路、搜刮、裝填。機器人實測的目標區間是 1500～3000，對應的下限估計約落在 700～1400。",
-    "estRunTime": { "min": 700, "max": 1400 },
+    "estRunTime": {
+      "min": 700,
+      "max": 1400
+    },
     "_dirCoverGap": "東西向與南北向掩蔽覆蓋率的差距上限（百分點）。掩體列的走向等於在決定哪個軸向的交火是安全的 —— 差距太大的話，那件事完全是作者無意間決定的。",
     "dirCoverGap": 20
   },
-
   "sequences": {
     "_comment": "系列動作：效果只在整套走完時發生。走到一半的單位是暴露的、可被打斷的。",
     "_interrupt": "v0.12：每個序列標註被打斷之後會怎樣。判準是『已經完成的物理狀態改變會不會自己消失』—— 退殼退了就是退了。RESUMABLE 的進度存在武器上，不是存在單位上（§5.6）。",
@@ -169,30 +287,42 @@
       "sequenceType": "RESUMABLE",
       "label": "裝填 RR-4",
       "steps": [
-        { "id": "OPEN_BOLT", "label": "開栓退殼", "time": 10 },
-        { "id": "LOAD", "label": "裝入彈藥", "time": 10 }
+        {
+          "id": "OPEN_BOLT",
+          "label": "開栓退殼",
+          "time": 10
+        },
+        {
+          "id": "LOAD",
+          "label": "裝入彈藥",
+          "time": 10
+        }
       ]
     }
   },
-
   "ai": {
     "_searchTime": "搜索持續的時間量。v0.6 的 3 回合換算成 30（每回合約等於玩家兩個動作）。",
     "searchTime": 30,
-
     "_tacticalBehaviour": "v0.10 的總開關。關掉就回到 v0.9 的行為（貪婪逼近、不蹲、IDLE 不轉向、不喊口令）。這一版的效果只能靠對照判斷得出來，所以沿用命中率擲骰開關的作法。",
     "tacticalBehaviour": true,
-
     "_patrolTurnTime": "警戒巡視（原地轉 90 度）的時間花費。轉向本身是 0 成本，而 AI 不得選 0 成本動作（§5.4），所以巡視必須是一個獨立的、有花費的動作。",
     "patrolTurnTime": 10,
     "_searchWrapUp": "抵達最後已知位置後，先巡視幾次再轉回 IDLE。讓噪音引誘更有價值。",
     "searchWrapUpTurns": 2,
-
     "_callout": "口令的可聽範圍（曼哈頓）。牆壁不阻擋，與噪音機制一致（§8.3 的刻意簡化）。",
     "calloutRange": 12,
     "_vaultPenalty": "翻越候選的評分懲罰係數（v0.19 §1.3）。落點評分裡沒有時間項，用它代表「翻越比較貴」。**實際懲罰 = 這個係數 × 多花了幾倍的時間**，所以調高 time.vault 對敵人也會生效 —— 若寫成固定值，§4 那個旋鈕就只對玩家有用。原型差異不必另外寫：翻過去之後掩體在你身後，selfCover 自然歸零，所以射手型本來就不會想翻，衝鋒型（只看 approach）會。",
-    "vaultPenalty": 1.5
+    "vaultPenalty": 1.5,
+    "identifyRange": 4,
+    "_desperate": "§3.4：彈盡改用近戰的敵人，落點權重切換成積極型。射手型的權重是保持距離、找掩體 —— 一個只剩刀的射手若繼續躲在掩體後，會變成一個永遠不會結束的僵局，而且看起來很蠢。沒子彈了就得衝上來，或者死在原地。",
+    "desperate": {
+      "approach": 10,
+      "selfCover": 0,
+      "targetExposure": 0,
+      "canShoot": 0,
+      "crouchInCover": false
+    }
   },
-
   "combat": {
     "_enableToHitRoll": "命中率總開關。false = 一律必中（等價於 v0.4），用來做對照測試。",
     "_minDamage": "保底傷害。與生命值同單位，生命值規模變動時要一起調，否則等於實質取消保底。",
@@ -203,33 +333,52 @@
     "minDamage": 10,
     "stance": {
       "_comment": "射手蹲姿加成 / 目標蹲姿減免。v0.8 移除了蹲姿視野係數：蹲姿的代價改成面向盲區與姿勢時間。",
-      "shooterCrouchBonus": 0.10,
+      "shooterCrouchBonus": 0.1,
       "targetCrouchPenalty": 0.15
     },
     "_backstab": "背刺（§8.8）：目標對攻擊者沒有視線時成立。無視掩蔽是刻意的 —— 掩蔽的意義是『對著你打的人很難打中』，而背刺的前提正是它沒在對著你。",
     "backstab": {
-      "bonus": 0.30,
+      "bonus": 0.3,
       "ignoreCover": true
     },
-
     "cover": {
       "_comment": "三級列舉，不是每格累加 —— 上界由結構本身保證，不需要額外的封頂規則。",
       "partial": 0.25,
-      "good": 0.40
+      "good": 0.4
     }
   },
-
   "movement": {
     "_comment": "v0.3 起只能四方向移動，斜向切角規則連同它的歧義一起移除。所有距離一律用曼哈頓。"
   },
-
   "presentation": {
     "_comment": "敵人回合的演出間隔（毫秒）。只影響渲染層，規則解算完全不受影響。",
     "enemyStepMs": 200,
     "playerMoveStepMs": 110
   },
-
   "log": {
     "maxEntries": 60
+  },
+  "enemyWeapons": {
+    "_comment": "§2：敵人的武器是**從池中抽出**，不是在掉落表上擲出。抽走一把，補給站就少一把。",
+    "_localBias": "「權重明顯偏向土製」的實作方式。土製武器現在還做得出來，所以它不在池子裡 ——它是無限供給的那一層。擲中就生成一把新的，沒擲中才從池中抽一把遺產武器。",
+    "localBias": 0.78,
+    "localTypes": [
+      {
+        "id": "rb7",
+        "weight": 6
+      },
+      {
+        "id": "sg12p",
+        "weight": 3
+      },
+      {
+        "id": "sg12s",
+        "weight": 2
+      }
+    ],
+    "_recover": "§2.4：任務結束時留在戰場上的武器實例，依機率回到池中，其餘永久銷毀。你的損失是真的（要花錢買回來，或再遇到它），世界的總量卻是守恆的 ——拾荒者把它撿走、洗回市場，這是這個世界唯一的物流方式。銷毀機率讓遺產武器的總量緩慢下降，那是世界層級的消耗閥，不是玩家層級的耐久度。",
+    "recoverChance": 0.7,
+    "_reserve": "§3.2：攜行彈藥。以彈匣數計，實際發數 = 彈匣數 × magazine。",
+    "reserveMagazines": 2
   }
 }

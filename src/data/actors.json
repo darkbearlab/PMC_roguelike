@@ -1,28 +1,36 @@
 {
   "_comment": "玩家士兵與敵人原型。敵人的攻擊以一把合成的 Weapon 表示，讓 core/combat.ts 的解算管線對雙方完全一致。",
-
   "SOLDIER": {
     "name": "複製兵",
     "faction": "PLAYER",
     "hp": 60,
     "armor": 0,
     "armorSpread": 0,
-    "time": { "move": 10, "transition": 0 },
+    "time": {
+      "move": 10,
+      "transition": 0
+    },
     "sightRange": 12,
     "aim": 0,
-    "evasion": 0
+    "evasion": 0,
+    "intrinsic": "field_blade",
+    "armed": false
   },
-
   "RUNNER": {
     "name": "衝鋒型",
     "faction": "ENEMY",
     "hp": 25,
     "armor": 0,
     "armorSpread": 0,
-    "time": { "move": 7, "transition": 5 },
+    "time": {
+      "move": 7,
+      "transition": 5
+    },
     "sightRange": 10,
     "aim": 0,
     "evasion": 0,
+    "intrinsic": "runner_claw",
+    "armed": false,
     "_loot": "敵人屍體可搜刮（§4.2）。chance 為 1 代表必掉。抽值順序固定：由上而下各抽一次。",
     "_ai": "衝鋒型：approach 壓倒一切，不管掩體，直接衝。權重必須依原型不同，否則三種敵人會退化成同一種打法。",
     "ai": {
@@ -33,45 +41,33 @@
       "crouchInCover": false
     },
     "loot": [
-      { "defId": "standard_5.56", "qty": 4, "chance": 1 },
-      { "defId": "SCRAP", "qty": 1, "chance": 0.35 }
-    ],
-    "attack": {
-      "id": "runner_claw",
-      "name": "衝擊爪",
-      "class": "LIGHT",
-      "damage": 30,
-      "damageSpread": 5,
-      "penetration": 0,
-      "range": 1,
-      "magazine": 99,
-      "ammo": 99,
-      "calibre": "5.56",
-      "weight": 0,
-      "modes": ["SINGLE"],
-      "mode": "SINGLE",
-      "fireTime": 10,
-      "reloadTime": 0,
-      "reloadSequence": null,
-    "reloadProgress": 0,
-      "noiseRadius": 0,
-      "splash": 0,
-      "accuracy": 0.7,
-      "optimalRange": 1,
-      "falloffPerTile": 0
-    }
+      {
+        "defId": "standard_5.56",
+        "qty": 4,
+        "chance": 1
+      },
+      {
+        "defId": "SCRAP",
+        "qty": 1,
+        "chance": 0.35
+      }
+    ]
   },
-
   "HULK": {
     "name": "裝甲型",
     "faction": "ENEMY",
     "hp": 90,
     "armor": 20,
     "armorSpread": 8,
-    "time": { "move": 20, "transition": 15 },
+    "time": {
+      "move": 20,
+      "transition": 15
+    },
     "sightRange": 8,
     "aim": 0,
     "evasion": 0,
+    "intrinsic": "hulk_slam",
+    "armed": false,
     "_ai": "裝甲型：緩慢推進，靠護甲不靠掩體。approach 中等、selfCover 低。",
     "ai": {
       "approach": 6,
@@ -81,47 +77,43 @@
       "crouchInCover": false
     },
     "loot": [
-      { "defId": "standard_5.56", "qty": 6, "chance": 1 },
-      { "defId": "heat_84mm", "qty": 1, "chance": 0.4 },
-      { "defId": "CORE", "qty": 1, "chance": 0.5 },
-      { "defId": "SEALANT", "qty": 1, "chance": 0.25 }
-    ],
-    "attack": {
-      "id": "hulk_slam",
-      "name": "重擊",
-      "class": "HEAVY",
-      "damage": 60,
-      "damageSpread": 10,
-      "penetration": 0,
-      "range": 1,
-      "magazine": 99,
-      "ammo": 99,
-      "calibre": "5.56",
-      "weight": 0,
-      "modes": ["SINGLE"],
-      "mode": "SINGLE",
-      "fireTime": 15,
-      "reloadTime": 0,
-      "reloadSequence": null,
-    "reloadProgress": 0,
-      "noiseRadius": 0,
-      "splash": 0,
-      "accuracy": 0.7,
-      "optimalRange": 1,
-      "falloffPerTile": 0
-    }
+      {
+        "defId": "standard_5.56",
+        "qty": 6,
+        "chance": 1
+      },
+      {
+        "defId": "heat_84mm",
+        "qty": 1,
+        "chance": 0.4
+      },
+      {
+        "defId": "CORE",
+        "qty": 1,
+        "chance": 0.5
+      },
+      {
+        "defId": "SEALANT",
+        "qty": 1,
+        "chance": 0.25
+      }
+    ]
   },
-
   "SHOOTER": {
     "name": "射手型",
     "faction": "ENEMY",
     "hp": 30,
     "armor": 0,
     "armorSpread": 0,
-    "time": { "move": 10, "transition": 8 },
+    "time": {
+      "move": 10,
+      "transition": 8
+    },
     "sightRange": 12,
     "aim": 0,
     "evasion": 0,
+    "intrinsic": "field_blade",
+    "armed": true,
     "_ai": "射手型：保持距離、找掩體、繞側翼。targetExposure 最高 —— 那一項就是『繞開玩家的掩體』，也是本作核心戰術第一次被敵人使用。",
     "ai": {
       "approach": 2,
@@ -131,33 +123,23 @@
       "crouchInCover": true
     },
     "loot": [
-      { "defId": "standard_5.56", "qty": 6, "chance": 1 },
-      { "defId": "OPTICS", "qty": 1, "chance": 0.3 },
-      { "defId": "SEALANT", "qty": 1, "chance": 0.2 }
+      {
+        "defId": "standard_5.56",
+        "qty": 6,
+        "chance": 1
+      },
+      {
+        "defId": "OPTICS",
+        "qty": 1,
+        "chance": 0.3
+      },
+      {
+        "defId": "SEALANT",
+        "qty": 1,
+        "chance": 0.2
+      }
     ],
-    "attack": {
-      "id": "shooter_smg",
-      "name": "制壓槍",
-      "class": "LIGHT",
-      "damage": 20,
-      "damageSpread": 4,
-      "penetration": 0,
-      "range": 7,
-      "magazine": 99,
-      "ammo": 99,
-      "calibre": "5.56",
-      "weight": 0,
-      "modes": ["SINGLE"],
-      "mode": "SINGLE",
-      "fireTime": 12,
-      "reloadTime": 0,
-      "reloadSequence": null,
-    "reloadProgress": 0,
-      "noiseRadius": 0,
-      "splash": 0,
-      "accuracy": 0.5,
-      "optimalRange": 5,
-      "falloffPerTile": 0.05
-    }
-  }
+    "_armed": "§2.3：只有本來就持槍的原型參與抽取。衝鋒型與裝甲型用內建武器，不抽。"
+  },
+  "_intrinsic": "§1：敵人的內嵌 attack 已改為 weapons.json 裡的**內建武器**。衝擊爪與重擊數值一個字都沒改 —— 那是重構，不是調整。射手型的『制壓槍』則整個消失：他改為從物品池抽一把真的槍（§2），所以他也會沒子彈、也要換彈、打光了也只剩刀。"
 }

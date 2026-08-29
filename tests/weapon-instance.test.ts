@@ -47,12 +47,14 @@ describe('附錄 A §2 型號與實例分離', () => {
     expect(p.equipped!.instanceId).toBeTruthy();
     expect(p.stowed!.instanceId).toBeTruthy();
     expect(p.equipped!.instanceId).not.toBe(p.stowed!.instanceId);
-    // 敵人的攻擊也是實例 —— 衝擊爪不會流通，但這條不留例外
-    for (const e of s.units.filter((u) => u.faction === 'ENEMY')) {
-      expect(e.equipped!.instanceId, e.id).toBeTruthy();
+    // §1：內建武器也是實例 —— 衝擊爪不會流通，但這條不留例外
+    for (const u of s.units) {
+      expect(u.intrinsic.instanceId, u.id).toBeTruthy();
+      expect(u.intrinsic.intrinsic, u.id).toBe(true);
     }
-    // 全場的 instanceId 互不重複
-    const ids = s.units.map((u) => u.equipped?.instanceId).filter(Boolean);
+    // 全場的 instanceId 互不重複（含內建武器）
+    const ids = s.units.flatMap((u) => [u.equipped, u.stowed, u.intrinsic])
+      .filter(Boolean).map((w) => w!.instanceId);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -115,12 +117,17 @@ describe('附錄 A §3 詞條：只有形狀，沒有效果', () => {
   it('每一把槍都有 affixes 與 provenance，而且是空的', () => {
     const s = createInitialState(9, mapById('mission_04')!);
     for (const u of s.units) {
-      for (const w of [u.equipped, u.stowed]) {
+      for (const w of [u.equipped, u.stowed, u.intrinsic]) {
         if (!w) continue;
         expect(Array.isArray(w.affixes), u.id).toBe(true);
         expect(w.affixes, u.id).toHaveLength(0);
+        // 來歷不再一律為空：§4.5 起它是有用途的欄位。
+        // 形狀仍然是「事件 + 勢力名稱」，而且**不得存放帳號或使用者識別**。
         expect(Array.isArray(w.provenance), u.id).toBe(true);
-        expect(w.provenance, u.id).toHaveLength(0);
+        for (const pv of w.provenance) {
+          expect(typeof pv.event, u.id).toBe('string');
+          expect(typeof pv.actor, u.id).toBe('string');
+        }
       }
     }
   });

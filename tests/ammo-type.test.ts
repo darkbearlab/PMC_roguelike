@@ -25,7 +25,10 @@ const ids = (): string[] => Object.keys(AMMO_TYPES);
 describe('附錄 B §20.2 彈藥型別引用口徑', () => {
   it('五種型別，每個口徑剛好一種，重量與先前一致', () => {
     expect(ids()).toHaveLength(5);
+    // 'melee' 是內建近戰的口徑（§1.2）。它沒有彈藥型別，因為它沒有彈藥 ——
+    // 那正是內建武器的定義。
     for (const c of Object.keys(RULES.calibres) as Calibre[]) {
+      if (c === 'melee') { expect(ammoTypesForCalibre(c), c).toHaveLength(0); continue; }
       const types = ammoTypesForCalibre(c);
       expect(types, c).toHaveLength(1);
       expect(types[0].def.weightPerRound, c).toBe(RULES.calibres[c].weightPerRound);
@@ -94,11 +97,16 @@ describe('附錄 B §20.2 彈藥型別引用口徑', () => {
 });
 
 describe('附錄 B §20.3 機構型式', () => {
-  it('七把武器都填了，而且值是對的', () => {
+  it('每一把武器都填了，而且值是對的', () => {
     const want: Record<string, string> = {
       ar9: 'AUTO', rr4: 'BREECH', sg12p: 'PUMP', sg12s: 'BREAK',
       dmr7: 'SEMI', lmg5: 'AUTO', p9: 'SEMI',
+      // §2.3：池子空了就生成這一把。手動循環，所以它是土製的。
+      rb7: 'BOLT',
+      // §1：內建近戰也是武器，一樣要填 —— 它們不是特例。
+      field_blade: 'BREAK', runner_claw: 'BREAK', hulk_slam: 'BREAK',
     };
+    expect(Object.keys(want).sort()).toEqual(WEAPONS.map((w) => w.id).sort());
     for (const w of WEAPONS) expect(w.action, w.id).toBe(want[w.id]);
   });
 

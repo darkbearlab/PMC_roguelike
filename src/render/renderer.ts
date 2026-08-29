@@ -11,6 +11,7 @@ import type { Vision } from './vision';
 import { isVisible } from './vision';
 import { isExplored } from '../core/fog';
 import { isDropActivated } from '../core/commands';
+import { isIdentified } from '../core/combat';
 
 const C = {
   bg: '#0b0e12',
@@ -84,6 +85,13 @@ export interface Lock {
   modeNote: string;
   /** 這次會打幾發。連發是三次獨立判定，所以傷害區間要乘上去（§2.2）。 */
   shots: number;
+  /**
+   * 這一下改用內建近戰的說明（§1.4）。空字串代表用的是主手那把。
+   *
+   * **必須明說**：主手沒彈或超出射程時攻擊會自動改用內建武器，
+   * 玩家若不知道，會以為自己在用那把空槍。
+   */
+  weaponNote: string;
 }
 
 export interface MovePreview {
@@ -343,12 +351,14 @@ function drawUnits(ctx: CanvasRenderingContext2D, sc: Scene): void {
   const me = activePlayerUnit(state);
   for (const u of state.units) {
     if (u.faction === 'ENEMY' && !isVisible(vision, state.map, u.pos)) continue;
-    drawUnit(ctx, cam, u, me ? u.id === me.id : false, at(sc, u));
+    drawUnit(ctx, cam, u, me ? u.id === me.id : false, at(sc, u),
+      isIdentified(state, u.equipped));
   }
 }
 
 function drawUnit(
   ctx: CanvasRenderingContext2D, cam: Camera, u: Unit, isActive: boolean, pos: Vec2,
+  identified = false,
 ): void {
   const t = cam.tile;
   const c = tileCenter(cam, pos);
@@ -423,6 +433,42 @@ function drawUnit(
         ctx.textBaseline = 'bottom';
         ctx.fillText(glyph, c.x + t * 0.32, by - 1);
       }
+    }
+
+    // §4.2：認出來拿的是什麼，武器名稱就常駐在旁邊。
+    // **未識別的敵人什麼都不顯示** —— 看不出他手上有什麼，是這個系統的重點。
+    if (identified && u.equipped) {
+      const label = u.equipped.name.split(' ')[0];
+      ctx.font = '700 10px ui-sans-serif, system-ui, "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = 'rgba(4,6,9,0.92)';
+      ctx.lineWidth = 3;
+      ctx.strokeText(label, c.x, c.y + t * 0.42);
+      ctx.fillStyle = u.equipped.conspicuous ? '#ffb648' : '#c9d4e0';
+      ctx.fillText(label, c.x, c.y + t * 0.42);
+    }
+
+    // §4.4：架設中的敵人**必須看得出來**。那一個完整行動的價值就在這裡 ——
+    // 看到砲 → 聽到口令 → 看到他在架 → 斷掉射線，那一砲整個作廢。
+    if (u.setUp) {
+      ctx.save();
+      ctx.strokeStyle = '#ffb648';
+      ctx.lineWidth = Math.max(2, t * 0.07);
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, t * 0.44, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.font = '700 10px ui-sans-serif, system-ui, "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = 'rgba(4,6,9,0.92)';
+      ctx.lineWidth = 3;
+      ctx.strokeText('架設中', c.x, by - 2);
+      ctx.fillStyle = '#ffb648';
+      ctx.fillText('架設中', c.x, by - 2);
+      ctx.restore();
     }
   }
 }
@@ -544,7 +590,8 @@ function drawLock(ctx: CanvasRenderingContext2D, sc: Scene): void {
   // 傷害與護甲並排：AR-9 打裝甲型會顯示「傷害 10–10　裝甲 20」，
   // 開槍之前就看得出這把槍對它沒用（§12.9 的教學要在開火前就成立）
   const sub = live
-    ? lock.modeNote
+    ? (lock.weaponNote ? lock.weaponNote + '　' : '')
+      + lock.modeNote
       + '　傷害 ' + (lock.shots > 1 ? '每發 ' : '') + lock.damage.min + '–' + lock.damage.max
       + '　裝甲 ' + lock.armor.min + '–' + lock.armor.max
       + '　耗時 ' + lock.time

@@ -102,7 +102,7 @@ export function checkKit(k: CarriedKit): LoadoutCheck {
   }
   const warnings: string[] = [];
   for (const w of [k.equipped, k.stowed]) {
-    if (!w || w.magazine >= 99) continue;
+    if (!w || w.intrinsic) continue;
     // 餵得到的型別加起來都是 0 才算「沒帶彈」
     const fed = ammoTypesForCalibre(w.calibre).reduce((a, t) => a + (k.ammo[t.id] ?? 0), 0);
     if (fed <= 0) {

@@ -204,22 +204,42 @@ function ledgerHtml2(l: MissionLedger): string {
   const row = (label: string, n: number, sign: 1 | -1): string =>
     '<li><span>' + esc(label) + '</span><b class="' + (sign > 0 ? 'plus' : 'minus') + '">'
     + (n === 0 ? '—' : (sign > 0 ? '+' : '−') + n) + '</b></li>';
-  return '<h3 class="sub">本次合約損益（' + esc(cur) + '）</h3>'
+  const assetRow = (label: string, a: { name: string; qty: number; value: number }[],
+    sign: 1 | -1): string => a.map((x) =>
+    '<li class="asset"><span>' + esc(label) + '　' + esc(x.name) + ' ×' + x.qty + '</span>'
+    + '<b class="' + (sign > 0 ? 'plus' : 'minus') + '">'
+    + (sign > 0 ? '+' : '−') + x.value + '</b></li>').join('');
+
+  const assets = l.assetsGained.length + l.assetsLost.length === 0
+    ? ''
+    : '<h3 class="sub">資產變動（估值，未實現）</h3>'
+      + '<ul class="ledger">'
+      + assetRow('取得', l.assetsGained, 1)
+      + assetRow('損失', l.assetsLost, -1)
+      + '<li class="rule"></li>'
+      + '<li class="total"><span>資產淨變動</span><b class="'
+      + (l.assetNet >= 0 ? 'plus' : 'minus') + '">'
+      + (l.assetNet >= 0 ? '+' : '−') + Math.abs(l.assetNet) + '</b></li>'
+      + '</ul>'
+      + '<p class="note">槍是<b>資產</b>，不是收入 —— '
+      + '它進了軍械庫，那筆錢要拿去補給站賣掉才存在。所以它不計入上面的損益。</p>';
+
+  return '<h3 class="sub">本次合約損益（現金，' + esc(cur) + '）</h3>'
     + '<ul class="ledger">'
     + row('合約報酬', l.reward, 1)
     + row('次要目標獎金', l.secondary, 1)
-    + row('帶出的戰利品（估值）', l.salvage, 1)
+    + row('帶出的雜物（估值）', l.salvage, 1)
     + '<li class="rule"></li>'
     + row('陣亡士兵（重置成本）', l.soldiersLost, -1)
-    + row('遺留的武器（永久性減損）', l.weaponsLost, -1)
     + row('消耗的彈藥與物資', l.suppliesLost, -1)
     + '<li class="rule"></li>'
-    + '<li class="total"><span>本次合約損益</span><b class="'
+    + '<li class="total"><span>本次合約損益（現金）</span><b class="'
     + (l.net >= 0 ? 'plus' : 'minus') + '">' + (l.net >= 0 ? '+' : '−') + Math.abs(l.net)
     + '</b></li>'
     + '</ul>'
     + '<p class="note">實際入帳 <b>' + l.creditsEarned + '</b> —— '
-    + '戰利品要在補給站賣掉才變成錢，遺留與陣亡是已經發生的支出。</p>';
+    + '雜物要在補給站賣掉才變成錢，陣亡與消耗是已經發生的支出。</p>'
+    + assets;
 }
 
 export function showSummary(

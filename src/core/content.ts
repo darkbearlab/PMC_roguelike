@@ -33,6 +33,8 @@ export interface Rules {
     facing: number;
     /** 啟用空投點。比一般互動貴 —— 現在花時間，換之後少走一段路。 */
     activateDrop: number;
+    /** 顯眼武器的架設（§4.4）。架好之後才開得了火，被打斷即作廢。 */
+    weaponSetup: number;
     /** 翻越半身掩體（v0.19）。一次兩格、兩倍時間、落地強制站姿。 */
     vault: number;
     /** 把一件消耗品放進準備欄（§12.19）。 */
@@ -118,6 +120,11 @@ export interface Rules {
     };
     /** v0.18 附錄：自動補給：彈藥基準寫在武器上，這裡只有消耗品。 */
     resupply: { consumables: Record<string, number> };
+    /**
+     * 公司名稱。寫進武器來歷用（§4.5）——
+     * `Provenance.actor` **只存公司或勢力名稱，不得存放帳號或使用者識別**。
+     */
+    companyName: string;
   };
   /** 戰爭迷霧。關掉時一切視同已探索（機器人基準用）。 */
   fog: { enabled: boolean; activateNoise: number };
@@ -131,6 +138,29 @@ export interface Rules {
     calloutRange: number;
     /** 翻越候選的評分懲罰（v0.19）。 */
     vaultPenalty: number;
+    /** 距離這麼近就認得出對方拿什麼（§4.2）。 */
+    identifyRange: number;
+    /** 彈盡改用近戰時切換過去的落點權重（§3.4）。 */
+    desperate: {
+      approach: number; selfCover: number; targetExposure: number;
+      canShoot: number; crouchInCover: boolean;
+    };
+  };
+  /**
+   * 敵人的武器與彈藥（§2 / §3）。
+   *
+   * **不變量**：世界上每一把遺產武器實例，在任何時刻都恰好存在於一個地方 ——
+   * 玩家軍械庫、玩家士兵身上、戰場地面、補給站現貨、或某個敵人手上。
+   * 敵人生成時是從池中**抽出**，不是在掉落表上擲出。
+   */
+  enemyWeapons: {
+    /** 抽到土製（生成一把新的）的機率；其餘從池中抽一把遺產武器。 */
+    localBias: number;
+    localTypes: { id: string; weight: number }[];
+    /** 未回收的武器回到池中的機率；其餘永久銷毀。 */
+    recoverChance: number;
+    /** 攜行彈藥以彈匣數計。實際發數 = 彈匣數 × magazine。 */
+    reserveMagazines: number;
   };
   combat: {
     enableToHitRoll: boolean;
@@ -156,8 +186,14 @@ export interface ActorArchetype {
   sightRange: number;
   aim: number;
   evasion: number;
-  /** 敵人的攻擊也是一份型號資料；實際單位身上掛的是它的實例。 */
-  attack?: WeaponType;
+  /**
+   * 內建近戰武器的型號 id（§1）。**每個原型都有，包含玩家。**
+   * 敵人的內嵌 `attack` 已經退場：衝擊爪與重擊搬進 weapons.json 成為武器，
+   * 射手型則改為從物品池抽一把真的槍。
+   */
+  intrinsic: string;
+  /** 本來就持槍嗎（§2.3）。只有這種原型參與抽取；其餘用內建武器。 */
+  armed?: boolean;
   /** 敵人屍體的掉落表（§4.2）。抽值順序固定：由上而下各抽一次。 */
   loot?: { defId: string; qty: number; chance: number }[];
   /** 落點評分的權重（§9.2）。權重必須依原型不同，否則三種敵人會退化成同一種打法。 */

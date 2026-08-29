@@ -101,15 +101,24 @@ describe('§9.1 AI 狀態機', () => {
     expect(player(s).hp).toBe(300 - 60);
   });
 
-  it('射手型每回合上限 1 次攻擊（反應窗口過後）', () => {
+  it('射手型的節奏由它手上那把槍決定，不再是原型內嵌的數字', () => {
     let s = testState(HALL, [{ archetype: 'SHOOTER', pos: { x: 5, y: 1 } }]);
     player(s).maxHp = 300;
     player(s).hp = 300;
+    // §1：射手型的攻擊改成一把真的槍（§2 起是從物品池抽的）。
+    // 「每回合上限 1 次」這條 v0.6 的規則早在 v0.7 就被時間取代了 ——
+    // 真正的性質是：**一次輪到只做得了一件事**，而那件事花多久由槍決定。
+    const w = unit(s, 'E01').equipped!;
+    s = run(s, { type: 'WAIT' });
+    s = runEnemyTurn(s);                    // 發現的那一回合（反應窗口）
+    const before = player(s).hp;
+    const at = unit(s, 'E01').nextActAt;
     s = run(s, { type: 'WAIT' });
     s = runEnemyTurn(s);
-    s = run(s, { type: 'WAIT' });
-    s = runEnemyTurn(s);
-    expect(player(s).hp).toBe(300 - 20);
+    const shots = (before - player(s).hp) / w.damage;
+    expect(Number.isInteger(shots), '傷害必定是這把槍的整數倍').toBe(true);
+    expect(unit(s, 'E01').nextActAt - at, '花的時間 = 開火次數 × 這把槍的 fireTime')
+      .toBe(shots * w.fireTime);
   });
 
   it('蹲在半身掩體後 → 敵人失去視線，轉入 SEARCH', () => {

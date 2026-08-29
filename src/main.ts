@@ -11,7 +11,8 @@ import type { Contract } from './core/contracts';
 import type { RawMap } from './core/map';
 import type { MetaState } from './core/meta';
 import {
-  assignWeapon, makeDeployment, missionLedger, missionResultOf, moveAmmo, newCompany,
+  assignWeapon, drawEnemyWeapons, makeDeployment, missionLedger, missionResultOf,
+  moveAmmo, newCompany,
   resupplyAll, settleMission,
 } from './core/meta';
 import type { MissionLedger, MissionResult } from './core/meta';
@@ -116,6 +117,12 @@ function launch(soldierId: string): void {
   const map = mapById(c.mapId);
   if (!map) throw new Error('合約指向不存在的地圖 ' + c.mapId);
   const plan = makeDeployment(meta, soldierId);
+  // §2：敵人的武器**從物品池抽出**。抽走一把，補給站就少一把 ——
+  // 所以它必須發生在這裡（局外層），不能發生在任務裡。
+  plan.enemyWeapons = drawEnemyWeapons(
+    meta, c.missionSeed, map.enemies.map((e) => e.archetype),
+  );
+  saveCompany(meta);
   hideCompany();
   hideContracts();
   if (game) game.loadMission(c.missionSeed, map, plan);

@@ -17,7 +17,10 @@ import { findTiles, tileAt } from './map';
 import {
   canStep, findPath, nearestFreeTileOfType, occupiedBy, terrainPassable, vaultTarget,
 } from './pathfind';
-import { canAttack, emitNoise, performAttack, type Legality } from './combat';
+import {
+  attackWeapon, canAttackAny, emitNoise, markIdentified, performAttack,
+  type Legality,
+} from './combat';
 import { stepEnemy } from './ai';
 import { RULES, archetype, fireModeOrder } from './content';
 import { nextFloat } from './rng';
@@ -141,7 +144,11 @@ export function commandTime(state: GameState, cmd: Command): number | null {
     case 'SET_STANCE':
     case 'TOGGLE_STANCE': return RULES.time.stance;
     case 'SET_FACING': return RULES.time.facing;
-    case 'FIRE': return u && u.equipped ? u.equipped.fireTime : null;
+    case 'FIRE': {
+      // 花費依**實際會用的那一把**：改用內建近戰時就是刀的時間，不是槍的
+      const w = u ? attackWeapon(state, u, cmd.target) : null;
+      return w ? w.fireTime : null;
+    }
     case 'RELOAD': {
       if (!u || !u.equipped) return null;
       // 增量裝填的 reloadTime 就是「一發」的時間，兩者剛好同一個欄位（§3.1）
@@ -248,14 +255,15 @@ function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
     case 'SET_FACING':
       return OK;
     case 'FIRE':
-      return canAttack(state, u, cmd.target, u.equipped);
+      // 主手打不出去而目標就在旁邊時，這一下改用內建近戰（§1.4）
+      return canAttackAny(state, u, cmd.target);
     case 'RELOAD': {
       const w = u.equipped;
       if (!w) return no('沒有裝備武器');
       // 已經退殼、還沒裝完的槍，這一步是「接著裝」而不是「彈匣已滿」
       if (w.ammo >= w.magazine && w.reloadProgress === 0) return no('彈匣已滿');
       // v0.9：彈藥是背包裡的資源（§1.1）。背包空了就裝不了。
-      if (w.magazine < 99 && countAmmoFor(u.backpack, w) <= 0) return no('沒有備用彈藥');
+      if (!w.intrinsic && countAmmoFor(u.backpack, w) <= 0) return no('沒有備用彈藥');
       return OK;
     }
     case 'CYCLE_FIRE_MODE': {
@@ -625,6 +633,7 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
   spend(s, u.id, cost);
   // 移動、轉向、蹲下都會改變可見範圍 —— 每個動作之後補一次探索
   markExplored(s, u);
+  markIdentified(s, u);
 }
 
 
@@ -634,7 +643,7 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
 
 /** 從背包補滿槍。回傳實際補進去的發數 —— 背包不足時就補多少算多少（§1.1）。 */
 export function refillFromBackpack(u: Unit, w: Weapon, limit?: number): number {
-  if (w.magazine >= 99) { w.ammo = w.magazine; return 0; }   // 敵人的攻擊不吃彈藥
+  if (w.intrinsic) { w.ammo = w.magazine; return 0; }        // 內建武器彈藥無限（§1.2）
   const need = Math.min(w.magazine - w.ammo, limit ?? Number.POSITIVE_INFINITY);
   const got = takeAmmoFor(u.backpack, w, need);
   w.ammo += got;
@@ -886,6 +895,7 @@ function deployReinforcement(
   // 落地不能立刻行動 —— 這是 v0.6「落地當回合 AP 為 0」的時間換算（§5.2）
   unit.nextActAt = s.clock + RULES.time.deploy;
   markExplored(s, unit);
+  markIdentified(s, unit);
 }
 
 // ============================================================================

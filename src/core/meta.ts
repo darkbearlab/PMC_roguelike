@@ -15,9 +15,10 @@
 import type { Item, WeaponInstance } from './state';
 import type { CarriedKit } from './loadout';
 import { kitWeight } from './loadout';
-import { AMMO_TYPES, ECONOMY, ITEMS, RULES, ammoTypesForCalibre } from './content';
+import { AMMO_TYPES, ITEMS, RULES, ammoTypesForCalibre, archetype } from './content';
 import { makeWeapon } from './weapon';
-import { createRng, nextInt } from './rng';
+import { makeLocalEnemyWeapon } from './setup';
+import { createRng, nextFloat, nextInt } from './rng';
 import {
   ammoPrice, consumablePrice, contractReward, debtTier, isLegacy, itemPrice, rollLegacyStock,
   secondaryReward, sellValue, soldierPrice, weaponPrice,
@@ -99,8 +100,20 @@ export interface MetaState {
   credits: number;
   /** 完成的合約數。遺產武器的現貨綁定它，**不綁定真實時間**（§2.4）。 */
   contractsCompleted: number;
-  /** 補給站現在有的遺產武器（型號 id）。不是型錄，是現貨。 */
-  legacyStock: string[];
+  /**
+   * **物品池**（§2.1）：世界上還沒被任何人拿著的遺產武器實例。
+   *
+   * 它同時就是**補給站的現貨** —— 不是型錄，是架上真的擺著的那幾把。
+   *
+   * **不變量**：世界上每一把遺產武器實例，在任何時刻都恰好存在於一個地方 ——
+   * 玩家軍械庫、玩家士兵身上、戰場地面、這個池子、或某個敵人手上。
+   * 敵人生成時是從這裡**抽出**，不是在掉落表上擲出（§2.1）。
+   * **抽走一把，補給站就少一把。**總量不增不減，只是換位置。
+   *
+   * 這兩者看起來很像，經濟上完全相反：若實作成機率生成，
+   * v0.20 §2.2 的遺產武器結構性稀缺當場失效。
+   */
+  legacyStock: WeaponInstance[];
   /** 抽現貨用的種子。存進來才能在重新載入之後接得下去。 */
   stockSeed: number;
   /** 待閱讀的董事會信件（級距 id）。 */
@@ -125,7 +138,7 @@ function serialOf(meta: MetaState): Serial {
 
 /** 造一把新槍並放進軍械庫。補給站與新公司的起始配備都走這裡。 */
 export function grantWeapon(meta: MetaState, typeId: string): WeaponInstance {
-  const w = makeWeapon(serialOf(meta), typeId);
+  const w = stampProvenance(meta, makeWeapon(serialOf(meta), typeId), 'ISSUED');
   meta.armoury.push(w);
   return w;
 }
@@ -293,6 +306,14 @@ export interface Deployment {
   soldiers: DeployedSoldier[];
   /** 首發士兵。其餘照 `soldiers` 的順序當替補人選。 */
   firstId: string;
+  /**
+   * 這一場敵人手上的武器，**依地圖敵人順序**（§2.3）。
+   *
+   * 抽取發生在局外層而不是任務裡，因為抽走一把補給站就少一把 ——
+   * 那是 `MetaState` 的事。任務只收到抽好的結果，
+   * 所以「相同種子 + 相同快照 ⇒ 相同結果」這條硬性要求不受影響。
+   */
+  enemyWeapons?: (WeaponInstance | null)[];
 }
 
 const cloneWeaponFor = (w: WeaponInstance | null): WeaponInstance | null =>
@@ -341,6 +362,13 @@ export interface MissionResult {
   issued: { defId: string; qty: number }[];
   /** 這一趟帶出去的武器實例 id，用來算遺留損失。 */
   issuedWeaponIds: string[];
+  /**
+   * 任務結束時**還留在戰場上**的每一把槍（§2.4）：敵人手上的、屍體堆裡的、
+   * 還有沒走出撤離點的人身上的。依機率洗回池子，其餘永久銷毀。
+   *
+   * 需要完整實例而不只是 id —— 玩家那幾把已經從軍械庫被移除了，之後查不到。
+   */
+  leftBehind: WeaponInstance[];
   /** 走出撤離點的那一位（止損與全滅都是 null）。 */
   survivorId: string | null;
   /**
@@ -463,7 +491,11 @@ export function newCompany(): MetaState {
     stockSeed: RULES.meta.start.stockSeed,
     mail: [],
   };
-  meta.legacyStock = rollLegacyStock(createRng(meta.stockSeed));
+  // 世界一開始就有的那幾把遺產武器。**之後不會再憑空多出來** ——
+  // 池子只會因為玩家賣出、敵人陣亡後被回收而變多（§2.4）。
+  for (const typeId of rollLegacyStock(createRng(meta.stockSeed))) {
+    meta.legacyStock.push(stampProvenance(meta, makeWeapon(serialOf(meta), typeId), 'FOUND'));
+  }
   for (let i = 0; i < start.soldiers; i++) grantSoldier(meta);
   for (const t of start.weapons) grantWeapon(meta, t);
   for (const [id, n] of Object.entries(start.ammo)) grantAmmo(meta, id, n as number);
@@ -480,6 +512,96 @@ export function supplyCatalogue(): {
     ammo: RULES.meta.supply.ammo,
     consumables: Object.keys(ITEMS).filter((id) => !!ITEMS[id].use),
   };
+}
+
+/**
+ * 在武器的來歷上蓋一個章（§4.5）。
+ *
+ * `Provenance.actor` **只存公司或勢力名稱，不得存放帳號或使用者識別** ——
+ * 這是日後開放多人時的隱私邊界，從第一天就立下來。
+ *
+ * 這個章是 §4.5 的全部意義所在：三場之後在敵人手上再看到它時，
+ * 那個人不再是一個射手，是一筆你的資產。
+ */
+export function stampProvenance(
+  meta: MetaState, w: WeaponInstance, event: string,
+): WeaponInstance {
+  const actor = RULES.meta.companyName;
+  if (!w.provenance.some((p) => p.event === event && p.actor === actor)) {
+    w.provenance.push({ event, actor });
+  }
+  void meta;
+  return w;
+}
+
+/** 這把槍曾經是我們的嗎（§4.5）。 */
+export function wasOurs(w: WeaponInstance): boolean {
+  return w.provenance.some((p) => p.actor === RULES.meta.companyName);
+}
+
+/**
+ * 為一張地圖的敵人抽武器（§2.3）。**會改動 `meta.legacyStock`。**
+ *
+ * 規則：
+ *  1. 只有 `armed` 的原型參與抽取。衝鋒型與裝甲型用內建武器（§1），不抽。
+ *  2. 依權重抽取，**權重明顯偏向土製** —— 土製不在池子裡，
+ *     它現在還做得出來，所以「抽到土製」的實作是生成一把新的。
+ *  3. 池中沒有遺產武器可抽時，一律生成土製 —— 敵人不會空手站在那裡。
+ *
+ * **不排除任何武器類型**，包含無後座力砲。威脅由 §4 的可讀性處理，
+ * 不由排除處理：一發即死沒問題，看不到它要來才有問題。
+ */
+export function drawEnemyWeapons(
+  meta: MetaState, seed: number, archetypes: string[],
+): (WeaponInstance | null)[] {
+  const rng = createRng(seed >>> 0);
+  const serial = serialOf(meta);
+  const out: (WeaponInstance | null)[] = [];
+  for (const id of archetypes) {
+    if (!archetype(id).armed) { out.push(null); continue; }
+    const wantLocal = nextFloat(rng) < RULES.enemyWeapons.localBias;
+    if (!wantLocal && meta.legacyStock.length > 0) {
+      out.push(meta.legacyStock.splice(nextInt(rng, meta.legacyStock.length), 1)[0]);
+    } else {
+      out.push(makeLocalEnemyWeapon(serial, rng));
+    }
+  }
+  meta.instanceCounter = serial.nextEntitySerial;
+  return out;
+}
+
+/**
+ * 任務結束後，戰場上沒被帶走的武器怎麼辦（§2.4）。
+ *
+ * **改變了 v0.16 起「留在戰場上的東西即永久失去」這條規則。**
+ * 現在它依機率回到池中，其餘永久銷毀。三件事同時成立：
+ *
+ *  - **你的損失是真的** —— 要花錢買回來，或在某個敵人手上再遇到它
+ *  - **世界的總量是守恆的** —— 拾荒者把它撿走、洗回市場，
+ *    那是這個世界唯一的物流方式
+ *  - **銷毀機率讓遺產武器的總量緩慢下降**，那是世界層級的消耗閥，
+ *    不是玩家層級的耐久度
+ *
+ * 彈藥與消耗品維持現行規則（未帶走即失去）—— 它們本來就是消耗品。
+ */
+export function recoverBattlefieldWeapons(m: MetaState, r: MissionResult): void {
+  const back = new Set(
+    r.extracted.filter((it) => it.kind === 'WEAPON' && it.weapon)
+      .map((it) => it.weapon!.instanceId),
+  );
+  const rng = createRng(m.stockSeed);
+  const left: WeaponInstance[] = [];
+  for (const w of r.leftBehind ?? []) {
+    if (back.has(w.instanceId)) continue;
+    if (!isLegacy(w.typeId)) continue;         // 土製的沒有回收價值，作坊再做一把就好
+    if (nextFloat(rng) < RULES.enemyWeapons.recoverChance) left.push(w);
+  }
+  m.stockSeed = nextInt(rng, 0x7fffffff);
+  for (const w of left) {
+    if (m.legacyStock.some((x) => x.instanceId === w.instanceId)) continue;
+    if (m.armoury.some((x) => x.instanceId === w.instanceId)) continue;
+    m.legacyStock.push(w);
+  }
 }
 
 /** 一次補給的數量（彈藥一次給一整批，不要按 60 下）。 */
@@ -514,6 +636,17 @@ export function missionResultOf(
     .filter((id) => !notDeployed.has(id));
   const wentOut = new Set(deployedIds);
   const out = state.deployment.filter((d) => wentOut.has(d.id));
+  // 戰場上還躺著／還被拿著的每一把槍（§2.4）。撤離點外面的一律算「留在戰場上」——
+  // 屍體堆裡的、敵人手上的、沒走出去的人身上的，對這個世界而言沒有差別。
+  const onField: WeaponInstance[] = [];
+  for (const u of state.units) {
+    if (u.id === state.extractedBy) continue;
+    for (const w of [u.equipped, u.stowed]) if (w && !w.intrinsic) onField.push(w);
+    for (const it of u.backpack?.items ?? []) if (it.weapon) onField.push(it.weapon);
+  }
+  for (const pile of state.loot) {
+    for (const it of pile.items) if (it.weapon) onField.push(it.weapon);
+  }
   return {
     mapName: meta.mapName,
     contractCode: meta.contractCode,
@@ -523,6 +656,7 @@ export function missionResultOf(
     issued: out.flatMap((d) => d.items.map((e) => ({ ...e }))),
     issuedWeaponIds: out.flatMap((d) =>
       [d.equipped, d.stowed].filter(Boolean).map((w) => w!.instanceId)),
+    leftBehind: onField.map((w) => JSON.parse(JSON.stringify(w)) as WeaponInstance),
     outcome: state.result === 'ONGOING' ? 'ABORTED' : state.result,
     clock: state.clock,
     deployedIds,
@@ -550,7 +684,7 @@ export function resupplyTarget(meta: MetaState, s: Soldier): Record<string, numb
   const want: Record<string, number> = {};
   for (const id of [s.loadout.equippedWeaponId, s.loadout.stowedWeaponId]) {
     const w = findWeapon(meta, id);
-    if (!w || w.magazine >= 99) continue;
+    if (!w || w.intrinsic) continue;
     const n = w.magazine * (w.resupplyMagazines ?? 1);
     for (const t of ammoTypesForCalibre(w.calibre)) {
       want[t.id] = Math.max(want[t.id] ?? 0, n);
@@ -631,6 +765,13 @@ export function resupplyAll(meta: MetaState): number {
  *  - 其餘各欄是**估值** —— 帶出來的戰利品要拿去補給站賣才變成錢，
  *    而遺留的裝備與陣亡的士兵是「這一趟實際上花掉了多少」
  */
+/** 資產變動的一列（§5.2）。取得與損失分開列，不合併成一個淨數字。 */
+export interface AssetLine {
+  name: string;
+  qty: number;
+  value: number;
+}
+
 export interface MissionLedger {
   reward: number;
   secondary: number;
@@ -640,8 +781,19 @@ export interface MissionLedger {
   suppliesLost: number;
   /** 真的入帳的金額（reward + secondary）。 */
   creditsEarned: number;
-  /** 這一趟的淨損益（含估值）。 */
+  /**
+   * **現金損益**（§5.2）。合約報酬、獎金、雜物估值，減掉陣亡與物資消耗。
+   *
+   * **不含武器。**撿回一把 DMR 是資產不是收入，那筆錢要賣掉才存在；
+   * 加進損益會誤導，完全不顯示則會讓回收看起來像白忙一場。
+   */
   net: number;
+  /** 撿到、搶到、帶回來的槍（§5.2）。 */
+  assetsGained: AssetLine[];
+  /** 帶出去沒帶回來的槍。 */
+  assetsLost: AssetLine[];
+  /** 資產淨變動（估值，未實現）。**刻意不計入 net。** */
+  assetNet: number;
 }
 
 const itemValue = (defId: string, qty: number): number =>
@@ -694,6 +846,29 @@ export function missionLedger(meta: MetaState, r: MissionResult): MissionLedger 
     if (extra > 0) salvage += itemValue(defId, extra);
   }
 
+  // ---- 資產變動（§5.2）。**與現金損益分開，兩條底線。** ----
+  //
+  // 撿回一把 DMR 是資產不是收入，那筆錢要賣掉才存在。加進損益會誤導；
+  // 完全不顯示則會讓「冒著命回去撿」看起來像白忙一場。
+  // 這剛好就是損益表與資產負債表的差別 —— 用會計格式講死人正是本作的文體。
+  const issuedWeapons = new Set(r.issuedWeaponIds);
+  const assetsGained: AssetLine[] = [];
+  for (const it of r.extracted) {
+    if (it.kind !== 'WEAPON' || !it.weapon) continue;
+    if (issuedWeapons.has(it.weapon.instanceId)) continue;   // 自己帶出去的不算「取得」
+    assetsGained.push({
+      name: it.weapon.name, qty: 1, value: sellValue(weaponPrice(it.weapon.typeId)),
+    });
+  }
+  const assetsLost: AssetLine[] = [];
+  for (const id of r.issuedWeaponIds) {
+    if (broughtBack.has(id)) continue;
+    const w = meta.armoury.find((x) => x.instanceId === id);
+    if (w) assetsLost.push({ name: w.name, qty: 1, value: sellValue(weaponPrice(w.typeId)) });
+  }
+  const assetNet = assetsGained.reduce((a, x) => a + x.value, 0)
+    - assetsLost.reduce((a, x) => a + x.value, 0);
+
   const soldiersLost = r.deadIds.length * soldierPrice();
   const creditsEarned = reward + secondary;
   return {
@@ -704,7 +879,11 @@ export function missionLedger(meta: MetaState, r: MissionResult): MissionLedger 
     weaponsLost,
     suppliesLost,
     creditsEarned,
-    net: creditsEarned + salvage - soldiersLost - weaponsLost - suppliesLost,
+    // **武器不進現金損益**（§5.2）—— 它在下面的資產區塊裡。
+    net: creditsEarned + salvage - soldiersLost - suppliesLost,
+    assetsGained,
+    assetsLost,
+    assetNet,
   };
 }
 
@@ -723,13 +902,12 @@ export function settleMission(
   m.contractsCompleted += 1;
   if (m.missionLog[0]) m.missionLog[0].net = ledger.net;
 
-  // 遺產武器的現貨綁定**完成的合約數**，不綁定真實時間（§2.4）
-  const every = Math.max(1, ECONOMY.legacyStock.refreshEvery);
-  if (m.contractsCompleted % every === 0) {
-    const rng = createRng(m.stockSeed);
-    m.legacyStock = rollLegacyStock(rng);
-    m.stockSeed = nextInt(rng, 0x7fffffff);
-  }
+  // §2.1 的不變量取代了 v0.20 §2.4 的「每 N 場重抽現貨」。
+  //
+  // **重抽會憑空生出武器，也會憑空消滅武器** —— 那正是這一版要拔掉的東西。
+  // 現貨現在只會因為三件事改變：玩家買走、玩家賣回、以及戰場上未回收的武器
+  // 依機率洗回池子（下面那一段）。補給站因此可能長期空著，那是真的稀缺。
+  recoverBattlefieldWeapons(m, r);
 
   pushMail(m);
   return { meta: m, ledger };
@@ -756,15 +934,26 @@ export function buySoldier(meta: MetaState): Soldier {
   return grantSoldier(meta);
 }
 
-/** 買一把槍。遺產武器買走之後就從現貨清單上消失 —— 那是現貨，不是型錄。 */
-export function buyWeapon(meta: MetaState, typeId: string): WeaponInstance | null {
-  if (isLegacy(typeId)) {
-    const i = meta.legacyStock.indexOf(typeId);
-    if (i < 0) return null;                      // 沒有現貨就是買不到
-    meta.legacyStock.splice(i, 1);
+/**
+ * 買一把槍。
+ *
+ * `key` 對遺產武器是**實例 id**（架上就是那一把，不是一個型號），
+ * 對土製武器是型號 id（現在還做得出來，要幾把有幾把）。
+ *
+ * 遺產武器買走之後就從池子裡消失 —— 它換了位置，不是被複製。
+ */
+export function buyWeapon(meta: MetaState, key: string): WeaponInstance | null {
+  const i = meta.legacyStock.findIndex((w) => w.instanceId === key);
+  if (i >= 0) {
+    const w = meta.legacyStock.splice(i, 1)[0];
+    meta.credits -= weaponPrice(w.typeId);
+    stampProvenance(meta, w, 'PURCHASED');
+    meta.armoury.push(w);
+    return w;
   }
-  meta.credits -= weaponPrice(typeId);
-  return grantWeapon(meta, typeId);
+  if (isLegacy(key)) return null;                // 遺產武器沒有現貨就是買不到
+  meta.credits -= weaponPrice(key);
+  return grantWeapon(meta, key);
 }
 
 export function buyAmmo(meta: MetaState, ammoTypeId: string, qty: number): void {
@@ -782,9 +971,13 @@ export function sellWeapon(meta: MetaState, instanceId: string): number {
   const i = meta.armoury.findIndex((w) => w.instanceId === instanceId);
   if (i < 0) return 0;
   if (holderOf(meta, instanceId)) return 0;
-  const got = sellValue(weaponPrice(meta.armoury[i].typeId));
+  const w = meta.armoury[i];
+  const got = sellValue(weaponPrice(w.typeId));
   meta.armoury.splice(i, 1);
   meta.credits += got;
+  // 賣掉的遺產武器**回到池子** —— 它沒有消失，只是換了位置（§2.1）。
+  // 所以三場之後在某個射手手上看到自己賣掉的那把，是這條規則的直接後果。
+  if (isLegacy(w.typeId)) meta.legacyStock.push(w);
   return got;
 }
 

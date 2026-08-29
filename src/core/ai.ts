@@ -17,12 +17,14 @@
  *    所以「警戒巡視」是一個有時間花費的獨立動作，不是免費轉向。
  */
 import type { EventSink } from './events';
-import type { Declaration, GameState, Unit, Vec2 } from './state';
+import type { Declaration, GameState, Unit, Vec2, Weapon } from './state';
 import { activePlayerUnit, findUnit } from './state';
 import { facingToward, manhattan, sameTile } from './grid';
 import { unitSees } from './sight';
 import { hasLineOfSight } from './los';
-import { canAttack, performAttack } from './combat';
+import {
+  attackWeapon, canAttack, canAttackAny, identify, isIdentified, outOfAmmo, performAttack,
+} from './combat';
 import { findPath, isVaultStep, occupiedBy } from './pathfind';
 import { spend } from './scheduler';
 import { CALLOUTS, RULES } from './content';
@@ -30,6 +32,7 @@ import {
   bestCandidate, betterFiringPosition, flankSide, moveReason, scoreCandidate, weightsFor,
 } from './tactics';
 import { pushLog } from './log';
+import * as seq from './sequence';
 
 const tactical = (): boolean => RULES.ai.tacticalBehaviour;
 
@@ -104,6 +107,7 @@ function stepTo(state: GameState, e: Unit, next: Vec2): number | null {
   const f = facingToward(e.pos, next);
   if (f) e.facing = f;
   e.pos = { x: next.x, y: next.y };
+  e.setUp = false;              // 換了位置就要重架（§4.4）
   if (vault) {
     e.stance = 'STAND';                 // §1.2：落地必定站姿，敵人也一樣
     return RULES.time.vault;
@@ -112,12 +116,83 @@ function stepTo(state: GameState, e: Unit, next: Vec2): number | null {
 }
 
 // ============================================================================
+// 彈藥（§3）
+// ============================================================================
+
+/** 該裝填了嗎（§3.2）：**只在彈匣打空後才裝填，絕不提前。** */
+function shouldReload(e: Unit): boolean {
+  const w = e.equipped;
+  if (!w || w.intrinsic) return false;
+  if (w.reloadProgress > 0) return true;          // 退了殼就一定要裝完
+  return w.ammo <= 0 && e.reserveAmmo > 0;
+}
+
+/**
+ * 從攜行彈藥補進彈匣。回傳實際補了幾發。
+ *
+ * 敵人沒有背包（§3.2）—— 他們不做裝備管理，備彈只是一個數字。
+ */
+function refillFromReserve(e: Unit): number {
+  const w = e.equipped;
+  if (!w) return 0;
+  const want = w.magazine - w.ammo;
+  const got = Math.min(want, e.reserveAmmo);
+  w.ammo += got;
+  e.reserveAmmo -= got;
+  w.reloadProgress = 0;
+  return got;
+}
+
+/**
+ * 執行一次裝填動作，回傳花掉的時間（§3.2）。
+ *
+ * **走與玩家相同的裝填流程與時間成本**，含增量裝填與系列動作：
+ * 拿泵動霰彈槍的敵人一次只填一發，拿無後座力砲的要開栓、再裝填 ——
+ * 那兩個空檔是玩家真的抓得到的東西。
+ */
+function doReload(state: GameState, e: Unit, events?: EventSink): number {
+  const w = e.equipped as Weapon;
+  if (w.reloadSequence) {
+    const def = seq.sequenceDef(w.reloadSequence);
+    const steps = def ? def.steps.length : 1;
+    const idx = Math.min(w.reloadProgress, steps - 1);
+    const cost = def ? def.steps[idx].time : w.reloadTime;
+    w.reloadProgress = idx + 1;
+    if (w.reloadProgress >= steps) {
+      const got = refillFromReserve(e);
+      events?.push({ kind: 'RELOAD', unitId: e.id, pos: { ...e.pos }, weaponName: w.name });
+      pushLog(state, 'AI', e.name + ' 裝填完成（+' + got + '）');
+    } else {
+      pushLog(state, 'AI', e.name + ' ' + (def ? def.steps[idx].label : '裝填'));
+    }
+    return cost;
+  }
+  const one = w.reloadMode === 'INCREMENTAL' ? 1 : undefined;
+  const want = one ?? (w.magazine - w.ammo);
+  const got = Math.min(want, e.reserveAmmo);
+  w.ammo += got;
+  e.reserveAmmo -= got;
+  events?.push({ kind: 'RELOAD', unitId: e.id, pos: { ...e.pos }, weaponName: w.name });
+  pushLog(state, 'AI', e.name + ' 裝填 ' + w.name + '（+' + got + '，' + w.ammo + '/' + w.magazine + '）');
+  return w.reloadTime;
+}
+
+// ============================================================================
 // 口令與宣告（§9.4 / §9.5）
 // ============================================================================
 
-/** 口令的文字。由理由碼查資料檔，不是事後推測 —— 否則調權重之後口令會說謊。 */
-export function calloutText(d: Declaration): string {
+/**
+ * 口令的文字。由理由碼查資料檔，不是事後推測 —— 否則調權重之後口令會說謊。
+ *
+ * **未識別的武器不得被口令洩漏**（§4.3）：`weaponName` 只有在該武器已識別
+ * 或本來就藏不住時才會傳進來。否則玩家可以靠聽的繞過整個識別系統。
+ */
+export function calloutText(d: Declaration, weaponName?: string): string {
   if (d.kind === 'FLANK') return CALLOUTS[d.side === 'RIGHT' ? 'FLANK_RIGHT' : 'FLANK_LEFT'];
+  if (weaponName) {
+    const named = CALLOUTS[d.kind + '_NAMED'];
+    if (named) return named.replace('{weapon}', weaponName);
+  }
   return CALLOUTS[d.kind] ?? d.kind;
 }
 
@@ -133,12 +208,14 @@ function shout(state: GameState, e: Unit, d: Declaration, events?: EventSink): v
   const player = activePlayerUnit(state);
   if (!player) return;
   if (manhattan(e.pos, player.pos) > RULES.ai.calloutRange) return;
+  // §4.3：認得出來才說得出名字。
+  const name = isIdentified(state, e.equipped) ? e.equipped?.name : undefined;
   events.push({
     kind: 'CALLOUT',
     unitId: e.id,
     pos: { x: e.pos.x, y: e.pos.y },
     code: d.kind === 'FLANK' ? 'FLANK_' + (d.side ?? 'LEFT') : d.kind,
-    text: calloutText(d),
+    text: calloutText(d, name),
   });
 }
 
@@ -152,9 +229,12 @@ function stillValid(state: GameState, e: Unit, d: Declaration): boolean {
       //
       // （寫成「目標必須待在同一格」試過，結果是笨機器人幾乎每個動作都在走，
       //   於是敵人一槍都打不出來 —— 那不是拘束力，那是把敵人關掉。）
+      //
+      // 用 canAttackAny：主手不行但人就貼在旁邊時，那一下改用內建近戰（§1.4），
+      // 宣告依然有效。拿刀的衝鋒型從頭到尾走的就是這條路。
       const player = activePlayerUnit(state);
       if (!player) return false;
-      return canAttack(state, e, player.pos, e.equipped).ok;
+      return canAttackAny(state, e, player.pos).ok;
     }
     case 'ADVANCE':
     case 'FLANK':
@@ -165,6 +245,13 @@ function stillValid(state: GameState, e: Unit, d: Declaration): boolean {
       return !occupiedBy(state, d.to, [e.id]);
     case 'CROUCH':
       return e.stance === 'STAND';
+    case 'SETUP': {
+      // 架設是為了打那一發。射線在架好之前就斷了，架設本身就沒有意義了。
+      const player = activePlayerUnit(state);
+      return !!player && canAttack(state, e, player.pos, e.equipped).ok;
+    }
+    case 'RELOAD':
+      return shouldReload(e);
     default:
       return true;
   }
@@ -177,10 +264,18 @@ function execute(state: GameState, e: Unit, d: Declaration, events?: EventSink):
       // 重新瞄準到目標現在的位置：宣告綁的是「做什麼」，不是「瞄哪一格」。
       const player = activePlayerUnit(state);
       const aim = player ? player.pos : (d.target as Vec2);
-      const weapon = e.equipped;
+      const weapon = attackWeapon(state, e, aim);
       performAttack(state, e.id, aim, events);
       return weapon ? weapon.fireTime : RULES.time.wait;
     }
+    case 'RELOAD':
+      return doReload(state, e, events);
+    case 'SETUP':
+      // 架設：這一整個動作只是把砲架起來，還沒有任何東西射出去（§4.4）
+      e.setUp = true;
+      identify(state, e.equipped);
+      pushLog(state, 'AI', e.name + ' 架起 ' + (e.equipped ? e.equipped.name : '武器'));
+      return RULES.time.weaponSetup;
     case 'CROUCH':
       e.stance = 'CROUCH';
       return RULES.time.stance;
@@ -208,7 +303,7 @@ function decideAlert(state: GameState, e: Unit): Declaration {
 
   if (!tactical()) {
     // v0.9 的行為：能打就打，不能打就貪婪逼近
-    if (canAttack(state, e, player.pos, e.equipped).ok) {
+    if (canAttackAny(state, e, player.pos).ok) {
       return { kind: 'FIRE', target: { ...player.pos } };
     }
     const path = findPath(state, e.pos, player.pos, {
@@ -220,6 +315,9 @@ function decideAlert(state: GameState, e: Unit): Declaration {
     return { kind: 'HOLD' };
   }
 
+  // §3.4：沒子彈了就得衝上來，或者死在原地。
+  // 射手型的權重是保持距離、找掩體 —— 一個只剩刀的射手若繼續躲在掩體後，
+  // 會變成一個永遠不會結束的僵局，而且看起來很蠢。
   const w = weightsFor(e);
   // 有掩蔽又看得到目標 → 先蹲下就位（§9.3）。代價是視野縮成前方半平面，
   // 也就是敵人變強的同時也給了玩家新的突破口 —— 這是刻意保留的。
@@ -233,7 +331,13 @@ function decideAlert(state: GameState, e: Unit): Declaration {
     if (here.raw.selfCover > 0 && here.raw.canShoot > 0 && stillSees) return { kind: 'CROUCH' };
   }
 
+  // 打空了就裝填（§3.2）。**只在彈匣打空後才裝填，絕不提前** ——
+  // 玩家因此可以數敵人開了幾槍、知道換彈的窗口什麼時候到、在那個空檔衝上去。
+  if (shouldReload(e)) return { kind: 'RELOAD' };
+
   if (canAttack(state, e, player.pos, e.equipped).ok) {
+    // 顯眼武器要先架起來（§4.4）：一次架設換一次射擊，中途被打斷就整個作廢。
+    if (e.equipped && e.equipped.conspicuous && !e.setUp) return { kind: 'SETUP' };
     // 打得到就打 —— 除非換一格能打得更好（掩蔽更好、對方的掩蔽更差）。
     // 換過去必須**也還打得到**，所以敵人永遠不會為了躲而放棄射線（§9.2）。
     const better = betterFiringPosition(state, e, player.pos);
@@ -246,6 +350,10 @@ function decideAlert(state: GameState, e: Unit): Declaration {
     }
     return { kind: 'FIRE', target: { ...player.pos } };
   }
+
+  // 主手打不到但人就在旁邊 —— 用內建近戰（§1.4）。
+  // 這是彈盡的敵人「衝上來」之後真的能做的那件事。
+  if (canAttackAny(state, e, player.pos).ok) return { kind: 'FIRE', target: { ...player.pos } };
 
   const best = bestCandidate(state, e, player.pos);
   if (best.stay) return { kind: 'HOLD' };
@@ -342,8 +450,13 @@ export function takeEnemyAction(state: GameState, enemyId: string, events?: Even
       cost = execute(state, e, pending, events);
     } else {
       // 宣告失效：這一整個行動就浪費掉了。這正是玩家打斷它的回報（§9.4）。
+      //
+      // §4.4：架好的砲也一起作廢。**斷掉射線之後那一砲整個不算** ——
+      // 這就是「看到砲 → 聽到口令 → 看到他在架 → 你有一個完整的行動」的回報。
       acted = { kind: 'LOST' };
       cost = RULES.time.wait;
+      if (e.setUp) pushLog(state, 'AI', e.name + ' 架好的' + (e.equipped ? e.equipped.name : '武器') + '白架了');
+      e.setUp = false;
       pushLog(state, 'AI', e.name + ' 撲了個空');
       shout(state, e, acted, events);
     }
@@ -365,6 +478,13 @@ export function takeEnemyAction(state: GameState, enemyId: string, events?: Even
     } else if (searchExhausted(e) && e.patrolLeft === 0) {
       e.patrolLeft = RULES.ai.searchWrapUpTurns;   // 站定了，開始環顧四周
     }
+  }
+
+  // §3.3：彈盡是一個**真的戰術訊號**，不只是風味。第一次沒子彈時喊一聲。
+  if (outOfAmmo(e) && !e.announcedDry) {
+    e.announcedDry = true;
+    pushLog(state, 'AI', e.name + ' 打光了彈藥，改用近戰');
+    shout(state, e, { kind: 'NO_AMMO' }, events);
   }
 
   // 4. 決定並宣告下一個動作。宣告具有拘束力，所以它是規則狀態，進 GameState。

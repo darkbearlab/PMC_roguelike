@@ -16,7 +16,8 @@ await p.waitForTimeout(400);
 const m0 = await meta();
 ok(typeof m0.credits === 'number', `新公司有起始資金 ${m0.credits}`);
 ok(m0.legacyStock.length >= 1 && m0.legacyStock.length <= 3,
-  `補給站有 ${m0.legacyStock.length} 件遺產武器現貨：${m0.legacyStock.join('、')}`);
+  `物品池有 ${m0.legacyStock.length} 件遺產武器：`
+  + m0.legacyStock.map((w) => w.name + '#' + w.instanceId).join('、'));
 const head = await p.locator('.co-credits').innerText();
 ok(/信用點/.test(head), `公司畫面顯示信用點（${head.replace(/\n/g, ' ')}）`);
 
@@ -76,9 +77,12 @@ await p.evaluate(() => {
 await p.waitForTimeout(500);
 const summary = await p.locator('#modal-root').innerText();
 ok(/本次合約損益/.test(summary), '結算畫面是一份損益表');
-for (const line of ['合約報酬', '陣亡士兵', '遺留的武器', '消耗的彈藥與物資']) {
+for (const line of ['合約報酬', '陣亡士兵', '消耗的彈藥與物資']) {
   ok(summary.includes(line), `損益表有「${line}」這一列`);
 }
+// §5.2：武器移到資產區塊，**兩條底線，資產不計入現金損益**
+ok(/本次合約損益（現金）/.test(summary), '現金損益自己一條底線');
+ok(!/遺留的武器/.test(summary), '武器不再列在現金損益裡 —— 它是資產，不是支出');
 const creditsBeforeSettle = (await meta()).credits;
 await p.locator('#modal-root button[data-list]').click();
 await p.waitForTimeout(500);

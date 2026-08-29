@@ -6,9 +6,10 @@ import type {
 } from './state';
 import type { RawMap } from './map';
 import { parseMap, findTiles } from './map';
-import { createRng, nextFloat } from './rng';
+import type { RngState } from './rng';
+import { createRng, nextFloat, nextInt } from './rng';
 import { ACTORS, MAPS, RULES, archetype } from './content';
-import { makeWeapon, makeWeaponFrom } from './weapon';
+import { makeWeapon } from './weapon';
 import { addItem, emptyBackpack, makeItem } from './inventory';
 import { blankExplored, markExplored } from './fog';
 import type { Deployment, DeployedSoldier } from './meta';
@@ -21,6 +22,7 @@ function makeUnit(
   weapons: { equipped: WeaponInstance | null; stowed: WeaponInstance | null },
   facing: Facing = 'S',
   backpack: Backpack | null = null,
+  serial: { nextEntitySerial: number } = { nextEntitySerial: 0 },
 ): Unit {
   const a = archetype(archetypeId);
   return {
@@ -40,6 +42,11 @@ function makeUnit(
     sightRange: a.sightRange,
     equipped: weapons.equipped,
     stowed: weapons.stowed,
+    // 內建武器也是實例（§1.2）。它不會流通，但「所有持有處都持有實例」不留例外。
+    intrinsic: makeWeapon(serial, a.intrinsic),
+    reserveAmmo: 0,
+    setUp: false,
+    announcedDry: false,
     backpack,
     aiState: 'IDLE',
     lastKnownTarget: null,
@@ -74,29 +81,68 @@ export function makeDeployedUnit(
   const u = makeUnit('SOLDIER', d.id, d.designation, pos, {
     equipped: d.equipped ? JSON.parse(JSON.stringify(d.equipped)) as WeaponInstance : null,
     stowed: d.stowed ? JSON.parse(JSON.stringify(d.stowed)) as WeaponInstance : null,
-  }, 'S', bag);
+  }, 'S', bag, state);
   u.hp = d.hp;
   u.maxHp = d.maxHp;
   return u;
 }
 
 /**
+ * 生成一把土製武器給敵人（§2.3）。
+ *
+ * **土製不在池子裡** —— 它現在還做得出來，所以是無限供給的那一層。
+ * 池中沒有適用的遺產武器時就補上一把這個，敵人不會空手站在那裡。
+ */
+export function makeLocalEnemyWeapon(
+  serial: { nextEntitySerial: number }, rng: RngState,
+): WeaponInstance {
+  const table = RULES.enemyWeapons.localTypes;
+  const total = table.reduce((a, t) => a + t.weight, 0);
+  let roll = nextInt(rng, Math.max(1, total));
+  let pick = table[table.length - 1].id;
+  for (const t of table) {
+    if (roll < t.weight) { pick = t.id; break; }
+    roll -= t.weight;
+  }
+  return makeWeapon(serial, pick, [], [
+    { event: 'MANUFACTURED', actor: '本地作坊' },
+  ]);
+}
+
+/**
+ * 敵人生成時把武器配到位（§3.2）。
+ *
+ * 兩件事都在**生成時**決定、整場不變：
+ *  - **射擊模式**從該武器的可用模式中抽一種。同一原型的兩個敵人因此打法不同 ——
+ *    一個單發、一個連發，是免費的變化。
+ *  - **攜行彈藥**是有限的。打光就只剩內建近戰（§3.4）。
+ */
+function issueWeapon(u: Unit, w: WeaponInstance | null, rng: RngState): void {
+  u.equipped = w;
+  if (!w) return;
+  w.mode = w.modes[nextInt(rng, w.modes.length)] ?? w.mode;
+  u.reserveAmmo = w.magazine * RULES.enemyWeapons.reserveMagazines;
+}
+
+/**
  * @param facing 初始面向（§13.3）。未指定時預設為南。
- * @param serial 實例流水號。敵人的攻擊也是一把有 instanceId 的槍（附錄 A）——
- *               衝擊爪不會流通，但「所有持有處都持有實例」這條不留例外。
+ * @param weapon 從物品池抽到的那一把（§2）。null 代表這個原型不持槍 ——
+ *               它照樣有內建武器，只是打不到遠處。
  */
 export function makeEnemy(
   serial: { nextEntitySerial: number },
   archetypeId: string, index: number, pos: Vec2, facing: Facing = 'S',
+  weapon: WeaponInstance | null = null,
+  rng?: RngState,
 ): Unit {
-  const a = archetype(archetypeId);
-  if (!a.attack) throw new Error('敵人原型 ' + archetypeId + ' 缺少 attack 資料');
   const id = 'E' + String(index + 1).padStart(2, '0');
+  const a = archetype(archetypeId);
   const name = a.name + '-' + String(index + 1).padStart(2, '0');
-  return makeUnit(archetypeId, id, name, pos, {
-    equipped: makeWeaponFrom(serial, a.attack),
-    stowed: null,
-  }, facing);
+  const u = makeUnit(archetypeId, id, name, pos, { equipped: null, stowed: null },
+    facing, null, serial);
+  if (rng) issueWeapon(u, weapon, rng);
+  else u.equipped = weapon;
+  return u;
 }
 
 /** 測試與機器人用的固定名冊 id。正式流程的名冊來自 MetaState。 */
@@ -141,9 +187,16 @@ export function createInitialState(
 
   // 物品與屍體的 id 走同一個流水號，所以先開一個計數器再交給 state
   const units: Unit[] = [makeDeployedUnit(serial, first, map.startDropPoint)];
+  // 敵人的武器：**從物品池抽出**（§2）。派遣快照裡帶著局外層抽好的那幾把 ——
+  // 抽取必須發生在局外層，因為抽走一把，補給站就少一把。
+  // 沒有快照時（測試與機器人）就生成土製武器，決定論仍然只看種子。
   picked.enemies.forEach((e, i) => {
     if (!ACTORS[e.archetype]) throw new Error('地圖引用了未知的敵人原型 ' + e.archetype);
-    units.push(makeEnemy(serial, e.archetype, i, e.pos, e.facing));
+    const drawn = plan.enemyWeapons ? (plan.enemyWeapons[i] ?? null) : undefined;
+    const w = drawn !== undefined
+      ? (drawn && JSON.parse(JSON.stringify(drawn)) as WeaponInstance)
+      : (archetype(e.archetype).armed ? makeLocalEnemyWeapon(serial, rng) : null);
+    units.push(makeEnemy(serial, e.archetype, i, e.pos, e.facing, w, rng));
   });
 
   // 地圖搜刮點（§4.1）。地形是 LOOT，內容寫在地圖檔的 caches。
@@ -171,6 +224,7 @@ export function createInitialState(
     explored: blankExplored(map),
     // 起始空投點預設已啟用 —— 他就是從那裡下來的
     activatedDrops: [map.startDropPoint.x + ',' + map.startDropPoint.y],
+    identifiedWeapons: [],
     deployment: plan.soldiers,
     stats: {},
     deadSoldierIds: [],

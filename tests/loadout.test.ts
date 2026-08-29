@@ -44,8 +44,10 @@ describe('§1 口徑系統', () => {
       expect(ITEMS[id].weight).toBe(a.weightPerRound);
       expect(ITEMS[id].ammoTypeId).toBe(id);
     }
-    // v0.15：每個口徑剛好一種型別，數值與附錄前相同
+    // v0.15：每個口徑剛好一種型別，數值與附錄前相同。
+    // 'melee' 例外 —— 內建近戰沒有彈藥（§1.2），那正是它的定義。
     for (const c of Object.keys(RULES.calibres) as Calibre[]) {
+      if (c === 'melee') { expect(ammoTypesForCalibre(c), c).toHaveLength(0); continue; }
       const types = ammoTypesForCalibre(c);
       expect(types, c).toHaveLength(1);
       expect(types[0].def.weightPerRound).toBe(RULES.calibres[c].weightPerRound);
@@ -62,10 +64,11 @@ describe('§1 口徑系統', () => {
     }
   });
 
-  it('七把武器都填了機構型式，而且本版不參與任何判斷', () => {
+  it('每一把武器都填了機構型式，而且本版不參與任何判斷', () => {
     const want: Record<string, string> = {
       ar9: 'AUTO', rr4: 'BREECH', sg12p: 'PUMP', sg12s: 'BREAK',
-      dmr7: 'SEMI', lmg5: 'AUTO', p9: 'SEMI',
+      dmr7: 'SEMI', lmg5: 'AUTO', p9: 'SEMI', rb7: 'BOLT',
+      field_blade: 'BREAK', runner_claw: 'BREAK', hulk_slam: 'BREAK',
     };
     for (const w of WEAPONS) expect(w.action, w.id).toBe(want[w.id]);
   });
@@ -95,8 +98,10 @@ describe('§2 武器表', () => {
     expect(rr4.reloadSequence).toBe('RR4_RELOAD');
   });
 
-  it('七把武器，全部 penetration 為 0（穿甲本次擱置）', () => {
-    expect(WEAPONS).toHaveLength(7);
+  it('全部 penetration 為 0（穿甲本次擱置）', () => {
+    // 七把可配裝的槍 + RB-7（§2.3 的補位）+ 三把內建近戰（§1）
+    expect(WEAPONS.filter((w) => !w.intrinsic)).toHaveLength(8);
+    expect(WEAPONS.filter((w) => w.intrinsic)).toHaveLength(3);
     for (const w of WEAPONS) expect(w.penetration, w.id).toBe(0);
   });
 

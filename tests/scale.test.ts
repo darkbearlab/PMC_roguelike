@@ -14,6 +14,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { runMission } from './bot';
 import { RULES, WEAPONS, ACTORS } from '../src/core/content';
 import { freezeCombat, thawCombat } from './helpers';
+import { weaponType } from '../src/core/weapon';
 
 describe('關掉浮動之後，整場任務逐事件完全重現', () => {
   beforeAll(() => freezeCombat());
@@ -54,8 +55,11 @@ describe('§1.2 不該放大的東西一律沒動', () => {
     expect(ACTORS.RUNNER.sightRange).toBe(10);
     expect(ACTORS.HULK.sightRange).toBe(8);
     expect(ACTORS.SHOOTER.sightRange).toBe(12);
-    expect(ACTORS.RUNNER.attack!.range).toBe(1);
-    expect(ACTORS.SHOOTER.attack!.range).toBe(7);
+    // §1：敵人的內嵌 attack 已改為 weapons.json 裡的內建武器。
+    // 衝鋒型的爪還是射程 1；射手型則改為抽一把真的槍，射程由那把槍決定。
+    expect(weaponType(ACTORS.RUNNER.intrinsic).range).toBe(1);
+    expect(weaponType(ACTORS.SHOOTER.intrinsic).range).toBe(1);
+    expect(ACTORS.SHOOTER.armed).toBe(true);
   });
 
   it('速度分級由時間成本表達，取代原本的 AP 分級', () => {

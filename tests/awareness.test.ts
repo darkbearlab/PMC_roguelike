@@ -5,6 +5,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { applyCommand } from '../src/core/commands';
 import { damageAfterArmor } from '../src/core/combat';
 import { ACTORS, RULES, WEAPONS } from '../src/core/content';
+import { weaponType } from '../src/core/weapon';
 import { advanceOnce, run, testState, player, unit, freezeCombat, thawCombat } from './helpers';
 
 const HALL = [
@@ -202,10 +203,16 @@ describe('§1 命中率：位置成為交火的主題', () => {
     expect(ar9.accuracy - RULES.combat.cover.good).toBeCloseTo(RULES.combat.hitFloor, 5);
   });
 
-  it('敵人有自己的基礎命中，近戰明顯高於遠程', () => {
-    expect(ACTORS.RUNNER.attack!.accuracy).toBe(0.7);
-    expect(ACTORS.HULK.attack!.accuracy).toBe(0.7);
-    expect(ACTORS.SHOOTER.attack!.accuracy).toBe(0.5);
-    expect(ACTORS.RUNNER.attack!.accuracy).toBeGreaterThan(ACTORS.SHOOTER.attack!.accuracy);
+  it('近戰的基礎命中明顯高於遠程 —— 貼上來就很難閃', () => {
+    // §1：敵人的內嵌攻擊已改為 weapons.json 裡的內建武器，數值一個字沒改。
+    expect(weaponType(ACTORS.RUNNER.intrinsic).accuracy).toBe(0.7);
+    expect(weaponType(ACTORS.HULK.intrinsic).accuracy).toBe(0.7);
+    for (const w of WEAPONS.filter((x) => x.intrinsic)) {
+      expect(w.range, w.id).toBe(1);
+      expect(w.weight, w.id).toBe(0);
+      expect(w.modes, w.id).toEqual(['SINGLE']);
+    }
+    expect(weaponType(ACTORS.RUNNER.intrinsic).accuracy)
+      .toBeGreaterThan(WEAPONS.find((w) => w.id === 'ar9')!.accuracy);
   });
 });

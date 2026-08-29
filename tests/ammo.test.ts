@@ -69,11 +69,17 @@ describe('§1.1 只有兩層彈藥：槍內與背包', () => {
     }
   });
 
-  it('敵人的攻擊不吃背包彈藥（magazine 99）', () => {
+  it('內建近戰不吃彈藥，敵人也沒有背包（§1.2 / §3.2）', () => {
     const s = testState(OPEN, [{ archetype: 'RUNNER', pos: { x: 4, y: 1 } }]);
     const e = unit(s, 'E01');
-    expect(e.backpack).toBeNull();
-    expect(e.equipped!.magazine).toBe(99);
+    expect(e.backpack, '敵人不做裝備管理').toBeNull();
+    expect(e.equipped, '衝鋒型沒有槍，只有爪').toBeNull();
+    expect(e.intrinsic.intrinsic).toBe(true);
+    expect(e.intrinsic.weight).toBe(0);
+    // §3.2：持槍的敵人備彈是一個數字，不是一個背包
+    const t = testState(OPEN, [{ archetype: 'SHOOTER', pos: { x: 4, y: 1 } }]);
+    expect(unit(t, 'E01').backpack).toBeNull();
+    expect(unit(t, 'E01').equipped).not.toBeNull();
   });
 });
 

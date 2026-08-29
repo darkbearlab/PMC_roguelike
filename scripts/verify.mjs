@@ -38,8 +38,16 @@ await page.evaluate(() => {
   const g = window.__game;
   const me = g.state.units.find((u) => u.faction === 'PLAYER');
   me.pos = { x: 3, y: 11 };   // 靠近 D2 (2,11)
-  me.hp = 3;
-  g.dispatch({ type: 'FIRE', target: { x: 3, y: 11 } });
+  // 自盡可能會沒打中（命中率是真的在擲的），所以打到死為止 ——
+  // 這一段驗的是「陣亡之後會怎樣」，不是「這一槍會不會中」。
+  for (let i = 0; i < 20 && !g.state.pendingReinforcement; i++) {
+    const u = g.state.units.find((x) => x.faction === 'PLAYER');
+    if (!u) break;
+    u.hp = 3;
+    if (u.equipped) u.equipped.ammo = u.equipped.magazine;
+    u.nextActAt = g.state.clock;
+    g.dispatch({ type: 'FIRE', target: { x: 3, y: 11 } });
+  }
 });
 await page.waitForTimeout(400);
 await page.screenshot({ path: OUT + '/20-reinforce.png' });

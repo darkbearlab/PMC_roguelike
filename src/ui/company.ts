@@ -14,7 +14,7 @@ import {
   assignWeapon, freeAmmo, freeConsumable,
   holderOf, moveAmmo, moveConsumable, resolveLoadout, resupplyAll,
   resupplySoldier, resupplyTarget, supplyBatch, unassignSlot,
-  buyAmmo, buyConsumable, buySoldier, buyWeapon, sellStock, sellWeapon,
+  buyAmmo, buyConsumable, buySoldier, buyWeapon, sellStock, sellWeapon, wasOurs,
 } from '../core/meta';
 import { allAmmoTypes, ammoLabel, checkKit, kitBreakdown, selectableConsumables } from '../core/loadout';
 import { BOARD_MAIL, ECONOMY, ITEMS, RULES, WEAPONS } from '../core/content';
@@ -166,14 +166,15 @@ function supplyHtml(meta: MetaState): string {
     + '<em>' + esc(note) + '</em></button>';
 
   // ---- 遺產武器：**不是型錄，是現貨** ----
+  // 架上擺的是**實例**，不是型號 —— 買走的就是那一把（§2.1）。
   const stock = meta.legacyStock.length
-    ? meta.legacyStock.map((id, i) => {
-      const w = WEAPONS.find((x) => x.id === id)!;
-      return row('weapon', id, w.name, weaponPrice(id),
-        '現貨 1 件　' + RULES.calibres[w.calibre].name + '　' + w.action
-        + (i === 0 ? '　—— 賣掉就沒了，下一批不保證有同一型' : ''));
-    }).join('')
-    : '<p class="note">本期沒有遺產武器現貨。下一份合約完成後重新調度。</p>';
+    ? meta.legacyStock.map((w, i) => row('weapon', w.instanceId, w.name, weaponPrice(w.typeId),
+      '現貨 1 件　' + RULES.calibres[w.calibre].name + '　' + w.action
+      + (wasOurs(w) ? '　⚑ 前次登記：本公司' : '')
+      + (i === 0 ? '　—— 買走就沒了，池子不會自己長回來' : ''))).join('')
+    : '<p class="note">補給站沒有遺產武器現貨。'
+      + '槍不會被生產，只會流通 —— 池子空了就是真的空了，'
+      + '要等戰場上的那幾把被拾荒者洗回來。</p>';
 
   const legacyOwned = meta.armoury.filter((w) => !holderOf(meta, w.instanceId));
   const sellRow = (kind: string, key: string, label: string, price: number, note: string): string =>

@@ -213,7 +213,7 @@ describe('§5 把任務結果套用回公司', () => {
   };
   const result = (over: Partial<MissionResult>): MissionResult => ({
     mapName: '測試場', contractCode: '委-TEST', outcome: 'ABORTED', clock: 100,
-    rating: 'C', mainDone: false, secondaryDone: 0, issued: [], issuedWeaponIds: [],
+    rating: 'C', mainDone: false, secondaryDone: 0, issued: [], issuedWeaponIds: [], leftBehind: [],
     deployedIds: [], deadIds: [], survivorId: null,
     survivorEquippedId: null, survivorStowedId: null, extracted: [],
     kills: {}, damageTaken: {}, ...over,
@@ -430,7 +430,7 @@ describe('v0.18 附錄：自動補給', () => {
     // 打完一場，帶回來 5 發
     const after = applyMissionResult(m, {
       mapName: '測試場', contractCode: '委-TEST', outcome: 'SUCCESS', clock: 100,
-      rating: 'C', mainDone: true, secondaryDone: 0, issued: [], issuedWeaponIds: [],
+      rating: 'C', mainDone: true, secondaryDone: 0, issued: [], issuedWeaponIds: [], leftBehind: [],
       deployedIds: [id], deadIds: [], survivorId: id,
       survivorEquippedId: plan.soldiers.find((d) => d.id === id)!.equipped!.instanceId,
       survivorStowedId: null,

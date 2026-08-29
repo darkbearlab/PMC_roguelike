@@ -50,7 +50,7 @@ type PlayerUnit = NonNullable<ReturnType<typeof activePlayerUnit>>;
 function weaponLine(state: GameState, w: PlayerUnit['equipped']): string {
   if (!w) return '無';
   const u = activePlayerUnit(state);
-  const spare = w.magazine < 99 ? '　備彈 ' + countAmmoFor(u ? u.backpack : null, w) : '';
+  const spare = !w.intrinsic ? '　備彈 ' + countAmmoFor(u ? u.backpack : null, w) : '';
   const mode = w.modes.length > 1 ? '　' + RULES.fireModes[w.mode].full : '';
   return w.name + ' ' + w.ammo + '/' + w.magazine + spare + mode;
 }

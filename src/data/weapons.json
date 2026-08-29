@@ -19,7 +19,11 @@
     "ammo": 8,
     "calibre": "5.56",
     "weight": 7,
-    "modes": ["SINGLE", "BURST", "AUTO"],
+    "modes": [
+      "SINGLE",
+      "BURST",
+      "AUTO"
+    ],
     "mode": "SINGLE",
     "fireTime": 10,
     "reloadTime": 10,
@@ -49,7 +53,9 @@
     "ammo": 1,
     "calibre": "84mm",
     "weight": 20,
-    "modes": ["SINGLE"],
+    "modes": [
+      "SINGLE"
+    ],
     "mode": "SINGLE",
     "fireTime": 20,
     "reloadTime": 20,
@@ -61,7 +67,8 @@
     "splash": 1,
     "accuracy": 0.5,
     "optimalRange": 8,
-    "falloffPerTile": 0.10
+    "falloffPerTile": 0.1,
+    "conspicuous": true
   },
   {
     "_why": "增量裝填的槍（§2.2）。壓力下就填一發打一發，安全時才填滿 —— 這是泵動散彈槍該有的手感，而它由 reloadMode 一個欄位產生，不需要任何特例程式碼。",
@@ -79,7 +86,9 @@
     "ammo": 5,
     "calibre": "12ga",
     "weight": 7,
-    "modes": ["SINGLE"],
+    "modes": [
+      "SINGLE"
+    ],
     "mode": "SINGLE",
     "fireTime": 10,
     "reloadTime": 6,
@@ -89,9 +98,9 @@
     "swapTime": 10,
     "noiseRadius": 10,
     "splash": 0,
-    "accuracy": 0.70,
+    "accuracy": 0.7,
     "optimalRange": 2,
-    "falloffPerTile": 0.20
+    "falloffPerTile": 0.2
   },
   {
     "_why": "泵動型的反面：一次填兩發、單一動作、費時 20。零承諾 vs 高承諾 —— 兩把槍性格對立，而不只是數值不同。",
@@ -110,7 +119,10 @@
     "ammo": 2,
     "calibre": "12ga",
     "weight": 5,
-    "modes": ["SINGLE", "VOLLEY"],
+    "modes": [
+      "SINGLE",
+      "VOLLEY"
+    ],
     "mode": "SINGLE",
     "fireTime": 10,
     "reloadTime": 20,
@@ -120,9 +132,9 @@
     "swapTime": 8,
     "noiseRadius": 12,
     "splash": 0,
-    "accuracy": 0.80,
+    "accuracy": 0.8,
     "optimalRange": 1,
-    "falloffPerTile": 0.30
+    "falloffPerTile": 0.3
   },
   {
     "_why": "衰減曲線是這批武器的主軸（§2.3）。DMR-7 的基礎命中只有 0.50，比 AR-9 還低 —— 它的長處不是準，是**遠處也一樣準**。",
@@ -140,7 +152,9 @@
     "ammo": 5,
     "calibre": "7.62",
     "weight": 11,
-    "modes": ["SINGLE"],
+    "modes": [
+      "SINGLE"
+    ],
     "mode": "SINGLE",
     "fireTime": 14,
     "reloadTime": 14,
@@ -150,7 +164,7 @@
     "swapTime": 12,
     "noiseRadius": 14,
     "splash": 0,
-    "accuracy": 0.50,
+    "accuracy": 0.5,
     "optimalRange": 14,
     "falloffPerTile": 0.05
   },
@@ -170,7 +184,10 @@
     "ammo": 30,
     "calibre": "5.56",
     "weight": 15,
-    "modes": ["BURST", "AUTO"],
+    "modes": [
+      "BURST",
+      "AUTO"
+    ],
     "mode": "AUTO",
     "fireTime": 10,
     "reloadTime": 30,
@@ -182,7 +199,8 @@
     "splash": 0,
     "accuracy": 0.48,
     "optimalRange": 5,
-    "falloffPerTile": 0.09
+    "falloffPerTile": 0.09,
+    "conspicuous": true
   },
   {
     "_why": "手槍是「沒空裝填」的答案（§2.5）：步槍打空後裝填再開火要 20，換手槍再開火只要 11。加上極輕，是想多背戰利品時收納格的首選。",
@@ -200,7 +218,10 @@
     "ammo": 10,
     "calibre": "9mm",
     "weight": 2,
-    "modes": ["SINGLE", "BURST"],
+    "modes": [
+      "SINGLE",
+      "BURST"
+    ],
     "mode": "SINGLE",
     "fireTime": 6,
     "reloadTime": 6,
@@ -210,8 +231,137 @@
     "swapTime": 5,
     "noiseRadius": 5,
     "splash": 0,
-    "accuracy": 0.60,
+    "accuracy": 0.6,
     "optimalRange": 3,
     "falloffPerTile": 0.12
+  },
+  {
+    "_why": "土製拉栓步槍（§2.3）。**池子空了就生成這個** —— 土製武器現在還做得出來，所以它是無限供給的那一層。手動循環，所以它是土製的（附錄 B §20.3 的分界線）。",
+    "_numbers": "比 DMR-7 差在每一項：準度更低、循環更慢、射程更短。它唯一的優點是它存在。",
+    "id": "rb7",
+    "origin": "LOCAL",
+    "resupplyMagazines": 3,
+    "action": "BOLT",
+    "name": "RB-7 土製拉栓步槍",
+    "class": "LIGHT",
+    "damage": 40,
+    "damageSpread": 8,
+    "penetration": 0,
+    "range": 12,
+    "magazine": 5,
+    "ammo": 5,
+    "calibre": "7.62",
+    "weight": 10,
+    "modes": [
+      "SINGLE"
+    ],
+    "mode": "SINGLE",
+    "fireTime": 16,
+    "reloadTime": 16,
+    "reloadMode": "FULL",
+    "reloadSequence": null,
+    "reloadProgress": 0,
+    "swapTime": 12,
+    "noiseRadius": 11,
+    "splash": 0,
+    "accuracy": 0.5,
+    "optimalRange": 9,
+    "falloffPerTile": 0.07
+  },
+  {
+    "_why": "玩家與射手型的內建近戰（§1.3）。傷害低到不能當主力，但**噪音為 0** —— 打光彈藥之後仍然有事可做，而且那件事很安靜。與背刺加成（+0.30、無視掩蔽）相容，所以「繞到背後解決掉他」是一個成立的戰術，順帶也是日後潛入契約的第一個工具。",
+    "id": "field_blade",
+    "origin": "LOCAL",
+    "intrinsic": true,
+    "action": "BREAK",
+    "name": "工兵刀",
+    "class": "LIGHT",
+    "damage": 18,
+    "damageSpread": 4,
+    "penetration": 0,
+    "range": 1,
+    "magazine": 1,
+    "ammo": 1,
+    "calibre": "melee",
+    "weight": 0,
+    "modes": [
+      "SINGLE"
+    ],
+    "mode": "SINGLE",
+    "fireTime": 8,
+    "reloadTime": 0,
+    "reloadMode": "FULL",
+    "reloadSequence": null,
+    "reloadProgress": 0,
+    "swapTime": 0,
+    "noiseRadius": 0,
+    "splash": 0,
+    "accuracy": 0.65,
+    "optimalRange": 1,
+    "falloffPerTile": 0
+  },
+  {
+    "_why": "衝鋒型的內建近戰。數值沿用 v0.9 起的內嵌攻擊，一個字都沒改 —— §1.1 是重構，不是調整。",
+    "id": "runner_claw",
+    "origin": "LOCAL",
+    "intrinsic": true,
+    "action": "BREAK",
+    "name": "衝擊爪",
+    "class": "LIGHT",
+    "damage": 30,
+    "damageSpread": 5,
+    "penetration": 0,
+    "range": 1,
+    "magazine": 1,
+    "ammo": 1,
+    "calibre": "melee",
+    "weight": 0,
+    "modes": [
+      "SINGLE"
+    ],
+    "mode": "SINGLE",
+    "fireTime": 10,
+    "reloadTime": 0,
+    "reloadMode": "FULL",
+    "reloadSequence": null,
+    "reloadProgress": 0,
+    "swapTime": 0,
+    "noiseRadius": 0,
+    "splash": 0,
+    "accuracy": 0.7,
+    "optimalRange": 1,
+    "falloffPerTile": 0
+  },
+  {
+    "_why": "裝甲型的內建近戰。數值沿用既有的內嵌攻擊。",
+    "id": "hulk_slam",
+    "origin": "LOCAL",
+    "intrinsic": true,
+    "action": "BREAK",
+    "name": "重擊",
+    "class": "LIGHT",
+    "damage": 60,
+    "damageSpread": 10,
+    "penetration": 0,
+    "range": 1,
+    "magazine": 1,
+    "ammo": 1,
+    "calibre": "melee",
+    "weight": 0,
+    "modes": [
+      "SINGLE"
+    ],
+    "mode": "SINGLE",
+    "fireTime": 15,
+    "reloadTime": 0,
+    "reloadMode": "FULL",
+    "reloadSequence": null,
+    "reloadProgress": 0,
+    "swapTime": 0,
+    "noiseRadius": 0,
+    "splash": 0,
+    "accuracy": 0.7,
+    "optimalRange": 1,
+    "falloffPerTile": 0
   }
 ]

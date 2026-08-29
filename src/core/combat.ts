@@ -46,7 +46,7 @@ export type ToHitFn = (
  * 不讓玩家在彈藥不足時無法開火，也不無聲降級 —— UI 顯示的一律是這個值。
  */
 export function effectiveMode(w: Weapon): FireMode {
-  if (w.magazine >= 99) return w.mode;            // 敵人的攻擊不吃彈藥
+  if (w.intrinsic) return w.mode;                 // 內建武器彈藥無限（§1.2）
   const order = RULES.fireModes.order;
   const idx = order.indexOf(w.mode);
   for (let i = idx; i >= 0; i--) {
@@ -248,6 +248,85 @@ export function canAttack(
   return OK;
 }
 
+/**
+ * 這一下攻擊實際會用哪一把（§1.4）。
+ *
+ * **主手優先；主手打不出去而目標就在旁邊時，自動改用內建近戰。**
+ * 沒有切換動作、沒有新按鈕、不花時間 —— 它長在身上，本來就在手邊。
+ *
+ * 這條規則的存在理由很單純：彈藥現在是有限資源，
+ * 打光的單位若完全無法攻擊，那不是資源壓力，是把他關掉。
+ */
+export function attackWeapon(state: GameState, u: Unit, targetPos: Vec2): Weapon | null {
+  if (u.equipped && canAttack(state, u, targetPos, u.equipped).ok) return u.equipped;
+  if (u.intrinsic && canAttack(state, u, targetPos, u.intrinsic).ok) return u.intrinsic;
+  return null;
+}
+
+/** 這一下會不會用到內建近戰（介面要說清楚，§1.4）。 */
+export function usesIntrinsic(state: GameState, u: Unit, targetPos: Vec2): boolean {
+  return attackWeapon(state, u, targetPos) === u.intrinsic;
+}
+
+/** 攻擊的合法性：主手不行就看內建近戰行不行。 */
+export function canAttackAny(state: GameState, u: Unit, targetPos: Vec2): Legality {
+  if (attackWeapon(state, u, targetPos)) return OK;
+  // 理由取主手的 —— 玩家問的是「為什麼那把槍打不到」，不是「為什麼刀捅不到」
+  return u.equipped ? canAttack(state, u, targetPos, u.equipped) : no('沒有裝備武器');
+}
+
+/**
+ * 這個敵人**打光了**嗎（§3.4）。
+ *
+ * 判準是「他有一把槍，而那把槍已經榨乾了」——
+ * **不是**「他沒有槍」。衝鋒型與裝甲型從來就沒有槍，
+ * 他們不是彈盡，他們本來就是那樣打的：把他們也算進來會誤改他們的落點權重。
+ */
+export function outOfAmmo(e: Unit): boolean {
+  const w = e.equipped;
+  if (!w || w.intrinsic) return false;
+  return w.ammo <= 0 && e.reserveAmmo <= 0 && w.reloadProgress === 0;
+}
+
+// ============================================================================
+// 武器識別（§4.2）
+// ============================================================================
+
+/** 認出這把武器。已識別的狀態在這一場裡保留。 */
+export function identify(state: GameState, w: Weapon | null): void {
+  if (!w || w.intrinsic) return;
+  if (state.identifiedWeapons.includes(w.instanceId)) return;
+  state.identifiedWeapons.push(w.instanceId);
+}
+
+/**
+ * 玩家看得出這把武器是什麼嗎（§4.2）。三個層級：
+ *
+ *  - **未識別**：只看到敵人，看不出武器
+ *  - **已識別**：該敵人開過火，或雙方距離 ≤ 門檻
+ *  - **恆常可見**：`conspicuous` 的武器藏不住，從任何距離都看得到
+ */
+export function isIdentified(state: GameState, w: Weapon | null): boolean {
+  if (!w) return false;
+  if (w.conspicuous) return true;
+  return state.identifiedWeapons.includes(w.instanceId);
+}
+
+/**
+ * 走近就認得出來（§4.2）。玩家單位行動之後掃一次，與迷霧同一個時機。
+ *
+ * 只認**敵人**手上的 —— 自己那把本來就知道是什麼。
+ */
+export function markIdentified(state: GameState, u: Unit): void {
+  if (u.faction !== 'PLAYER') return;
+  const reach = RULES.ai.identifyRange;
+  for (const e of state.units) {
+    if (e.faction !== 'ENEMY') continue;
+    if (manhattan(u.pos, e.pos) > reach) continue;
+    identify(state, e.equipped);
+  }
+}
+
 // ============================================================================
 // 噪音（§8.3）
 // ============================================================================
@@ -439,15 +518,21 @@ export function performAttack(
   events?: EventSink,
 ): BurstResult {
   const attacker = findUnit(state, attackerId);
-  if (!attacker || !attacker.equipped) {
+  const weapon = attacker ? attackWeapon(state, attacker, targetPos) : null;
+  if (!attacker || !weapon) {
     throw new Error('performAttack: 攻擊者狀態無效 ' + attackerId);
   }
-  const weapon = attacker.equipped;
   const mode = effectiveMode(weapon);
   const shots = RULES.fireModes[mode].shots;
 
+  // 開火就會被認出來拿的是什麼（§4.2）—— 開槍是最誠實的自我介紹。
+  identify(state, weapon);
+  // 顯眼武器打完就要重新架設（§4.4）：一次架設換一次射擊，不能架一次連打。
+  attacker.setUp = false;
+
   // 時間成本由排程器統一處理（commands.ts / ai.ts），這裡只管彈藥與朝向
-  if (weapon.magazine < 99) weapon.ammo -= shots;
+  // 內建武器彈藥無限（§1.2）—— 它長在身上，沒有彈匣可以打空。
+  if (!weapon.intrinsic) weapon.ammo -= shots;
   const f = facingToward(attacker.pos, targetPos);
   if (f) attacker.facing = f;
 
@@ -457,7 +542,7 @@ export function performAttack(
   }
 
   // 空倉提示排在彈道與傷害之後，順序才符合玩家看到的因果
-  if (weapon.ammo <= 0 && weapon.magazine < 99) {
+  if (weapon.ammo <= 0 && !weapon.intrinsic) {
     events?.push({ kind: 'AMMO_OUT', unitId: attacker.id, pos: { x: attacker.pos.x, y: attacker.pos.y } });
   }
   return {

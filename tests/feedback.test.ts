@@ -134,9 +134,9 @@ describe('§2.5 回饋層不得污染規則層', () => {
     }
     expect(Object.keys(s).sort()).toEqual([
       'activatedDrops', 'activePlayerUnitId', 'casualties', 'clock', 'deadSoldierIds',
-      'deployed', 'deployment', 'explored', 'extracted', 'extractedBy', 'log', 'loot', 'map',
-      'nextEntitySerial', 'objectives', 'pendingReinforcement', 'result', 'rng',
-      'rngSeed', 'roster', 'stats', 'units',
+      'deployed', 'deployment', 'explored', 'extracted', 'extractedBy', 'identifiedWeapons',
+      'log', 'loot', 'map', 'nextEntitySerial', 'objectives', 'pendingReinforcement',
+      'result', 'rng', 'rngSeed', 'roster', 'stats', 'units',
     ]);
   });
 

@@ -20,7 +20,9 @@ import { activeUnit, isMissionOver, isPlayerTurn } from '../core/scheduler';
 import { describe as describeSequence, remainingTime } from '../core/sequence';
 import { createInitialState } from '../core/setup';
 import { RULES } from '../core/content';
-import { armorRange, damageRange, effectiveMode, hitBreakdown } from '../core/combat';
+import {
+  armorRange, attackWeapon, damageRange, effectiveMode, hitBreakdown,
+} from '../core/combat';
 import { COVER_LABEL } from '../core/cover';
 import { manhattan, sameTile } from '../core/grid';
 import { inBounds } from '../core/map';
@@ -1020,21 +1022,26 @@ export class Game {
     if (!s || s.kind !== 'TARGET') return null;
     const me = activePlayerUnit(this.state);
     const foe = findUnit(this.state, s.unitId);
-    if (!me || !foe || !me.equipped) return null;
+    if (!me || !foe) return null;
+    // §1.4：這一下實際會用哪一把。主手打不出去而人就在旁邊時是內建近戰 ——
+    // **介面必須明說**，否則玩家會以為自己在用那把空槍。
+    const w = attackWeapon(this.state, me, foe.pos) ?? me.equipped;
+    if (!w) return null;
     const legal = checkLegal(this.state, { type: 'FIRE', target: foe.pos });
-    const bd = hitBreakdown(me, foe, me.equipped, this.state);
+    const bd = hitBreakdown(me, foe, w, this.state);
     return {
       unitId: foe.id,
       pos: { ...foe.pos },
       name: foe.name,
       chance: legal.ok ? bd.chance : null,
       reason: legal.reason,
-      damage: damageRange(me.equipped, foe),
+      weaponNote: w.intrinsic ? '以 ' + w.name + ' 近戰' : '',
+      damage: damageRange(w, foe),
       armor: armorRange(foe),
-      time: me.equipped.fireTime,
+      time: w.fireTime,
       // 預覽只顯示**當前模式**的數值，不列出其他模式（§2.6）。
       // 降級時要寫出來，玩家才知道自己按的跟實際發生的不一樣。
-      modeNote: bd.shots > 1 || me.equipped.modes.length > 1
+      modeNote: bd.shots > 1 || w.modes.length > 1
         ? RULES.fireModes[bd.mode].label + '發 ' + bd.shots + ' 發'
           + (bd.downgraded ? '（彈藥不足，已降級）' : '')
         : '',
