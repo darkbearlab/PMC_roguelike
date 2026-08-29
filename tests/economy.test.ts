@@ -319,6 +319,52 @@ describe('§5.4 損益表', () => {
     expect(ledger.suppliesLost).toBe(sellValue(ammoPrice('standard_5.56', 15)));
   });
 
+  it('**自己發下去的彈藥帶回來不算收益** —— 那只是沒有損耗', () => {
+    const m = co();
+    const { ledger } = settleMission(m, base(m, {
+      issued: [{ defId: 'standard_5.56', qty: 60 }],
+      extracted: [{
+        id: 'A', kind: 'AMMO', defId: 'standard_5.56', name: '5.56 步槍彈',
+        weight: 0.024, qty: 60, ammoTypeId: 'standard_5.56',
+      }],
+    }));
+    expect(ledger.salvage).toBe(0);
+    expect(ledger.suppliesLost).toBe(0);
+  });
+
+  it('從自己屍體撿回整套裝備 = 打平，不是賺錢', () => {
+    const m = co();
+    const w = m.armoury[0];
+    const { ledger } = settleMission(m, base(m, {
+      issuedWeaponIds: [w.instanceId],
+      issued: [{ defId: 'standard_5.56', qty: 60 }],
+      extracted: [
+        { id: 'W', kind: 'WEAPON', defId: 'WEAPON', name: w.name,
+          weight: w.weight, qty: 1, weapon: w },
+        { id: 'A', kind: 'AMMO', defId: 'standard_5.56', name: '5.56 步槍彈',
+          weight: 0.024, qty: 60, ammoTypeId: 'standard_5.56' },
+      ],
+    }));
+    // 回去撿屍體是止血，不是發財：損益回到「只有合約報酬」那一格。
+    expect(ledger.net).toBe(ledger.creditsEarned);
+    expect(ledger.salvage).toBe(0);
+    expect(ledger.weaponsLost).toBe(0);
+    expect(ledger.suppliesLost).toBe(0);
+  });
+
+  it('超出發放量的部分才是真的撿到的', () => {
+    const m = co();
+    const { ledger } = settleMission(m, base(m, {
+      issued: [{ defId: 'standard_5.56', qty: 24 }],
+      extracted: [{
+        id: 'A', kind: 'AMMO', defId: 'standard_5.56', name: '5.56 步槍彈',
+        weight: 0.024, qty: 40, ammoTypeId: 'standard_5.56',
+      }],
+    }));
+    expect(ledger.salvage).toBe(sellValue(ammoPrice('standard_5.56', 16)));
+    expect(ledger.suppliesLost).toBe(0);
+  });
+
   it('帶回來的槍不算戰利品收入 —— 它回到軍械庫，不是賣掉', () => {
     const m = co();
     const w = m.armoury[0];

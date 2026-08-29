@@ -655,14 +655,14 @@ export function missionLedger(meta: MetaState, r: MissionResult): MissionLedger 
   const reward = r.mainDone ? contractReward(r.rating) : 0;
   const secondary = secondaryReward(r.rating, r.secondaryDone);
 
-  let salvage = 0;
   const broughtBack = new Set<string>();
+  const back = new Map<string, number>();
   for (const it of r.extracted) {
-    if (it.kind === 'WEAPON' && it.weapon) {
-      broughtBack.add(it.weapon.instanceId);
+    if (it.kind === 'WEAPON') {
+      if (it.weapon) broughtBack.add(it.weapon.instanceId);
       continue;                                  // 槍不算「賣掉的戰利品」，它回到軍械庫
     }
-    salvage += itemValue(it.defId, it.qty);
+    back.set(it.defId, (back.get(it.defId) ?? 0) + it.qty);
   }
 
   // 帶出去卻沒帶回來的槍 = 永久損失
@@ -673,16 +673,25 @@ export function missionLedger(meta: MetaState, r: MissionResult): MissionLedger 
     if (w) weaponsLost += sellValue(weaponPrice(w.typeId));
   }
 
-  // 帶出去的物資，扣掉帶回來的
-  const back = new Map<string, number>();
-  for (const it of r.extracted) {
-    if (it.kind === 'WEAPON') continue;
-    back.set(it.defId, (back.get(it.defId) ?? 0) + it.qty);
-  }
+  // 物資只算**淨額**：帶出去的扣掉帶回來的。
+  //
+  // 自己發下去的彈藥不是戰利品 —— 它本來就是公司的資產，帶回來只代表**沒有損耗**，
+  // 不代表賺到。從自己屍體上撿回來的更是如此：那趟是去止血的，不是去發財的。
+  // （早期版本把所有帶回來的東西都計入 salvage，於是同一批彈藥帶回來
+  //   會同時「消耗歸零」又「多一筆收益」，等於認列兩次。）
+  const issuedQty = new Map<string, number>();
+  for (const e of r.issued) issuedQty.set(e.defId, (issuedQty.get(e.defId) ?? 0) + e.qty);
+
   let suppliesLost = 0;
-  for (const e of r.issued) {
-    const left = Math.max(0, e.qty - (back.get(e.defId) ?? 0));
-    if (left > 0) suppliesLost += itemValue(e.defId, left);
+  for (const [defId, qty] of issuedQty) {
+    const left = qty - (back.get(defId) ?? 0);
+    if (left > 0) suppliesLost += itemValue(defId, left);
+  }
+  // 反過來，帶回來的超出發出去的部分才是真的撿到的：搜刮點、敵人屍體、DNA。
+  let salvage = 0;
+  for (const [defId, qty] of back) {
+    const extra = qty - (issuedQty.get(defId) ?? 0);
+    if (extra > 0) salvage += itemValue(defId, extra);
   }
 
   const soldiersLost = r.deadIds.length * soldierPrice();
