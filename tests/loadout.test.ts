@@ -166,10 +166,10 @@ describe('§4 換算尺與負重', () => {
     expect(ITEMS.SEALANT.weight).toBe(2);
   });
 
-  it('門檻是 55 / 78 / 100', () => {
+  it('門檻是 6 / 55 / 78 / 100', () => {
     expect(RULES.backpack.maxWeight).toBe(100);
     expect(RULES.backpack.weightTiers.map((t) => [t.maxWeight, t.moveCost]))
-      .toEqual([[55, 10], [78, 12], [100, 14]]);
+      .toEqual([[6, 7], [55, 10], [78, 12], [100, 14]]);
   });
 
   it('AR-9 + RR-4 + 24 發 5.56 + 2 發 84mm + 封合劑 = 41.6，第一級且有餘裕', () => {
@@ -182,7 +182,7 @@ describe('§4 換算尺與負重', () => {
     };
     const c = checkKit(kit);
     expect(c.weight).toBeCloseTo(41.576, 3);
-    expect(c.tier).toBe(0);
+    expect(c.tier).toBe(1);
     expect(c.moveCost).toBe(10);
     expect(c.overweight).toBe(false);
     expect(c.headroom).toBeCloseTo(13.424, 3);
@@ -257,7 +257,7 @@ describe('§19.4 至少三種明顯不同、各有適用場合的組合', () => 
     const ws = combos.map(([, k]) => checkKit(k));
     for (const [i, c] of ws.entries()) {
       expect(c.overweight, combos[i][0] + ' 超重').toBe(false);
-      expect(c.tier, combos[i][0] + ' 一出門就被拖慢').toBe(0);
+      expect(c.tier, combos[i][0] + ' 一出門就被拖慢').toBeLessThanOrEqual(1);
     }
     const min = Math.min(...ws.map((c) => c.weight));
     const max = Math.max(...ws.map((c) => c.weight));

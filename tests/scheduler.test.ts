@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { applyCommand, commandTime } from '../src/core/commands';
 import { activeUnit, isPlayerTurn, isMissionOver } from '../src/core/scheduler';
 import { ACTORS, RULES, WEAPONS } from '../src/core/content';
+import { effectiveMoveTime } from '../src/core/inventory';
 import { advanceOnce, advanceToPlayer, run, testState, player, unit, unburden } from './helpers';
 
 const OPEN = [
@@ -83,16 +84,23 @@ describe('§5.2 時間成本全部來自資料檔', () => {
     expect(commandTime(s, { type: 'SWAP_WEAPON' })).toBe(RULES.time.swap.HEAVY);
   });
 
-  it('敵人的速度分級：RUNNER 快於玩家、HULK 慢於玩家', () => {
-    expect(ACTORS.RUNNER.time.move).toBe(7);
-    expect(ACTORS.SOLDIER.time.move).toBe(10);
+  it('速度分級由**負重**表達，不再由原型指派（§3）', () => {
+    // 複製人統一之後所有人類共用同一個基礎值 —— 跑得快是因為身上沒東西
+    expect(ACTORS.RUNNER.time.move).toBe(ACTORS.SOLDIER.time.move);
+    expect(ACTORS.SHOOTER.time.move).toBe(ACTORS.SOLDIER.time.move);
+    // 機械保留專屬數值：那層裝甲板卸不下來
     expect(ACTORS.HULK.time.move).toBe(20);
+    expect(ACTORS.HULK.kind).toBe('MACHINE');
   });
 
-  it('RUNNER 真的追得上：同一段時間裡它走的格數比玩家多', () => {
+  it('只有一把爪的複製人真的追得上：同一段時間裡他走的格數比玩家多', () => {
+    const s = testState(OPEN, [{ archetype: 'RUNNER', pos: { x: 5, y: 1 } }]);
+    const fast = effectiveMoveTime(unit(s, 'E01'));
+    const me = effectiveMoveTime(player(s));
+    expect(fast, '極輕級').toBe(7);
+    expect(fast).toBeLessThan(me);
     const span = 140;
-    expect(Math.floor(span / ACTORS.RUNNER.time.move))
-      .toBeGreaterThan(Math.floor(span / ACTORS.SOLDIER.time.move));
+    expect(Math.floor(span / fast)).toBeGreaterThan(Math.floor(span / me));
   });
 });
 

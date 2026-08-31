@@ -9,7 +9,7 @@ import { applyCommand } from '../src/core/commands';
 import { createInitialState } from '../src/core/setup';
 import { findPath } from '../src/core/pathfind';
 import { activePlayerUnit, unitAt } from '../src/core/state';
-import { canAttack } from '../src/core/combat';
+import { canAttackAny } from '../src/core/combat';
 import { isPlayerTurn } from '../src/core/scheduler';
 import { facingFromDelta, manhattan } from '../src/core/grid';
 import type { CombatEvent } from '../src/core/events';
@@ -40,12 +40,16 @@ function botTurn(s: GameState, goal: Vec2): CommandResult {
   let best = Infinity;
   for (const e of s.units) {
     if (e.faction !== 'ENEMY') continue;
-    if (!canAttack(s, u, e.pos, u.equipped).ok) continue;
+    if (!canAttackAny(s, u, e.pos).ok) continue;
     const d = manhattan(u.pos, e.pos);
     if (d < best) { best = d; target = e.pos; }
   }
   if (target) return applyCommand(s, { type: 'FIRE', target });
-  if (u.equipped && u.equipped.ammo === 0) return applyCommand(s, { type: 'RELOAD' });
+  // 裝填不成就繼續往下走 —— 非法指令回傳同一個狀態物件，直接 return 會卡死
+  if (u.equipped && u.equipped.ammo === 0) {
+    const reloaded = applyCommand(s, { type: 'RELOAD' });
+    if (reloaded.state !== s) return reloaded;
+  }
 
   const path = findPath(s, u.pos, goal, { ignoreUnitIds: [u.id] });
   if (path && path.length > 0 && !unitAt(s, path[0])) {

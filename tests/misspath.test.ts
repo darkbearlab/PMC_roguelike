@@ -66,17 +66,26 @@ describe('未命中路徑', () => {
     expect(s.log.some((l) => l.kind === 'DAMAGE')).toBe(false);
   });
 
+  /**
+   * **量差值，不量絕對值。**
+   *
+   * 建立初始狀態本身也會抽（選圖、敵人配裝、護甲…），那些數字會隨版本改變，
+   * 但「這一次攻擊抽幾個」不會 —— 那才是這條紀律要守的東西。
+   */
+  const rollsForFire = (s0: ReturnType<typeof testState>, at: { x: number; y: number }): number => {
+    const before = s0.rng.count;
+    return run(s0, { type: 'FIRE', target: at }).rng.count - before;
+  };
+
   it('一次攻擊固定抽三個亂數（命中／傷害／護甲），命中與否都一樣', () => {
     setToHitPolicy(() => 1);
-    let hit = testState(ROOM, [{ archetype: 'HULK', pos: { x: 4, y: 1 } }]);
-    hit = run(hit, { type: 'FIRE', target: { x: 4, y: 1 } });
-
+    const hit = rollsForFire(
+      testState(ROOM, [{ archetype: 'HULK', pos: { x: 4, y: 1 } }]), { x: 4, y: 1 });
     setToHitPolicy(() => 0);
-    let miss = testState(ROOM, [{ archetype: 'HULK', pos: { x: 4, y: 1 } }]);
-    miss = run(miss, { type: 'FIRE', target: { x: 4, y: 1 } });
-
-    expect(hit.rng.count).toBe(3);
-    expect(miss.rng.count).toBe(3);
+    const miss = rollsForFire(
+      testState(ROOM, [{ archetype: 'HULK', pos: { x: 4, y: 1 } }]), { x: 4, y: 1 });
+    expect(hit).toBe(3);
+    expect(miss).toBe(3);
   });
 
   it('目標護甲為 0、甚至目標格沒有單位時，護甲擲值一樣照抽', () => {
@@ -84,15 +93,12 @@ describe('未命中路徑', () => {
     // 護甲 0 的敵人。刻意灌高血量讓它活下來 ——
     // v0.9 起敵人死亡會留下可搜刮的屍體，掉落表也要抽亂數（§4.2），
     // 那些是**另一組**擲值，不該混進「一次攻擊抽幾個」這條紀律裡。
-    let a = testState(ROOM, [{ archetype: 'RUNNER', pos: { x: 4, y: 1 } }]);
+    const a = testState(ROOM, [{ archetype: 'RUNNER', pos: { x: 4, y: 1 } }]);
     unit(a, 'E01').hp = 500;
-    a = run(a, { type: 'FIRE', target: { x: 4, y: 1 } });
-    expect(a.rng.count).toBe(3);
+    expect(rollsForFire(a, { x: 4, y: 1 })).toBe(3);
 
     // 目標格空無一物
-    let b = testState(ROOM);
-    b = run(b, { type: 'FIRE', target: { x: 4, y: 1 } });
-    expect(b.rng.count).toBe(3);
+    expect(rollsForFire(testState(ROOM), { x: 4, y: 1 })).toBe(3);
   });
 
   it('關掉擲骰開關也不改變亂數序列長度 —— 這正是紀律存在的理由', () => {

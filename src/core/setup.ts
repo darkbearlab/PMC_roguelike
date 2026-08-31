@@ -2,17 +2,18 @@
  * 初始狀態建立。所有數值來自 data/ 的 JSON，這裡不寫死任何平衡數字。
  */
 import type {
-  Backpack, Facing, GameState, Item, LootPile, Objective, Unit, Vec2, WeaponInstance,
+  Affix, Backpack, Facing, GameState, Item, LootPile, Objective, Unit, Vec2, WeaponInstance,
 } from './state';
 import type { RawMap } from './map';
 import { parseMap, findTiles } from './map';
 import type { RngState } from './rng';
 import { createRng, nextFloat, nextInt } from './rng';
-import { ACTORS, MAPS, RULES, archetype } from './content';
+import { ACTORS, ARMOUR, MAPS, RULES, archetype, armourType } from './content';
 import { makeWeapon } from './weapon';
 import { addItem, emptyBackpack, makeItem } from './inventory';
 import { blankExplored, markExplored } from './fog';
 import type { Deployment, DeployedSoldier } from './meta';
+import { levelOf } from './meta';
 
 function makeUnit(
   archetypeId: string,
@@ -47,6 +48,10 @@ function makeUnit(
     reserveAmmo: 0,
     setUp: false,
     announcedDry: false,
+    armour: null,
+    kind: a.kind,
+    skills: [],
+    actionScale: 1,
     backpack,
     aiState: 'IDLE',
     lastKnownTarget: null,
@@ -84,6 +89,11 @@ export function makeDeployedUnit(
   }, 'S', bag, state);
   u.hp = d.hp;
   u.maxHp = d.maxHp;
+  // §1.3：經驗影響 aim、evasion 與動作時間。**完全不影響生命值**（§1.4）——
+  // 「兩發斃命」是玩家所有資源計算的基準，一旦老兵比新兵耐打，那個計算就崩了。
+  u.aim = d.level.aim;
+  u.evasion = d.level.evasion;
+  u.actionScale = d.level.actionScale;
   return u;
 }
 
@@ -94,7 +104,7 @@ export function makeDeployedUnit(
  * 池中沒有適用的遺產武器時就補上一把這個，敵人不會空手站在那裡。
  */
 export function makeLocalEnemyWeapon(
-  serial: { nextEntitySerial: number }, rng: RngState,
+  serial: { nextEntitySerial: number }, rng: RngState, affixes: Affix[] = [],
 ): WeaponInstance {
   const table = RULES.enemyWeapons.localTypes;
   const total = table.reduce((a, t) => a + t.weight, 0);
@@ -104,9 +114,36 @@ export function makeLocalEnemyWeapon(
     if (roll < t.weight) { pick = t.id; break; }
     roll -= t.weight;
   }
-  return makeWeapon(serial, pick, [], [
+  return makeWeapon(serial, pick, affixes, [
     { event: 'MANUFACTURED', actor: '本地作坊' },
   ]);
+}
+
+/**
+ * 從護甲表抽一件（§2.3）。**大部分條目是「無」，低階時「無」的權重極高。**
+ *
+ * 回傳 null 代表沒穿 —— 那是最常見的結果，也是 §2.1 等價的關鍵：
+ * 最低階（C）的 `none` 權重是 100，所以最低階的複製人一律沒有護甲，
+ * 與統一之前完全相同。
+ */
+export function drawArmour(rng: RngState, tier: string): string | null {
+  const table = ARMOUR.tiers[tier] ?? ARMOUR.tiers.C;
+  const entries = Object.entries(table).filter(([k]) => !k.startsWith('_'));
+  const total = entries.reduce((a, [, w]) => a + w, 0);
+  let roll = nextInt(rng, Math.max(1, total));
+  for (const [id, w] of entries) {
+    if (roll < w) return id === 'none' ? null : id;
+    roll -= w;
+  }
+  return null;
+}
+
+/** 把一件護甲穿到身上：數值、負重、外觀都跟著走。 */
+export function wearArmour(u: Unit, id: string | null): void {
+  u.armour = id;
+  const a = id ? armourType(id) : null;
+  u.armor = a ? a.armor : archetype(u.archetype).armor;
+  u.armorSpread = a ? a.armorSpread : archetype(u.archetype).armorSpread;
 }
 
 /**
@@ -134,6 +171,7 @@ export function makeEnemy(
   archetypeId: string, index: number, pos: Vec2, facing: Facing = 'S',
   weapon: WeaponInstance | null = null,
   rng?: RngState,
+  armour: string | null = null,
 ): Unit {
   const id = 'E' + String(index + 1).padStart(2, '0');
   const a = archetype(archetypeId);
@@ -142,6 +180,7 @@ export function makeEnemy(
     facing, null, serial);
   if (rng) issueWeapon(u, weapon, rng);
   else u.equipped = weapon;
+  wearArmour(u, armour);
   return u;
 }
 
@@ -196,7 +235,12 @@ export function createInitialState(
     const w = drawn !== undefined
       ? (drawn && JSON.parse(JSON.stringify(drawn)) as WeaponInstance)
       : (archetype(e.archetype).armed ? makeLocalEnemyWeapon(serial, rng) : null);
-    units.push(makeEnemy(serial, e.archetype, i, e.pos, e.facing, w, rng));
+    // 沒有快照時（測試與機器人）用最低階抽護甲 —— C 級的「無」權重是 100，
+    // 所以那條路徑上一律沒有護甲，與統一之前完全相同（§2.1）。
+    const arm = plan.enemyArmour
+      ? (plan.enemyArmour[i] ?? null)
+      : (archetype(e.archetype).kind === 'HUMAN' ? drawArmour(rng, 'C') : null);
+    units.push(makeEnemy(serial, e.archetype, i, e.pos, e.facing, w, rng, arm));
   });
 
   // 地圖搜刮點（§4.1）。地形是 LOOT，內容寫在地圖檔的 caches。
@@ -269,6 +313,7 @@ export function testDeployment(serial: { nextEntitySerial: number }): Deployment
       equipped: makeWeapon(serial, 'ar9'),
       stowed: makeWeapon(serial, 'rr4'),
       items: spec,
+      level: levelOf(0),
     })),
   };
 }

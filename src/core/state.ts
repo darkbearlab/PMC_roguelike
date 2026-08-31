@@ -275,6 +275,32 @@ export interface Unit {
   setUp: boolean;
   /** 「沒子彈了」那一聲已經喊過了（§3.3）。喊一次就好，不是每個動作都喊。 */
   announcedDry: boolean;
+  /**
+   * 穿在身上的護甲（§2.3）。`null` = 沒穿 —— **表上大部分條目就是這個**。
+   *
+   * 它同時三件事：提供 `armor`／`armorSpread`、計入負重（所以穿甲的跑得慢）、
+   * 而且**從任何距離都看得見**（§2.5）。武器可以藏，體型藏不了。
+   */
+  armour: string | null;
+  /**
+   * 人類還是機械（§2.2）。人類的速度由負重決定、落點權重由武器決定；
+   * 機械保留專屬數值。
+   */
+  kind: 'HUMAN' | 'MACHINE';
+  /**
+   * 技能（§0.2）。**本次一律為空**，欄位先留好 ——
+   * 與詞條、`penetration`、`CombatEvent` 是同一種作法：先留形狀、後填內容。
+   *
+   * 約束記在這裡：**技能只能改變行為，不能改變耐打程度。**
+   */
+  skills: string[];
+  /**
+   * 動作時間乘數（§1.3）。老兵裝填快一點、換槍快一點。
+   *
+   * **只乘在裝填、換武器、互動這類動作上** —— 移動由負重決定、開火由武器決定。
+   * 排程器之下這是每一個行動都摸得到的差別，比命中率加幾個百分點具體得多。
+   */
+  actionScale: number;
   /** 背包（§3）。敵人沒有背包，一律 null。 */
   backpack: Backpack | null;
   aiState: AiState;
@@ -447,7 +473,7 @@ export interface GameState {
    */
   deployment: DeployedSoldier[];
   /** 本場的個人統計，結束後併進服役紀錄（§4.4）。soldierId → 數字。 */
-  stats: Record<string, { kills: number; damageTaken: number }>;
+  stats: Record<string, { kills: number; damageTaken: number; xp: number }>;
   /** 這一場陣亡的士兵 id。局外層據此永久移除（§5.1）。 */
   deadSoldierIds: string[];
   /** 走出撤離點的那一位。止損與全滅都是 null。 */

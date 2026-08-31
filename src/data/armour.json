@@ -1,0 +1,60 @@
+{
+  "_comment": "§2.3 護甲表。**大部分條目是「無」，低階時「無」的權重極高。**\n護甲比照 conspicuous 武器：**從任何距離都看得見**（§2.5）——武器可以藏，體型藏不了。這保住了「那個人很危險」的遠距離判讀，同時維持武器身分的不確定性。\n重量計入負重，所以穿甲的複製人跑得慢（§3）。這是同一條原則的另一面：**看得見的東西可以改變交戰成本，看不見的東西不行。**",
+  "_none": "「無」不是一筆資料，是抽不到任何一筆的結果。權重寫在 tiers 裡。",
+  "types": [
+    {
+      "id": "scrap_plate",
+      "name": "廢料板甲",
+      "glyph": "▤",
+      "armor": 8,
+      "armorSpread": 3,
+      "weight": 14,
+      "_why": "焊上去的鐵板。減傷有限、又重又醜，但它是作坊做得出來的東西。"
+    },
+    {
+      "id": "vest_carrier",
+      "name": "舊制式護具",
+      "glyph": "▥",
+      "armor": 15,
+      "armorSpread": 5,
+      "weight": 18,
+      "_why": "撤離前的軍用護具，還有人穿得到。這是「這個人有點來頭」的第一個訊號。"
+    },
+    {
+      "id": "composite_rig",
+      "name": "複合裝具",
+      "glyph": "▦",
+      "armor": 24,
+      "armorSpread": 6,
+      "weight": 26,
+      "_why": "遺產等級。穿著它的複製人跑不快，但輕武器打上去幾乎是白費。"
+    }
+  ],
+  "tiers": {
+    "_why": "品質階級同時影響**抽到遺產武器的機率**與**護甲的等級**（§2.3）。低階時「無」的權重極高 —— 最低階應該重現「所有人都沒有護甲」的現況（§2.1）。",
+    "C": {
+      "none": 100,
+      "scrap_plate": 0,
+      "vest_carrier": 0,
+      "composite_rig": 0
+    },
+    "B": {
+      "none": 82,
+      "scrap_plate": 15,
+      "vest_carrier": 3,
+      "composite_rig": 0
+    },
+    "A": {
+      "none": 62,
+      "scrap_plate": 22,
+      "vest_carrier": 13,
+      "composite_rig": 3
+    },
+    "S": {
+      "none": 42,
+      "scrap_plate": 25,
+      "vest_carrier": 22,
+      "composite_rig": 11
+    }
+  }
+}

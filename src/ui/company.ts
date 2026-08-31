@@ -13,7 +13,7 @@ import type { MetaState, Soldier } from '../core/meta';
 import {
   assignWeapon, freeAmmo, freeConsumable,
   holderOf, moveAmmo, moveConsumable, resolveLoadout, resupplyAll,
-  resupplySoldier, resupplyTarget, supplyBatch, unassignSlot,
+  levelOf, resupplySoldier, resupplyTarget, supplyBatch, unassignSlot, xpToNext,
   buyAmmo, buyConsumable, buySoldier, buyWeapon, sellStock, sellWeapon, wasOurs,
 } from '../core/meta';
 import { allAmmoTypes, ammoLabel, checkKit, kitBreakdown, selectableConsumables } from '../core/loadout';
@@ -73,7 +73,26 @@ function resupplyNote(meta: MetaState, s: Soldier): string {
   return parts.join('　');
 }
 
-/** 服役紀錄。**純數值士兵唯一的人格來源**（§4.4）。 */
+/**
+ * 等級與當前加成（§1.6）。
+ *
+ * 服役紀錄從此不再只是裝飾 —— **旁邊有實際生效的數值。**
+ * 刻意不列生命值：經驗完全不影響它（§1.4）。
+ */
+export function levelLine(s: Soldier): string {
+  const lv = levelOf(s.xp);
+  const next = xpToNext(s.xp);
+  const bonus = lv.level === 1
+    ? '新兵，尚無加成'
+    : '命中 +' + Math.round(lv.aim * 100) + '%'
+      + '　迴避 +' + Math.round(lv.evasion * 100) + '%'
+      + '　動作 ×' + lv.actionScale.toFixed(2);
+  return 'Lv.' + lv.level + '　經驗 ' + s.xp
+    + (next === null ? '（已滿級）' : '（再 ' + next + ' 升級）')
+    + '　' + bonus;
+}
+
+/** 服務紀錄。**純數值士兵唯一的人格來源**（§4.4）。 */
 function serviceLine(s: Soldier): string {
   const r = s.serviceRecord;
   if (r.missions === 0) return '尚未出勤';
@@ -109,6 +128,7 @@ function rosterHtml(meta: MetaState, pick: boolean): string {
     return '<article class="co-card">'
       + '<div class="co-head"><b>' + esc(s.designation) + '</b>'
       + '<span class="co-hp">HP ' + s.hp + '／' + s.maxHp + '</span></div>'
+      + '<p class="co-level">' + esc(levelLine(s)) + '</p>'
       + '<p class="co-service">' + esc(serviceLine(s)) + '</p>'
       + '<p class="co-kit">' + kitSummary(meta, s) + '</p>'
       + '<div class="c-actions">'
@@ -301,6 +321,7 @@ function kitHtml(meta: MetaState, s: Soldier): string {
   const ids: (string | null)[] = [null, ...meta.armoury.map((w) => w.instanceId)];
 
   return '<header class="l-top"><h2>' + esc(s.designation) + '　配裝</h2>'
+    + '<p class="co-level">' + esc(levelLine(s)) + '</p>'
     + '<p class="co-service">' + esc(serviceLine(s)) + '</p></header>'
 
     + '<div class="l-weight' + (chk.overweight ? ' bad' : chk.tier > 0 ? ' warn' : '') + '">'

@@ -375,7 +375,7 @@ function recordHit(
   state: GameState, attacker: Unit, victim: Unit, amount: number, lethal: boolean,
 ): void {
   const bump = (id: string, k: 'kills' | 'damageTaken', n: number): void => {
-    const cur = state.stats[id] ?? { kills: 0, damageTaken: 0 };
+    const cur = state.stats[id] ?? { kills: 0, damageTaken: 0, xp: 0 };
     cur[k] += n;
     state.stats[id] = cur;
   };

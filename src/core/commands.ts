@@ -11,7 +11,7 @@
 import type {
   Facing, FireMode, GameState, Item, LootPile, Stance, Unit, Vec2, Weapon, WeaponInstance,
 } from './state';
-import { activePlayerUnit, lootAt } from './state';
+import { activePlayerUnit, findUnit, lootAt } from './state';
 import { DIR_VEC, facingToward, manhattan, sameTile } from './grid';
 import { findTiles, tileAt } from './map';
 import {
@@ -130,7 +130,31 @@ export function movePhase(
   return vaultTarget(state, u.pos, dir, { ignoreUnitIds: [u.id] }) ? 'VAULT' : 'STEP';
 }
 
+/**
+ * 這一類動作會受經驗影響嗎（§1.3）。
+ *
+ * **只有裝填、換武器、互動這類「熟練度」動作。**
+ * 移動不算（那由負重決定）、開火不算（那由武器決定）、
+ * 姿勢與轉向不算（那是身體，不是技術）。
+ *
+ * 排程器之下這是**每一個行動都摸得到**的差別 ——
+ * 老兵裝填快一點、換槍快一點，比命中率加幾個百分點具體得多。
+ */
+const SKILLED: ReadonlySet<Command['type']> = new Set([
+  'RELOAD', 'SEQUENCE_STEP', 'SWAP_WEAPON', 'MOVE_GEAR',
+  'PICKUP', 'TAKE_ALL', 'INTERACT', 'PREPARE',
+]);
+
 export function commandTime(state: GameState, cmd: Command): number | null {
+  const raw = rawCommandTime(state, cmd);
+  if (raw === null || raw === 0 || !SKILLED.has(cmd.type)) return raw;
+  const u = activePlayerUnit(state);
+  const scale = u ? u.actionScale : 1;
+  // 至少 1 —— 排程器不接受 0 成本動作，那會讓主迴圈卡在同一個單位上（§5.4）
+  return Math.max(1, Math.round(raw * scale));
+}
+
+function rawCommandTime(state: GameState, cmd: Command): number | null {
   const u = activePlayerUnit(state);
   switch (cmd.type) {
     case 'MOVE': {
@@ -338,6 +362,23 @@ function checkPlayerCommand(state: GameState, u: Unit, cmd: Command): Legality {
     default:
       return no('未知的指令');
   }
+}
+
+/**
+ * 把經驗記在完成目標的那個人頭上（§1.2）。
+ *
+ * **擊殺不給經驗**：那會讓最優解變成清場，而本作的設計是「你可以隨時走人」。
+ * 綁在目標上，成長才與**做事**綁在一起。
+ *
+ * 記在 `GameState.stats` 而不是直接改局外層 —— 任務期間不讀寫 `MetaState`。
+ * 陣亡的士兵在結算時被過濾掉，所以「撤離才留得住成長」自動成立（§1.2）。
+ */
+export function awardXp(s: GameState, unitId: string, amount: number): void {
+  if (amount <= 0) return;
+  const cur = s.stats[unitId] ?? { kills: 0, damageTaken: 0, xp: 0 };
+  cur.xp += amount;
+  s.stats[unitId] = cur;
+  pushLog(s, 'OBJECTIVE', findUnit(s, unitId)?.name + ' 取得經驗 +' + amount);
 }
 
 /** 這個空投點啟用了嗎（插隊版 §1.1）。 */
@@ -602,11 +643,14 @@ function applyPlayerCommand(s: GameState, cmd: Command, events: EventSink): void
       if (f) u.facing = f;
       if (kind === 'TERMINAL') {
         s.objectives.main.done = true;
+        // §1.2：經驗歸給**實際完成該目標的士兵**。他之後死了就跟著沒了。
+        awardXp(s, u.id, RULES.experience.award.main);
         events.push({ kind: 'OBJECTIVE', pos: { ...cmd.pos }, text: '主目標完成' });
         pushLog(s, 'OBJECTIVE', '主目標完成：終端資料已取得。撤離點為初始空投點。');
       } else if (kind === 'SUPPLY') {
         const o = s.objectives.secondary.find((x) => sameTile(x.pos, cmd.pos));
         if (o) o.done = true;
+        awardXp(s, u.id, RULES.experience.award.secondary);
         const n = s.objectives.secondary.filter((x) => x.done).length;
         events.push({ kind: 'OBJECTIVE', pos: { ...cmd.pos }, text: '次要目標 ' + n + '/' + s.objectives.secondary.length });
         pushLog(s, 'OBJECTIVE', '次要目標完成（' + n + '/' + s.objectives.secondary.length + '）');

@@ -28,26 +28,34 @@ beforeAll(() => freezeCombat());
 afterAll(() => thawCombat());
 
 describe('§9.2 權重依原型不同', () => {
-  it('三種原型的權重不一樣 —— 否則會退化成同一種打法', () => {
-    const runner = ACTORS.RUNNER.ai!;
-    const shooter = ACTORS.SHOOTER.ai!;
+  it('**權重由手上的武器推導，不是由原型指派**（§2.4）', () => {
+    const melee = RULES.ai.desperate;
+    const ranged = RULES.ai.ranged;
     const hulk = ACTORS.HULK.ai!;
-    // 衝鋒型：只管接近
-    expect(runner.approach).toBeGreaterThan(runner.selfCover);
-    expect(runner.selfCover).toBe(0);
-    expect(runner.targetExposure).toBe(0);
-    // 射手型：繞側翼壓倒接近
-    expect(shooter.targetExposure).toBeGreaterThan(shooter.approach);
-    expect(shooter.selfCover).toBeGreaterThan(shooter.approach);
-    // 裝甲型：緩慢推進，不靠掩體
+    // 只能貼上來的：只管接近
+    expect(melee.approach).toBeGreaterThan(melee.selfCover);
+    expect(melee.selfCover).toBe(0);
+    expect(melee.targetExposure).toBe(0);
+    // 有中長射程的：繞側翼壓倒接近
+    expect(ranged.targetExposure).toBeGreaterThan(ranged.approach);
+    expect(ranged.selfCover).toBeGreaterThan(ranged.approach);
+    // 機械保留原型指派的權重：緩慢推進，不靠掩體
     expect(hulk.approach).toBeGreaterThan(hulk.selfCover);
-    expect(hulk.approach).toBeLessThan(runner.approach);
+    expect(hulk.approach).toBeLessThan(melee.approach);
   });
 
-  it('只有射手型會蹲下', () => {
-    expect(ACTORS.SHOOTER.ai!.crouchInCover).toBe(true);
-    expect(ACTORS.RUNNER.ai!.crouchInCover).toBe(false);
-    expect(ACTORS.HULK.ai!.crouchInCover).toBe(false);
+  it('同一副身體，換一把槍就換一種打法', () => {
+    const s = testState(CORNER, [{ archetype: 'SHOOTER', pos: at(10, 4) }]);
+    const e = unit(s, 'E01');
+    expect(weightsFor(e), '拿著步槍 → 保持距離').toEqual(RULES.ai.ranged);
+    e.equipped = null;
+    expect(weightsFor(e), '只剩爪 → 必須貼上來').toEqual(RULES.ai.desperate);
+  });
+
+  it('只有拿著中長射程武器的才會蹲下', () => {
+    expect(RULES.ai.ranged.crouchInCover, '有槍才有蹲下的理由').toBe(true);
+    expect(RULES.ai.desperate.crouchInCover, '只剩刀就得衝，蹲下毫無意義').toBe(false);
+    expect(ACTORS.HULK.ai!.crouchInCover, '那台機器蹲不下來').toBe(false);
   });
 });
 

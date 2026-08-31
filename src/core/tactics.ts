@@ -30,11 +30,27 @@ const NEUTRAL: AiWeights = {
   approach: 1, selfCover: 0, targetExposure: 0, canShoot: 0, crouchInCover: false,
 };
 
+/**
+ * 這個單位的落點權重（§2.4）。
+ *
+ * **人類的權重由當前手上的武器推導，不是由原型指派。**
+ * 統一之後「衝鋒型積極、射手型保持距離」不再是兩個原型，
+ * 而是同一副身體拿著不同的東西：
+ *
+ *  - 射程 1（只有內建近戰，或槍打光了） → **積極型**，必須貼上來
+ *  - 中長射程 → 保持距離、找掩體、繞側翼
+ *
+ * 這順帶把「彈盡的敵人變積極」一般化了 —— 那不再是一個特例，
+ * 而是**武器變了所以行為變了**的自然結果。
+ *
+ * **機械保留原型指派的權重**：裝甲型的緩推是它的機構，不是它的選擇。
+ */
 export function weightsFor(u: Unit): AiWeights {
-  // §3.4：彈盡改用內建近戰的敵人，權重切換成積極型。
-  // 保持距離對一個只剩刀的人毫無意義 —— 那只會產生一個不會結束的僵局。
-  if (u.faction === 'ENEMY' && outOfAmmo(u)) return RULES.ai.desperate as AiWeights;
-  return (archetype(u.archetype).ai as AiWeights | undefined) ?? NEUTRAL;
+  const arch = archetype(u.archetype);
+  if (u.kind === 'MACHINE') return (arch.ai as AiWeights | undefined) ?? NEUTRAL;
+  const w = u.equipped && !outOfAmmo(u) ? u.equipped : u.intrinsic;
+  if (!w || w.range <= RULES.ai.meleeRange) return RULES.ai.desperate as AiWeights;
+  return RULES.ai.ranged as AiWeights;
 }
 
 /** 掩蔽等級轉成 0..1 的分數。三級列舉（§7.2b），不是累加。 */

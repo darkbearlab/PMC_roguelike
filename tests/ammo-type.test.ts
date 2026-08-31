@@ -142,7 +142,8 @@ describe('附錄 B §20.4 玩家看得到的東西不變', () => {
     };
     const c = checkKit(kit);
     expect(c.weight).toBeCloseTo(41.576, 3);
-    expect(c.tier).toBe(0);
+    // 極輕級加在最前面之後，「一般裝備」是第 1 級（§3.2）
+    expect(c.tier).toBe(1);
     expect(c.moveCost).toBe(10);
     expect(c.warnings).toEqual([]);
   });

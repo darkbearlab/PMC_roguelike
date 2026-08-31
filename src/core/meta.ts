@@ -12,12 +12,12 @@
  *
  * 任務期間完全不讀寫 `MetaState`；結束後才由這一層把結果套用回去。
  */
-import type { Item, WeaponInstance } from './state';
+import type { Affix, Item, WeaponInstance } from './state';
 import type { CarriedKit } from './loadout';
 import { kitWeight } from './loadout';
 import { AMMO_TYPES, ITEMS, RULES, ammoTypesForCalibre, archetype } from './content';
 import { makeWeapon } from './weapon';
-import { makeLocalEnemyWeapon } from './setup';
+import { drawArmour, makeLocalEnemyWeapon } from './setup';
 import { createRng, nextFloat, nextInt } from './rng';
 import {
   ammoPrice, consumablePrice, contractReward, debtTier, isLegacy, itemPrice, rollLegacyStock,
@@ -59,6 +59,47 @@ export interface Soldier {
   maxHp: number;
   loadout: Loadout;
   serviceRecord: ServiceRecord;
+  /**
+   * 累積經驗（§1）。**只由完成目標授予，擊殺不給。**
+   *
+   * 擊殺經驗會讓最優解變成清場，而本作的設計是「你可以隨時走人」。
+   * 綁在目標上，成長才與**做事**綁在一起。
+   *
+   * 陣亡的士兵不保留經驗（他死了，經驗隨他留在戰場上），
+   * 所以「撤離才留得住成長」自動成立，不需要額外規則 ——
+   * 而且它與撤離設計產生一個好取捨：
+   * **帶著戰利品提早收工可以拿錢，但拿不到成長。**
+   */
+  xp: number;
+}
+
+/** 一級的效果（§1.3）。**生命值刻意不在裡面**，見 §1.4。 */
+export interface LevelEffect {
+  level: number;
+  xp: number;
+  aim: number;
+  evasion: number;
+  actionScale: number;
+}
+
+/**
+ * 這些經驗對應到第幾級（§1.5）。**每一級的幅度遞減，而且有明確上限。**
+ *
+ * 上限同時是日後 DNA 世代遞減的收斂點 —— 繼承七成、再七成，
+ * 總得有個東西可以逼近。
+ */
+export function levelOf(xp: number): LevelEffect {
+  const table = RULES.experience.levels;
+  let best = table[0];
+  for (const e of table) if (xp >= e.xp) best = e;
+  return best;
+}
+
+/** 距離下一級還差多少經驗；已經滿級則回傳 null。 */
+export function xpToNext(xp: number): number | null {
+  const table = RULES.experience.levels;
+  const next = table.find((e) => e.xp > xp);
+  return next ? next.xp - xp : null;
 }
 
 /** 一場任務的簡短歷史紀錄。 */
@@ -161,6 +202,7 @@ export function grantSoldier(meta: MetaState, id?: string): Soldier {
     maxHp: RULES.meta.soldierHp,
     loadout: emptyLoadout(),
     serviceRecord: { missions: 0, kills: 0, damageTaken: 0, contracts: [] },
+    xp: 0,
   };
   meta.roster.push(s);
   return s;
@@ -300,6 +342,11 @@ export interface DeployedSoldier {
   stowed: WeaponInstance | null;
   /** 背包內容的規格，落地時才依任務的流水號展開成 Item。 */
   items: { defId: string; qty: number }[];
+  /**
+   * 這名士兵的等級效果（§1.3）。**快照的一部分，不是任務中查得到的東西** ——
+   * 任務期間不讀寫 `MetaState`（v0.16 §1.1），所以等級要跟著快照一起送進去。
+   */
+  level: LevelEffect;
 }
 
 export interface Deployment {
@@ -314,6 +361,8 @@ export interface Deployment {
    * 所以「相同種子 + 相同快照 ⇒ 相同結果」這條硬性要求不受影響。
    */
   enemyWeapons?: (WeaponInstance | null)[];
+  /** 這一場敵人穿的護甲（§2.3），同樣依地圖敵人順序。 */
+  enemyArmour?: (string | null)[];
 }
 
 const cloneWeaponFor = (w: WeaponInstance | null): WeaponInstance | null =>
@@ -335,6 +384,7 @@ export function makeDeployment(meta: MetaState, firstId: string): Deployment {
       ...Object.entries(s.loadout.ammo).map(([defId, qty]) => ({ defId, qty })),
       ...Object.entries(s.loadout.consumables).map(([defId, qty]) => ({ defId, qty })),
     ].filter((e) => e.qty > 0),
+    level: levelOf(s.xp),
   }));
   return { soldiers, firstId };
 }
@@ -352,6 +402,11 @@ export interface MissionResult {
   deployedIds: string[];
   /** 陣亡的士兵。永久移除。 */
   deadIds: string[];
+  /**
+   * 這一場誰賺到多少經驗（§1.2）。**陣亡者在套用時被過濾掉** ——
+   * 他死了，經驗隨他留在戰場上。
+   */
+  xpBy: Record<string, number>;
   /** 難度評級（報酬倍率用）。 */
   rating: string;
   /** 主目標完成了嗎 —— **完成才給主要報酬**（§3.1）。 */
@@ -424,6 +479,15 @@ export function applyMissionResult(meta: MetaState, r: MissionResult): MetaState
     for (const id of [s.loadout.equippedWeaponId, s.loadout.stowedWeaponId]) {
       if (id) lostWeapons.add(id);
     }
+  }
+
+  // §1.2：經驗歸給實際完成該目標的士兵。**陣亡者什麼都沒有** ——
+  // 他死了，經驗隨他留在戰場上。這讓「撤離才留得住成長」自動成立，
+  // 而且與撤離設計產生一個好取捨：帶著戰利品提早收工可以拿錢，但拿不到成長。
+  for (const [id, n] of Object.entries(r.xpBy ?? {})) {
+    if (r.deadIds.includes(id)) continue;
+    const s2 = findSoldier(m, id);
+    if (s2) s2.xp += n;
   }
 
   // 陣亡者永久移除
@@ -551,23 +615,63 @@ export function wasOurs(w: WeaponInstance): boolean {
  * **不排除任何武器類型**，包含無後座力砲。威脅由 §4 的可讀性處理，
  * 不由排除處理：一發即死沒問題，看不到它要來才有問題。
  */
-export function drawEnemyWeapons(
-  meta: MetaState, seed: number, archetypes: string[],
-): (WeaponInstance | null)[] {
+export interface EnemyKit {
+  weapons: (WeaponInstance | null)[];
+  /** 護甲條目 id；null = 沒穿（表上最常見的結果，§2.3）。 */
+  armour: (string | null)[];
+}
+
+/**
+ * 一份合約的品質階級對應的土製偏好（§2.3）。
+ *
+ * 階級越高越可能抽到遺產武器 —— 但**遺產武器來自有限的池子**，
+ * 所以玩家囤積遺產武器，敵人的裝備就會變差。囤積因此有了戰略後果。
+ */
+export function localBiasFor(tier: string): number {
+  return RULES.enemyWeapons.localBiasByTier[tier] ?? RULES.enemyWeapons.localBias;
+}
+
+/**
+ * 高階抽取時要附加的詞條（§2.3 第二點）。**本版一律為空。**
+ *
+ * 留這個函式是因為它是必要的：遺產武器來自有限的池子，池子空了時
+ * 高階抽取仍須產出**做工精良的土製槍**，不能開天窗。
+ * 詞條系統本身還沒有效果（v0.15 附錄 A），所以這裡先留形狀 ——
+ * 與 `penetration`、`CombatEvent`、技能欄位是同一種作法。
+ */
+export function affixesForTier(tier: string): Affix[] {
+  void tier;
+  return [];
+}
+
+export function drawEnemyKit(
+  meta: MetaState, seed: number, archetypes: string[], tier = 'C',
+): EnemyKit {
   const rng = createRng(seed >>> 0);
   const serial = serialOf(meta);
-  const out: (WeaponInstance | null)[] = [];
+  const bias = localBiasFor(tier);
+  const kit: EnemyKit = { weapons: [], armour: [] };
   for (const id of archetypes) {
-    if (!archetype(id).armed) { out.push(null); continue; }
-    const wantLocal = nextFloat(rng) < RULES.enemyWeapons.localBias;
+    const a = archetype(id);
+    // 機械不穿護甲 —— 它身上那層是焊死的裝甲板（§2.2）
+    kit.armour.push(a.kind === 'HUMAN' ? drawArmour(rng, tier) : null);
+    if (!a.armed) { kit.weapons.push(null); continue; }
+    const wantLocal = nextFloat(rng) < bias;
     if (!wantLocal && meta.legacyStock.length > 0) {
-      out.push(meta.legacyStock.splice(nextInt(rng, meta.legacyStock.length), 1)[0]);
+      kit.weapons.push(meta.legacyStock.splice(nextInt(rng, meta.legacyStock.length), 1)[0]);
     } else {
-      out.push(makeLocalEnemyWeapon(serial, rng));
+      kit.weapons.push(makeLocalEnemyWeapon(serial, rng, affixesForTier(tier)));
     }
   }
   meta.instanceCounter = serial.nextEntitySerial;
-  return out;
+  return kit;
+}
+
+/** 舊名。只回武器那一半，測試與腳本用。 */
+export function drawEnemyWeapons(
+  meta: MetaState, seed: number, archetypes: string[], tier = 'C',
+): (WeaponInstance | null)[] {
+  return drawEnemyKit(meta, seed, archetypes, tier).weapons;
 }
 
 /**
@@ -622,9 +726,11 @@ export function missionResultOf(
 ): MissionResult {
   const kills: Record<string, number> = {};
   const damageTaken: Record<string, number> = {};
+  const xpBy: Record<string, number> = {};
   for (const [id, v] of Object.entries(state.stats)) {
     if (v.kills) kills[id] = v.kills;
     if (v.damageTaken) damageTaken[id] = v.damageTaken;
+    if (v.xp) xpBy[id] = v.xp;
   }
   const survivor = state.extractedBy
     ? state.units.find((u) => u.id === state.extractedBy) ?? null
@@ -667,6 +773,7 @@ export function missionResultOf(
     extracted: state.extracted.map((it) => JSON.parse(JSON.stringify(it)) as Item),
     kills,
     damageTaken,
+    xpBy,
   };
 }
 

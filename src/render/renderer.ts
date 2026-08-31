@@ -12,6 +12,7 @@ import { isVisible } from './vision';
 import { isExplored } from '../core/fog';
 import { isDropActivated } from '../core/commands';
 import { isIdentified } from '../core/combat';
+import { armourType } from '../core/content';
 
 const C = {
   bg: '#0b0e12',
@@ -432,6 +433,23 @@ function drawUnit(
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
         ctx.fillText(glyph, c.x + t * 0.32, by - 1);
+      }
+    }
+
+    // §2.5：**護甲從任何距離都可辨識。**武器可以藏，體型藏不了 ——
+    // 這保住了「那個人很危險」的遠距離判讀，同時維持武器身分的不確定性。
+    if (u.armour) {
+      const arm = armourType(u.armour);
+      if (arm) {
+        ctx.font = `700 ${Math.round(t * 0.4)}px ui-sans-serif, system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = 'rgba(4,6,9,0.92)';
+        ctx.lineWidth = 3;
+        ctx.strokeText(arm.glyph, c.x - t * 0.34, c.y);
+        ctx.fillStyle = '#9fd8ff';
+        ctx.fillText(arm.glyph, c.x - t * 0.34, c.y);
       }
     }
 

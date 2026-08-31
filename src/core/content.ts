@@ -12,6 +12,7 @@ import contractsJson from '../data/contracts.json';
 import contractRulesJson from '../data/contract-rules.json';
 import economyJson from '../data/economy.json';
 import boardMailJson from '../data/board-mail.json';
+import armourJson from '../data/armour.json';
 import mission01Json from '../data/maps/mission_01.json';
 import mission02Json from '../data/maps/mission_02.json';
 import mission03Json from '../data/maps/mission_03.json';
@@ -126,6 +127,18 @@ export interface Rules {
      */
     companyName: string;
   };
+  /**
+   * §1 士兵個人經驗。**只由完成目標授予，擊殺不給。**
+   *
+   * `levels` 由低到高，每一級的幅度遞減且有明確上限（§1.5）——
+   * 上限同時是日後 DNA 世代遞減的收斂點。
+   */
+  experience: {
+    award: { main: number; secondary: number };
+    levels: {
+      level: number; xp: number; aim: number; evasion: number; actionScale: number;
+    }[];
+  };
   /** 戰爭迷霧。關掉時一切視同已探索（機器人基準用）。 */
   fog: { enabled: boolean; activateNoise: number };
   sequences: Record<string, unknown>;
@@ -140,8 +153,18 @@ export interface Rules {
     vaultPenalty: number;
     /** 距離這麼近就認得出對方拿什麼（§4.2）。 */
     identifyRange: number;
-    /** 彈盡改用近戰時切換過去的落點權重（§3.4）。 */
+    /** 射程 ≤ 這個值就算「只能貼上來」，套用積極型權重（§2.4）。 */
+    meleeRange: number;
+    /**
+     * 只能貼上來時的落點權重（§2.4）：手上只有近戰，或槍打光了。
+     * 彈盡的敵人轉為積極型不再是特例，是這條規則的自然結果。
+     */
     desperate: {
+      approach: number; selfCover: number; targetExposure: number;
+      canShoot: number; crouchInCover: boolean;
+    };
+    /** 有中長射程武器時的落點權重（§2.4）：保持距離、找掩體、繞側翼。 */
+    ranged: {
       approach: number; selfCover: number; targetExposure: number;
       canShoot: number; crouchInCover: boolean;
     };
@@ -161,6 +184,13 @@ export interface Rules {
     recoverChance: number;
     /** 攜行彈藥以彈匣數計。實際發數 = 彈匣數 × magazine。 */
     reserveMagazines: number;
+    /**
+     * 依合約品質階級的土製偏好（§2.3）。查不到就退回 `localBias`。
+     *
+     * 階級越高，抽到遺產武器的機率越大 —— 但池子空了就抽不到，
+     * 所以**玩家囤積遺產武器，敵人的裝備就會變差**。
+     */
+    localBiasByTier: Record<string, number>;
   };
   combat: {
     enableToHitRoll: boolean;
@@ -179,6 +209,15 @@ export interface Rules {
 export interface ActorArchetype {
   name: string;
   faction: 'PLAYER' | 'ENEMY';
+  /**
+   * 人類還是機械（§2.2）。
+   *
+   * **複製人共用單一基礎數值，差異全部來自裝備**：速度由負重決定（§3）、
+   * 落點權重由手上的武器決定（§2.4）、護甲從表裡抽（§2.3）。
+   *
+   * **機械／遺產單位不走這套**，保留專屬數值 —— 它是那台還在運作的老機器。
+   */
+  kind: 'HUMAN' | 'MACHINE';
   hp: number;
   armor: number;
   armorSpread: number;
@@ -324,6 +363,32 @@ export interface BoardLetter {
   from: string;
   subject: string;
   body: string[];
+}
+
+/**
+ * 一種護甲（§2.3）。**看得見的東西可以改變交戰成本，看不見的東西不行** ——
+ * 所以護甲有重量、有字形、從任何距離都認得出來。
+ */
+export interface ArmourType {
+  id: string;
+  name: string;
+  /** 畫在敵人旁邊的字形。護甲從任何距離都可辨識（§2.5）。 */
+  glyph: string;
+  armor: number;
+  armorSpread: number;
+  weight: number;
+}
+
+export interface ArmourTable {
+  types: ArmourType[];
+  /** 階級 → {條目 id 或 'none'} → 權重。低階時 `none` 的權重極高。 */
+  tiers: Record<string, Record<string, number>>;
+}
+
+export const ARMOUR: ArmourTable = armourJson as unknown as ArmourTable;
+
+export function armourType(id: string): ArmourType | null {
+  return ARMOUR.types.find((a) => a.id === id) ?? null;
 }
 
 export const BOARD_MAIL: Record<string, BoardLetter> = Object.fromEntries(

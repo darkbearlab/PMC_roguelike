@@ -26,8 +26,10 @@ const bagOf = (s: ReturnType<typeof testState>) => player(s).backpack!;
 describe('§3.2 負重分級', () => {
   it('分級表來自資料檔，上限 100（v0.15 的換算尺）', () => {
     expect(maxWeight()).toBe(100);
+    // 極輕級（§3.2）：**移動 7**。它補上敵人統一之後消失的速度壓力 ——
+    // 門檻 6 的意思是「只帶近戰武器、不穿甲、幾乎不帶彈藥」。
     expect(RULES.backpack.weightTiers.map((t) => [t.maxWeight, t.moveCost]))
-      .toEqual([[55, 10], [78, 12], [100, 14]]);
+      .toEqual([[6, 7], [55, 10], [78, 12], [100, 14]]);
   });
 
   it('v0.15：手持與收納的武器也計入負重', () => {

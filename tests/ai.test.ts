@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 import { RULES } from '../src/core/content';
+import { effectiveMoveTime } from '../src/core/inventory';
 import { isPlayerTurn } from '../src/core/scheduler';
 import { advanceOnce, advanceToPlayer, run, testState, player, unit, freezeCombat, thawCombat } from './helpers';
 
@@ -47,8 +48,10 @@ describe('§9.1 AI 狀態機', () => {
     s = run(s, { type: 'WAIT' });
     s = runEnemyTurn(s);
     expect(unit(s, 'E01').pos.x).toBeLessThan(10);
-    // v0.7：改用時間表達 —— RUNNER 移動一格花 7，玩家花 10，所以它追得上
-    expect(unit(s, 'E01').moveTime).toBeLessThan(player(s).moveTime);
+    // v0.7 改用時間表達；§3 起那個時間**由負重決定**，不是由原型指派 ——
+    // 只有一把爪的複製人重量 0，落在極輕級（7），所以他追得上帶槍的玩家。
+    expect(effectiveMoveTime(unit(s, 'E01')))
+      .toBeLessThan(effectiveMoveTime(player(s)));
   });
 
   it('轉換那一次不攻擊，之後每次輪到它就打一下（§9.2 階段轉換耗時）', () => {

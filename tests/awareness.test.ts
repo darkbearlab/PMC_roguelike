@@ -56,8 +56,10 @@ describe('§9.2 階段轉換耗時（取代兩段式察覺）', () => {
       s = advanceOnce(s);                  // 轉換
       return unit(s, 'E01').nextActAt;     // 它下次能動的時刻
     };
+    // §2：複製人統一之後，**所有人類的反應時間相同** —— 那是同一副身體。
+    // 差別留給機械：裝甲型是一台老機器，它的遲鈍是機構造成的。
     expect(window('HULK')).toBeGreaterThan(window('RUNNER'));
-    expect(window('SHOOTER')).toBeGreaterThan(window('RUNNER'));
+    expect(window('SHOOTER')).toBe(window('RUNNER'));
   });
 
   it('SEARCH 敵人重新取得視線：轉換花 0，同一次行動就能開火', () => {

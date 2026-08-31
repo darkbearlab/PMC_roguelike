@@ -14,32 +14,26 @@
     "aim": 0,
     "evasion": 0,
     "intrinsic": "field_blade",
-    "armed": false
+    "armed": false,
+    "kind": "HUMAN"
   },
   "RUNNER": {
-    "name": "衝鋒型",
+    "_why": "§2.1 等價：抽不到槍的複製人。手上只有爪 → 落點權重積極（§2.4）、身上沒東西 → 移動 7（§3）。",
+    "name": "複製兵",
     "faction": "ENEMY",
+    "kind": "HUMAN",
     "hp": 25,
     "armor": 0,
     "armorSpread": 0,
     "time": {
-      "move": 7,
-      "transition": 5
+      "move": 10,
+      "transition": 6
     },
-    "sightRange": 10,
+    "sightRange": 12,
     "aim": 0,
     "evasion": 0,
     "intrinsic": "runner_claw",
     "armed": false,
-    "_loot": "敵人屍體可搜刮（§4.2）。chance 為 1 代表必掉。抽值順序固定：由上而下各抽一次。",
-    "_ai": "衝鋒型：approach 壓倒一切，不管掩體，直接衝。權重必須依原型不同，否則三種敵人會退化成同一種打法。",
-    "ai": {
-      "approach": 10,
-      "selfCover": 0,
-      "targetExposure": 0,
-      "canShoot": 0,
-      "crouchInCover": false
-    },
     "loot": [
       {
         "defId": "standard_5.56",
@@ -66,6 +60,7 @@
     "sightRange": 8,
     "aim": 0,
     "evasion": 0,
+    "kind": "MACHINE",
     "intrinsic": "hulk_slam",
     "armed": false,
     "_ai": "裝甲型：緩慢推進，靠護甲不靠掩體。approach 中等、selfCover 低。",
@@ -97,31 +92,26 @@
         "qty": 1,
         "chance": 0.25
       }
-    ]
+    ],
+    "_kind": "§2.2：**機械／遺產單位保留專屬數值，不走統一那套。**它是那台還在運作的老機器 —— 沒有人造得出來，也沒有人修得好，但它還在開火。移動時間也不由負重決定：它身上那層是焊死的裝甲板。"
   },
   "SHOOTER": {
-    "name": "射手型",
+    "_why": "§2.1 等價：抽得到槍的複製人。與上面那個是同一副身體，差別只在手上拿什麼。",
+    "name": "複製兵",
     "faction": "ENEMY",
-    "hp": 30,
+    "kind": "HUMAN",
+    "hp": 25,
     "armor": 0,
     "armorSpread": 0,
     "time": {
       "move": 10,
-      "transition": 8
+      "transition": 6
     },
     "sightRange": 12,
     "aim": 0,
     "evasion": 0,
     "intrinsic": "field_blade",
     "armed": true,
-    "_ai": "射手型：保持距離、找掩體、繞側翼。targetExposure 最高 —— 那一項就是『繞開玩家的掩體』，也是本作核心戰術第一次被敵人使用。",
-    "ai": {
-      "approach": 2,
-      "selfCover": 6,
-      "targetExposure": 8,
-      "canShoot": 5,
-      "crouchInCover": true
-    },
     "loot": [
       {
         "defId": "standard_5.56",
@@ -138,8 +128,8 @@
         "qty": 1,
         "chance": 0.2
       }
-    ],
-    "_armed": "§2.3：只有本來就持槍的原型參與抽取。衝鋒型與裝甲型用內建武器，不抽。"
+    ]
   },
-  "_intrinsic": "§1：敵人的內嵌 attack 已改為 weapons.json 裡的**內建武器**。衝擊爪與重擊數值一個字都沒改 —— 那是重構，不是調整。射手型的『制壓槍』則整個消失：他改為從物品池抽一把真的槍（§2），所以他也會沒子彈、也要換彈、打光了也只剩刀。"
+  "_intrinsic": "§1：敵人的內嵌 attack 已改為 weapons.json 裡的**內建武器**。衝擊爪與重擊數值一個字都沒改 —— 那是重構，不是調整。射手型的『制壓槍』則整個消失：他改為從物品池抽一把真的槍（§2），所以他也會沒子彈、也要換彈、打光了也只剩刀。",
+  "_unify": "§2 敵人統一：**複製人共用單一基礎數值，差異全部來自裝備。**\n地圖裡的 RUNNER／SHOOTER 不再是數值表，而是**抽取時的角色提示**：RUNNER 抽不到槍（只有內建近戰）、SHOOTER 抽一把槍。兩者的 hp／視野／反應時間完全相同 —— 跑得快是因為身上沒東西（§3），貼上來是因為手上只有爪（§2.4）。\n**機械／遺產單位不走這套**：裝甲型就是設定裡那台「還在運作的老機器，沒有人造得出來也沒有人修得好，但它還在開火」。這順帶解釋了一個既有的不一致 ——敵人的護甲是機率減傷，因為那是**裝甲板**，不是防彈衣。"
 }

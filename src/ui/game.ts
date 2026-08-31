@@ -141,6 +141,11 @@ export class Game {
     spotlight: (): Vec2 | null => this.spotlight,
     focus: (): Vec2 => this.camAim ?? this.focus,
     enemySteps: (): void => this.runEnemySteps(),
+    /** 這個單位移動一格實際要花多久（§3：由負重決定）。 */
+    moveTimeOf: (id: string): number => {
+      const u = findUnit(this.state, id);
+      return u ? effectiveMoveTime(u) : -1;
+    },
   };
 
   /**

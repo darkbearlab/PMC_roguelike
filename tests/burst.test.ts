@@ -101,10 +101,13 @@ describe('§8 亂數順序：每一發固定三個擲值', () => {
     // 衝鋒型 25 血，AR-9 一發必死
     let s = testState(OPEN, [{ archetype: 'RUNNER', pos: { x: 5, y: 1 } }]);
     player(s).equipped!.mode = 'AUTO';
+    // **量差值，不量絕對值** —— 建立初始狀態本身也會抽（選圖、敵人配裝、護甲），
+    // 那些數字會隨版本改變，但「這一次開火抽幾個」不會。
+    const before = s.rng.count;
     const r = applyCommand(s, { type: 'FIRE', target: { x: 5, y: 1 } });
-    // 3 發 × 3 個擲值 = 9，再加上死亡掉落表的抽值（RUNNER 有 2 項）
+    // 3 發 × 3 個擲值 = 9，再加上死亡掉落表的抽值（衝鋒型的掉落表有 2 項）
     const dropRolls = 2;
-    expect(r.state.rng.count).toBe(9 + dropRolls);
+    expect(r.state.rng.count - before).toBe(9 + dropRolls);
     expect(r.state.units.some((u) => u.faction === 'ENEMY')).toBe(false);
   });
 

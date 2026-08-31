@@ -11,7 +11,7 @@ import type { Contract } from './core/contracts';
 import type { RawMap } from './core/map';
 import type { MetaState } from './core/meta';
 import {
-  assignWeapon, drawEnemyWeapons, makeDeployment, missionLedger, missionResultOf,
+  assignWeapon, drawEnemyKit, makeDeployment, missionLedger, missionResultOf,
   moveAmmo, newCompany,
   resupplyAll, settleMission,
 } from './core/meta';
@@ -119,9 +119,11 @@ function launch(soldierId: string): void {
   const plan = makeDeployment(meta, soldierId);
   // §2：敵人的武器**從物品池抽出**。抽走一把，補給站就少一把 ——
   // 所以它必須發生在這裡（局外層），不能發生在任務裡。
-  plan.enemyWeapons = drawEnemyWeapons(
-    meta, c.missionSeed, map.enemies.map((e) => e.archetype),
+  const kit = drawEnemyKit(
+    meta, c.missionSeed, map.enemies.map((e) => e.archetype), c.difficulty.rating,
   );
+  plan.enemyWeapons = kit.weapons;
+  plan.enemyArmour = kit.armour;
   saveCompany(meta);
   hideCompany();
   hideContracts();

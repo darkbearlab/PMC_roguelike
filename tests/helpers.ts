@@ -116,7 +116,9 @@ export const TEST_ENEMY_WEAPON = 'ar9';
 export function armEnemy(s: GameState, id: string, typeId: string): void {
   const e = unit(s, id);
   e.equipped = makeWeapon(s, typeId);
-  e.reserveAmmo = 9999;
+  // 「夠打整場」而不是「無限」：§3 起**備彈也有重量**，
+  // 塞 9999 發會讓每個測試敵人都變成超重的慢速目標，那會弄壞別的測試。
+  e.reserveAmmo = e.equipped.magazine * 40;
 }
 
 export function player(s: GameState): Unit {

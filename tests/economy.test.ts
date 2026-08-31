@@ -104,7 +104,7 @@ function base(m: MetaState, over: Partial<MissionResult> = {}): MissionResult {
   return {
     mapName: '測試場', contractCode: '委-TEST', rating: 'C',
     outcome: 'SUCCESS', clock: 100, mainDone: true, secondaryDone: 0,
-    issued: [], issuedWeaponIds: [], leftBehind: [], deployedIds: [m.roster[0].id], deadIds: [],
+    issued: [], issuedWeaponIds: [], leftBehind: [], xpBy: {}, deployedIds: [m.roster[0].id], deadIds: [],
     survivorId: null, survivorEquippedId: null, survivorStowedId: null,
     extracted: [], kills: {}, damageTaken: {}, ...over,
   };
@@ -428,6 +428,8 @@ describe('§6 存檔', () => {
       'instanceCounter', 'legacyStock', 'mail', 'missionLog', 'roster',
       'salvage', 'schemaVersion', 'stockSeed',
     ]);
+    // §1：士兵多了 xp。改了這一行就是改了存檔形狀。
+    expect(typeof m.roster[0].xp).toBe('number');
     // 這幾個容器裝的是什麼，與鍵有沒有存在同等重要
     expect(typeof m.legacyStock[0]).toBe('object');
     expect(typeof m.legacyStock[0].instanceId).toBe('string');
@@ -435,7 +437,7 @@ describe('§6 存檔', () => {
     expect(typeof m.armoury[0].instanceId).toBe('string');
     expect(typeof m.roster[0].loadout).toBe('object');
     // 目前的形狀對應到這個版本號
-    expect(m.schemaVersion).toBe(3);
+    expect(m.schemaVersion).toBe(4);
   });
 
   it('整份狀態仍可完整序列化還原', () => {

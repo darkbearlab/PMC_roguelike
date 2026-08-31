@@ -104,13 +104,14 @@ describe('§3.4 彈盡的敵人要改變行為', () => {
     expect(outOfAmmo(e)).toBe(true);
   });
 
-  it('**從來沒有槍的原型不算彈盡** —— 他們本來就是那樣打的', () => {
+  it('**從來沒有槍的不算彈盡** —— 他只是沒有槍', () => {
     const s = alerted('RUNNER', { x: 3, y: 1 });
     const e = unit(s, 'E01');
     expect(e.equipped).toBeNull();
-    expect(outOfAmmo(e), '衝鋒型不是彈盡，他只是沒有槍').toBe(false);
-    // 權重維持衝鋒型自己的，沒有被 desperate 蓋掉
-    expect(weightsFor(e)).not.toBe(RULES.ai.desperate);
+    expect(outOfAmmo(e), '他不是打光了，他本來就是那樣打的').toBe(false);
+    // §2.4：權重由手上的武器推導，所以只有爪的複製人本來就是積極型。
+    // 「彈盡變積極」因此不再是特例，而是同一條規則的另一個入口。
+    expect(weightsFor(e)).toEqual(RULES.ai.desperate);
   });
 
   it('打光之後落點權重切成積極型 —— 不會躲在掩體後不動', () => {

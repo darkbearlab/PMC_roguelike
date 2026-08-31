@@ -9,7 +9,7 @@ import { findPath, stepDirection, terrainPassable } from '../src/core/pathfind';
 import { isExplored } from '../src/core/fog';
 import { isPlayerTurn } from '../src/core/scheduler';
 import { activePlayerUnit, unitAt } from '../src/core/state';
-import { canAttack } from '../src/core/combat';
+import { canAttack, canAttackAny } from '../src/core/combat';
 import { facingFromDelta, manhattan, sameTile } from '../src/core/grid';
 import { MAPS, RULES } from '../src/core/content';
 import type { RawMap } from '../src/core/map';
@@ -65,12 +65,15 @@ function botAction(s: GameState, goal: Vec2): GameState {
   let best = Infinity;
   for (const e of s.units) {
     if (e.faction !== 'ENEMY') continue;
-    if (!canAttack(s, u, e.pos, u.equipped).ok) continue;
+    if (!canAttackAny(s, u, e.pos).ok) continue;
     const d = manhattan(u.pos, e.pos);
     if (d < best) { best = d; target = e.pos; }
   }
   if (target) return run(s, { type: 'FIRE', target });
-  if (u.equipped && u.equipped.ammo === 0) return run(s, { type: 'RELOAD' });
+  if (u.equipped && u.equipped.ammo === 0) {
+    const reloaded = run(s, { type: 'RELOAD' });
+    if (reloaded !== s) return reloaded;
+  }
   const step = nextStep(s, u.pos, goal);
   if (step) {
     const dir = stepDirection(u.pos, step);

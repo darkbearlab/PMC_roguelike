@@ -8,7 +8,7 @@
  * 與死亡懲罰的載體：背得越多走得越慢，走得越慢越容易死，死了全部留在原地。
  */
 import type { Backpack, GameState, Item, ItemKind, Unit, WeaponInstance } from './state';
-import { ITEMS, RULES, ammoTypesForCalibre } from './content';
+import { AMMO_TYPES, ITEMS, RULES, ammoTypesForCalibre, armourType } from './content';
 
 export function emptyBackpack(): Backpack {
   return { items: [] };
@@ -33,9 +33,23 @@ export function totalWeight(bag: Backpack | null): number {
  */
 export function carriedWeight(u: Unit | null): number {
   if (!u) return 0;
+  const arm = u.armour ? armourType(u.armour) : null;
   return totalWeight(u.backpack)
     + (u.equipped ? u.equipped.weight : 0)
-    + (u.stowed ? u.stowed.weight : 0);
+    + (u.stowed ? u.stowed.weight : 0)
+    // 護甲計入負重（§2.3）：穿甲的複製人跑得慢。
+    // 這是「看得見的東西可以改變交戰成本」的另一面 —— 它有代價，而且看得到。
+    + (arm ? arm.weight : 0)
+    // 敵人的備彈也是身上的重量。他們沒有背包，但子彈不會沒有重量。
+    + (u.equipped && u.reserveAmmo > 0
+      ? u.reserveAmmo * (AMMO_TYPES[ammoIdFor(u.equipped.calibre)]?.weightPerRound ?? 0)
+      : 0);
+}
+
+/** 這個口徑目前的（唯一）彈藥型別 id。敵人的備彈重量要靠它換算。 */
+function ammoIdFor(calibre: string): string {
+  for (const [id, a] of Object.entries(AMMO_TYPES)) if (a.calibreId === calibre) return id;
+  return '';
 }
 
 /** 攜行重量上限（§3.2）。超過就撿不起來。含手持與收納的武器（v0.15）。 */
@@ -55,9 +69,17 @@ export function moveCostForWeight(w: number): number {
   return tiers[tiers.length - 1].moveCost;
 }
 
-/** 這個單位移動一格實際要花的時間。沒有背包（敵人）就用原型的值。 */
+/**
+ * 這個單位移動一格實際要花的時間。
+ *
+ * **人類一律由負重決定**（§3），包含沒有背包的敵人 ——
+ * 統一之後「跑得快」不再是一個原型屬性，而是「身上沒東西」的後果。
+ * 手上只有一把爪的複製人重量 0，落在極輕級（7），與統一之前的衝鋒型完全相同。
+ *
+ * **機械保留原型的值**：裝甲型身上那層是焊死的裝甲板，不是可以卸下的負重。
+ */
 export function effectiveMoveTime(u: Unit): number {
-  if (!u.backpack) return u.moveTime;
+  if (u.kind === 'MACHINE') return u.moveTime;
   return moveCostForWeight(carriedWeight(u));
 }
 

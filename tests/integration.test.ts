@@ -16,7 +16,7 @@ function run(s: GameState, cmd: Command): GameState {
 import { findPath, stepDirection } from '../src/core/pathfind';
 import { activePlayerUnit, unitAt } from '../src/core/state';
 import { findTiles } from '../src/core/map';
-import { canAttack } from '../src/core/combat';
+import { canAttackAny } from '../src/core/combat';
 import { manhattan } from '../src/core/grid';
 import type { Facing, GameState, Vec2 } from '../src/core/state';
 
@@ -83,12 +83,17 @@ function botTurn(s: GameState, goal: Vec2): GameState {
   let best = Infinity;
   for (const e of s.units) {
     if (e.faction !== 'ENEMY') continue;
-    if (!canAttack(s, u, e.pos, u.equipped).ok) continue;
+    if (!canAttackAny(s, u, e.pos).ok) continue;
     const d = manhattan(u.pos, e.pos);
     if (d < best) { best = d; target = e.pos; }
   }
   if (target) return run(s, { type: 'FIRE', target });
-  if (u.equipped && u.equipped.ammo === 0) return run(s, { type: 'RELOAD' });
+  // **裝填不成就繼續往下走。**沒有備彈時 RELOAD 是非法的，
+  // 而非法指令回傳同一個狀態物件（§3.1 的識別契約）—— 直接 return 會讓機器人卡死。
+  if (u.equipped && u.equipped.ammo === 0) {
+    const reloaded = run(s, { type: 'RELOAD' });
+    if (reloaded !== s) return reloaded;
+  }
 
   const path = findPath(s, u.pos, goal, { ignoreUnitIds: [u.id] });
   if (path && path.length > 0) {

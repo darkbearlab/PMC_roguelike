@@ -51,10 +51,12 @@ describe('§1.2 不該放大的東西一律沒動', () => {
   });
 
   it('視野維持原值（v0.7 把 AP 換成時間，視野不受影響）', () => {
+    // §2：複製人統一之後，**所有人類的視野相同** —— 那是同一副眼睛。
     expect(ACTORS.SOLDIER.sightRange).toBe(12);
-    expect(ACTORS.RUNNER.sightRange).toBe(10);
-    expect(ACTORS.HULK.sightRange).toBe(8);
+    expect(ACTORS.RUNNER.sightRange).toBe(12);
     expect(ACTORS.SHOOTER.sightRange).toBe(12);
+    // 機械保留專屬數值：那台老機器的感測器就是比較差
+    expect(ACTORS.HULK.sightRange).toBe(8);
     // §1：敵人的內嵌 attack 已改為 weapons.json 裡的內建武器。
     // 衝鋒型的爪還是射程 1；射手型則改為抽一把真的槍，射程由那把槍決定。
     expect(weaponType(ACTORS.RUNNER.intrinsic).range).toBe(1);
@@ -62,9 +64,9 @@ describe('§1.2 不該放大的東西一律沒動', () => {
     expect(ACTORS.SHOOTER.armed).toBe(true);
   });
 
-  it('速度分級由時間成本表達，取代原本的 AP 分級', () => {
-    // RUNNER 原本 3 AP（比玩家快 1.5 倍）、HULK 原本 1 AP（比玩家慢一半）
-    expect(ACTORS.RUNNER.time.move).toBeLessThan(ACTORS.SOLDIER.time.move);
+  it('速度分級由**負重**表達（§3），機械仍由原型指派', () => {
+    // 統一之後人類共用同一個基礎值 —— 快慢是身上背了什麼的後果，不是身分
+    expect(ACTORS.RUNNER.time.move).toBe(ACTORS.SOLDIER.time.move);
     expect(ACTORS.HULK.time.move).toBeGreaterThan(ACTORS.SOLDIER.time.move);
     expect(ACTORS.SHOOTER.time.move).toBe(ACTORS.SOLDIER.time.move);
   });

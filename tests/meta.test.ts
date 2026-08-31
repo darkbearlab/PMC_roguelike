@@ -17,7 +17,7 @@ import { checkKit } from '../src/core/loadout';
 import { RULES, mapById } from '../src/core/content';
 import { createInitialState } from '../src/core/setup';
 import { applyCommand } from '../src/core/commands';
-import { weaponItem } from '../src/core/inventory';
+import { maxWeight, weaponItem } from '../src/core/inventory';
 
 const co = (): MetaState => newCompany();
 
@@ -145,8 +145,12 @@ describe('§3.3 兩種配裝原型在操作上成立', () => {
     const r = checkKit(resolveLoadout(m, rec.loadout));
     expect(a.weight).toBeGreaterThan(40);
     expect(r.weight).toBeLessThan(10);
-    // 回收型的空間差距，就是他能背回來的東西
-    expect((r.headroom ?? 0) - (a.headroom ?? 0)).toBeGreaterThan(30);
+    // 回收型的空間差距，就是他能背回來的東西。
+    // §3.2 之後 headroom 是「到下一級門檻還有多少」——
+    // 回收型落在極輕級（門檻 6），所以它的餘裕反而小；真正的差距要看總上限。
+    expect(maxWeight() - r.weight).toBeGreaterThan(maxWeight() - a.weight + 30);
+    // 而且回收型真的比較快：這是極輕級的全部意義（§3.3）
+    expect(r.moveCost).toBeLessThan(a.moveCost);
   });
 });
 
@@ -213,7 +217,7 @@ describe('§5 把任務結果套用回公司', () => {
   };
   const result = (over: Partial<MissionResult>): MissionResult => ({
     mapName: '測試場', contractCode: '委-TEST', outcome: 'ABORTED', clock: 100,
-    rating: 'C', mainDone: false, secondaryDone: 0, issued: [], issuedWeaponIds: [], leftBehind: [],
+    rating: 'C', mainDone: false, secondaryDone: 0, issued: [], issuedWeaponIds: [], leftBehind: [], xpBy: {},
     deployedIds: [], deadIds: [], survivorId: null,
     survivorEquippedId: null, survivorStowedId: null, extracted: [],
     kills: {}, damageTaken: {}, ...over,
@@ -381,13 +385,13 @@ describe('v0.18 附錄：自動補給', () => {
     grantAmmo(m, 'standard_5.56', 9999);
     const s = findSoldier(m, id)!;
     // 先壓上一塊接近第一級上限的東西
-    const tier0 = RULES.backpack.weightTiers[0].maxWeight;
     const before = checkKit(resolveLoadout(m, s.loadout));
-    expect(before.tier).toBe(0);
+    expect(before.tier).toBe(1);
+    const cap = RULES.backpack.weightTiers[before.tier].maxWeight;
     resupplySoldier(m, id);
     const after = checkKit(resolveLoadout(m, s.loadout));
-    expect(after.tier, '自動補給把他補到掉級了').toBe(0);
-    expect(after.weight).toBeLessThanOrEqual(tier0);
+    expect(after.tier, '自動補給把他補到掉級了').toBe(1);
+    expect(after.weight).toBeLessThanOrEqual(cap);
     expect(after.moveCost).toBe(before.moveCost);
   });
 
@@ -430,7 +434,7 @@ describe('v0.18 附錄：自動補給', () => {
     // 打完一場，帶回來 5 發
     const after = applyMissionResult(m, {
       mapName: '測試場', contractCode: '委-TEST', outcome: 'SUCCESS', clock: 100,
-      rating: 'C', mainDone: true, secondaryDone: 0, issued: [], issuedWeaponIds: [], leftBehind: [],
+      rating: 'C', mainDone: true, secondaryDone: 0, issued: [], issuedWeaponIds: [], leftBehind: [], xpBy: {},
       deployedIds: [id], deadIds: [], survivorId: id,
       survivorEquippedId: plan.soldiers.find((d) => d.id === id)!.equipped!.instanceId,
       survivorStowedId: null,
