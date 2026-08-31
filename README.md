@@ -31,6 +31,11 @@ node scripts/vault.mjs       # v0.19：翻越掩體、落地站姿、方向鍵�
 node scripts/fog.mjs         # 插隊版：迷霧三態、尋路不進黑地、空投點要先啟用
 node scripts/pool.mjs        # 敵人武器批：物品池不變量、敵人配槍、武器識別、資產區塊
 node scripts/veteran.mjs     # 老兵批：等級與加成、敵人統一、極輕負重級
+
+# 難度診斷（三支可重複執行的腳本，見 docs/difficulty-diagnosis.md）
+npx tsx scripts/diag-static.ts    # §1 靜態：等價性、負重分布、武器抽取、開場暴露、一致性
+npx tsx scripts/diag-factors.ts   # §2 因子分離：一次關一個功能，看哪個把數字拉回去
+node scripts/diag-metrics.mjs     # §3 人類遊玩指標的煙霧測試
 ```
 
 開啟遊戲會先進**公司畫面**（名冊、軍械庫、補給站、逐人配裝），

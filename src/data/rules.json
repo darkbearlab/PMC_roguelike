@@ -447,5 +447,9 @@
         "actionScale": 0.86
       }
     ]
+  },
+  "diagnostics": {
+    "_comment": "難度診斷 §3 的人類遊玩指標。**純統計輸出，不影響任何規則**，而且不進 GameState —— 它活在 ui/diag.ts，與渲染層同一層。",
+    "playerMetrics": true
   }
 }

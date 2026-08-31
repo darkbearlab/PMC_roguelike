@@ -36,6 +36,8 @@ import { computeVision, isVisible, visionKey } from '../render/vision';
 import { $, $$, esc, show } from './dom';
 import { fmtWeight, missionPanelHtml, renderHud, shortName } from './hud';
 import { carriedWeight, effectiveMoveTime } from '../core/inventory';
+import { MetricsCollector, metricsEnabled } from './diag';
+import { pushLog } from '../core/log';
 import { pathTime, stepDirection } from '../core/pathfind';
 import { MotionLayer, PanLayer } from '../render/motion';
 import { UI } from './config';
@@ -115,6 +117,9 @@ export class Game {
   private camAim: Vec2 | null = null;
 
   /** 測試用入口。正式流程一律走 canvas 的 pointer 事件與 rAF 迴圈。 */
+  /** 難度診斷 §3 的收集器。**不進 GameState** —— 它只是旁觀。 */
+  private readonly metrics = new MetricsCollector();
+
   readonly test = {
     tap: (p: Vec2): void => this.tapTile(p),
     isPlayerTurn: (): boolean => isPlayerTurn(this.state),
@@ -141,6 +146,9 @@ export class Game {
     spotlight: (): Vec2 | null => this.spotlight,
     focus: (): Vec2 => this.camAim ?? this.focus,
     enemySteps: (): void => this.runEnemySteps(),
+    /** 診斷 §3：這一場的人類遊玩指標。 */
+    metrics: (): ReturnType<MetricsCollector['snapshot']> => this.metrics.snapshot(),
+    metricsLine: (): string => this.metrics.report(),
     /** 這個單位移動一格實際要花多久（§3：由負重決定）。 */
     moveTimeOf: (id: string): number => {
       const u = findUnit(this.state, id);
@@ -180,8 +188,11 @@ export class Game {
     // 趕路的時候不擋人。
     this.motion.finishAll();
     const before = this.posSnapshot();
+    const prev = this.state;
     const { state, events } = applyCommand(this.state, cmd);
     if (state === this.state) return false;
+    // 診斷 §3：純統計，不影響任何規則。開關在 rules.json 的 diagnostics。
+    if (metricsEnabled()) this.metrics.observe(prev, state, events);
     this.state = state;
     this.effects.push(events, performance.now());
     this.trackMoves(before, UI.animation.playerMoveMs);
@@ -223,6 +234,7 @@ export class Game {
 
   restart(): void {
     this.state = createInitialState(this.seed, this.forcedMap ?? undefined, this.deployment ?? undefined);
+    this.metrics.reset();
     this.ghosts.clear();
     this.motion.clear();
     this.panner.finish();
@@ -248,6 +260,8 @@ export class Game {
     if (this.spotlight) this.focus = { ...this.spotlight };
     else if (me) this.focus = { ...me.pos };
     this.validateSelection();
+    // 「見過沒有」是視野的歷史，規則層沒有這個東西，也不該有（診斷 §3）
+    if (metricsEnabled()) this.metrics.markSeen(this.state, me);
 
     renderHud(this.state);
     // HUD 的 chip 會換行，高度是畫完才知道的 —— 量在 renderHud 之後，
@@ -719,6 +733,8 @@ export class Game {
     if (this.modal === 'SPLASH') return;
     if (s.result !== 'ONGOING' && this.modal !== 'SUMMARY') {
       this.modal = 'SUMMARY';
+      // 診斷 §3：把三個數字寫進戰鬥紀錄。不需要美觀，但要留得下來。
+      if (metricsEnabled()) pushLog(s, 'INFO', this.metrics.report());
       showSummary(s, () => this.restart(), this.onMissionEnd, this.ledgerFor?.() ?? null);
       return;
     }
